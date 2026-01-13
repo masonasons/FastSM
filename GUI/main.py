@@ -680,6 +680,12 @@ class MainGui(wx.Frame):
 						ct for ct in get_app().currentAccount.prefs.custom_timelines
 						if not (ct.get('type') == tl.type and ct.get('id') == tl.data)
 					]
+				if tl.type == "instance":
+					# Remove from instance_timelines
+					get_app().currentAccount.prefs.instance_timelines = [
+						inst for inst in get_app().currentAccount.prefs.instance_timelines
+						if inst.get('url') != tl.data
+					]
 				get_app().currentAccount.timelines.remove(tl)
 				sound.play(get_app().currentAccount,"close")
 				self.refreshTimelines()

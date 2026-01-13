@@ -112,10 +112,17 @@ def mastodon_status_to_universal(status, platform_data=None) -> Optional[Univers
         reblog = mastodon_status_to_universal(reblog_data)
 
     # Convert quote if present (Mastodon 4.0+)
+    # In Mastodon.py 2.x, quote is a Quote object with quoted_status field
     quote = None
     quote_data = get_attr(status, 'quote', None)
     if quote_data:
-        quote = mastodon_status_to_universal(quote_data)
+        # Check if it's a Quote object (has quoted_status) or direct status
+        quoted_status = get_attr(quote_data, 'quoted_status', None)
+        if quoted_status:
+            quote = mastodon_status_to_universal(quoted_status)
+        else:
+            # Fallback: maybe it's directly a status (older format)
+            quote = mastodon_status_to_universal(quote_data)
 
     # Convert media attachments
     media_attachments = []

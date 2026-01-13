@@ -121,6 +121,15 @@ class timeline(object):
 			else:
 				self.func = self.account.api.timeline_public
 			self.removable = True
+		elif self.type == "instance":
+			# Remote instance local timeline
+			if hasattr(self.account, '_platform') and self.account._platform:
+				self.func = lambda **kwargs: self.account._platform.get_instance_timeline(self.data, **kwargs)
+			else:
+				self.func = lambda **kwargs: []
+			self.removable = True
+			if not silent:
+				sound.play(self.account, "open")
 
 		if self.type != "conversation":
 			threading.Thread(target=self.load, daemon=True).start()
@@ -190,7 +199,7 @@ class timeline(object):
 			pass
 
 	def hide_tl(self):
-		if self.type == "user" and self.name != "Sent" or self.type == "list" or self.type == "search" or self.type == "conversation":
+		if self.type == "user" and self.name != "Sent" or self.type == "list" or self.type == "search" or self.type == "conversation" or self.type == "instance":
 			self.app.alert("You can't hide this timeline. Try closing it instead.", "Error")
 			return
 		self.hide = True
@@ -292,6 +301,11 @@ class timeline(object):
 						]
 					if self.type == "search" and self.data in self.account.prefs.search_timelines:
 						self.account.prefs.search_timelines.remove(self.data)
+					if self.type == "instance":
+						self.account.prefs.instance_timelines = [
+							item for item in self.account.prefs.instance_timelines
+							if item.get('url') != self.data
+						]
 					self.account.timelines.remove(self)
 					if self.account == self.app.currentAccount:
 						main.window.refreshTimelines()

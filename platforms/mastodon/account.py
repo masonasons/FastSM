@@ -90,6 +90,8 @@ class MastodonAccount(PlatformAccount):
                 if status:
                     # Store notification ID for deduplication
                     status._notification_id = str(notif.id)
+                    # Store original status ID for replies/interactions
+                    status._original_status_id = str(status.id)
                     # Use notification ID as the status ID for this timeline
                     # This ensures proper pagination with since_id/max_id
                     status.id = str(notif.id)
@@ -158,7 +160,155 @@ class MastodonAccount(PlatformAccount):
         return [
             {'type': 'local', 'id': 'local', 'name': 'Local Timeline', 'description': 'Posts from users on this instance'},
             {'type': 'federated', 'id': 'federated', 'name': 'Federated Timeline', 'description': 'Posts from all known instances'},
+            {'type': 'instance', 'id': 'instance', 'name': 'Instance Timeline', 'description': 'Local timeline from another instance'},
         ]
+
+    # ============ Instance Timeline Methods ============
+
+    def get_or_create_remote_api(self, instance_url: str) -> Mastodon:
+        """Get or create an unauthenticated API client for a remote instance.
+
+        Args:
+            instance_url: The URL of the remote instance (e.g., 'mastodon.social')
+
+        Returns:
+            An unauthenticated Mastodon API client for the instance
+        """
+        # Normalize URL
+        if not instance_url.startswith('http'):
+            instance_url = 'https://' + instance_url
+        instance_url = instance_url.rstrip('/')
+
+        # Get the account wrapper to access remote_apis
+        account = self.app.currentAccount
+
+        # Check if we already have this API
+        if instance_url in account.remote_apis:
+            return account.remote_apis[instance_url]
+
+        # Create new unauthenticated client
+        remote_api = Mastodon(api_base_url=instance_url)
+        account.remote_apis[instance_url] = remote_api
+        return remote_api
+
+    def get_instance_timeline(self, instance_url: str, limit: int = 40, **kwargs) -> List[UniversalStatus]:
+        """Fetch local timeline from a remote instance.
+
+        Args:
+            instance_url: The URL of the remote instance
+            limit: Maximum number of statuses to fetch
+            **kwargs: Additional parameters (max_id, since_id, etc.)
+
+        Returns:
+            List of statuses from the remote instance's local timeline
+        """
+        try:
+            remote_api = self.get_or_create_remote_api(instance_url)
+            statuses = remote_api.timeline_local(limit=limit, **kwargs)
+            result = self._convert_statuses(statuses)
+
+            # Extract domain from instance URL for user accts
+            from urllib.parse import urlparse
+            parsed = urlparse(instance_url)
+            instance_domain = parsed.netloc or parsed.path.strip('/')
+
+            def fix_user_acct(user):
+                """Add instance domain to user acct if not present."""
+                if user and '@' not in user.acct:
+                    user.acct = f"{user.acct}@{instance_domain}"
+                if user:
+                    user._instance_url = instance_url
+
+            # Mark all statuses as being from a remote instance
+            for status in result:
+                status._instance_url = instance_url
+                # Mark users as remote too (don't cache - IDs are local to remote instance)
+                if hasattr(status, 'account') and status.account:
+                    fix_user_acct(status.account)
+                # Also handle reblogged posts
+                if hasattr(status, 'reblog') and status.reblog:
+                    status.reblog._instance_url = instance_url
+                    if hasattr(status.reblog, 'account') and status.reblog.account:
+                        fix_user_acct(status.reblog.account)
+                # Handle mentions
+                if hasattr(status, 'mentions') and status.mentions:
+                    for mention in status.mentions:
+                        if hasattr(mention, 'acct') and '@' not in mention.acct:
+                            mention.acct = f"{mention.acct}@{instance_domain}"
+                # Store the original remote URL for resolving later
+                if not hasattr(status, 'url') or not status.url:
+                    # Construct URL if not present
+                    status.url = f"{instance_url}/@{status.account.acct}/{status.id}"
+                # Don't cache users from instance timelines - their IDs are from the remote instance
+
+            return result
+        except MastodonError:
+            return []
+        except Exception:
+            return []
+
+    def resolve_remote_status(self, status) -> str:
+        """Convert a remote instance status to a local status ID for interactions.
+
+        When you view a post from a remote instance timeline, the ID is local to
+        that instance. To interact with it (boost, favourite, reply), you need
+        the ID as known by your own instance. This method uses the search API
+        to resolve the remote URL to a local status.
+
+        Args:
+            status: The status object (must have _instance_url attribute or url)
+
+        Returns:
+            The local status ID for use in API calls
+        """
+        # If no instance URL marker, it's already local
+        if not hasattr(status, '_instance_url'):
+            return status.id
+
+        # Try multiple URL formats to find the post
+        urls_to_try = []
+
+        # First try the URL from the status (most reliable)
+        remote_url = getattr(status, 'url', None)
+        if remote_url and remote_url.strip():
+            urls_to_try.append(remote_url)
+
+        # Try the URI (ActivityPub identifier)
+        uri = getattr(status, 'uri', None)
+        if uri and uri.strip() and uri not in urls_to_try:
+            urls_to_try.append(uri)
+
+        # Construct URL as fallback
+        instance_url = status._instance_url
+        acct = getattr(status.account, 'acct', '') if hasattr(status, 'account') else ''
+        if acct and not '@' in acct:
+            # Local user on remote instance - construct full URL
+            constructed_url = f"{instance_url}/@{acct}/{status.id}"
+            if constructed_url not in urls_to_try:
+                urls_to_try.append(constructed_url)
+
+        for search_url in urls_to_try:
+            try:
+                # Use search with resolve=True to fetch the status into our instance
+                result = self.api.search_v2(q=search_url, resolve=True, result_type='statuses')
+                statuses = result.statuses if hasattr(result, 'statuses') else result.get('statuses', [])
+
+                if statuses and len(statuses) > 0:
+                    # Return the local ID
+                    local_id = str(statuses[0].id)
+                    # Cache the resolved ID on the status for future use
+                    status._resolved_id = local_id
+                    return local_id
+            except MastodonError as e:
+                print(f"Search failed for {search_url}: {e}")
+                continue
+            except Exception as e:
+                print(f"Search error for {search_url}: {e}")
+                continue
+
+        # Fallback to original ID (will likely fail on interaction)
+        print(f"Could not resolve status. Tried URLs: {urls_to_try}")
+        return status.id
 
     def search_statuses(self, query: str, limit: int = 40, **kwargs) -> List[UniversalStatus]:
         """Search for statuses."""

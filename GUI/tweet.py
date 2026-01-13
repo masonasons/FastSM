@@ -1,8 +1,3 @@
-from mastodon import MastodonError
-try:
-	from atproto.exceptions import AtProtocolError
-except ImportError:
-	AtProtocolError = Exception  # Fallback if atproto not installed
 import speak
 import wx
 import sound
@@ -261,9 +256,23 @@ class TweetGui(wx.Dialog):
 								if not self.list.IsChecked(index):
 									exclude_mentions.append(i.acct)
 								index += 1
+						# Use original status ID if available (for mentions timeline)
+						# or resolve remote status ID (for instance timelines)
+						reply_to_id = getattr(self.status, '_original_status_id', None)
+						if not reply_to_id:
+							# Check if this is from an instance timeline
+							if hasattr(self.status, '_instance_url'):
+								# Need to resolve the remote status to a local ID
+								print(f"Resolving instance timeline status for reply: {self.status._instance_url}")
+								print(f"Status URL: {getattr(self.status, 'url', 'N/A')}")
+								print(f"Status URI: {getattr(self.status, 'uri', 'N/A')}")
+								reply_to_id = self.account._platform.resolve_remote_status(self.status)
+								print(f"Resolved to local ID: {reply_to_id}")
+							else:
+								reply_to_id = self.status.id
 						status = self.account.post(
 							text=self.text.GetValue(),
-							id=self.status.id,
+							id=reply_to_id,
 							visibility=visibility,
 							spoiler_text=spoiler_text
 						)
@@ -297,7 +306,7 @@ class TweetGui(wx.Dialog):
 							spoiler_text=spoiler_text
 						)
 				self.account.app.prefs.chars_sent += len(self.text.GetValue())
-			except (MastodonError, AtProtocolError) as error:
+			except Exception as error:
 				sound.play(self.account, "error")
 				speak.speak(str(error))
 				status = False
@@ -321,7 +330,7 @@ class TweetGui(wx.Dialog):
 						status=text,
 						visibility='direct'
 					)
-				except (MastodonError, AtProtocolError) as error:
+				except Exception as error:
 					sound.play(self.account, "error")
 					speak.speak(str(error))
 					status = False

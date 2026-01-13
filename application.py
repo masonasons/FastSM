@@ -167,15 +167,67 @@ class Application:
 
 		self.load_timeline_settings()
 
-		for i in range(0, self.prefs.accounts):
+		# Load accounts - first one on main thread, rest in parallel if already configured
+		if self.prefs.accounts > 0:
+			# First account must be on main thread (handles auth dialogs, sets currentAccount)
 			self.add_session()
+
+			# Load remaining accounts in parallel if more than one
+			if self.prefs.accounts > 1:
+				import concurrent.futures
+				# Check which accounts are already configured (have credentials)
+				parallelizable = []
+				sequential = []
+				for i in range(1, self.prefs.accounts):
+					if self._is_account_configured(i):
+						parallelizable.append(i)
+					else:
+						sequential.append(i)
+
+				# Load configured accounts in parallel
+				if parallelizable:
+					with concurrent.futures.ThreadPoolExecutor(max_workers=len(parallelizable)) as executor:
+						futures = [executor.submit(self._add_session_threaded, i) for i in parallelizable]
+						concurrent.futures.wait(futures)
+
+				# Load unconfigured accounts sequentially on main thread (need dialogs)
+				for i in sequential:
+					self.add_session(i)
 
 		self._initialized = True
 
-	def add_session(self):
+	def add_session(self, index=None):
 		"""Add a new account session."""
 		import mastodon_api as t
-		self.accounts.append(t.mastodon(self, len(self.accounts)))
+		if index is None:
+			index = len(self.accounts)
+		self.accounts.append(t.mastodon(self, index))
+
+	def _is_account_configured(self, index):
+		"""Check if an account has credentials saved (no dialogs needed)."""
+		import config
+		try:
+			prefs = config.Config(name="FastSM/account"+str(index), autosave=False)
+			platform_type = prefs.get("platform_type", "")
+
+			if platform_type == "bluesky":
+				# Bluesky needs handle and password
+				return bool(prefs.get("bluesky_handle", "")) and bool(prefs.get("bluesky_password", ""))
+			else:
+				# Mastodon needs instance URL and access token
+				return bool(prefs.get("instance_url", "")) and bool(prefs.get("access_token", ""))
+		except:
+			return False
+
+	def _add_session_threaded(self, index):
+		"""Add account session from a background thread."""
+		import mastodon_api as t
+		try:
+			account = t.mastodon(self, index)
+			# Store directly - account is fully initialized
+			self.accounts.append(account)
+		except Exception as e:
+			print(f"Error loading account {index}: {e}")
 
 	def save_users(self):
 		"""Save user caches to disk (per-account caches)."""
@@ -239,6 +291,9 @@ class Application:
 
 	def strip_html(self, text):
 		"""Strip HTML tags and decode entities"""
+		# Add spaces before/after block elements and links to prevent text concatenation
+		text = re.sub(r'</(a|p|div|br|span)>', ' ', text, flags=re.IGNORECASE)
+		text = re.sub(r'<br\s*/?>', ' ', text, flags=re.IGNORECASE)
 		text = html_tag_re.sub('', text)
 		text = html.unescape(text)
 		text = re.sub(r'\s+', ' ', text).strip()
@@ -268,16 +323,48 @@ class Application:
 					else:
 						text += f" ({type_display}) with no description"
 
+		# Strip quote-related URLs from text when there's a quote
 		if hasattr(s, 'quote') and s.quote:
-			quote_text = self.process_status(s.quote, True)
-			if quote_text not in text:
-				text += " " + quote_text
+			import re
+			# Remove RE:/QT: followed by a URL at the start
+			text = re.sub(r'^(RE|QT|re|qt):\s*https?://\S+\s*', '', text, flags=re.IGNORECASE).strip()
+			# Get the quoted post's URL to strip it from the text
+			quote_url = getattr(s.quote, 'url', None)
+			if quote_url:
+				# Strip the exact URL if it appears at the end
+				text = text.rstrip()
+				if text.endswith(quote_url):
+					text = text[:-len(quote_url)].rstrip()
+			# Also strip any trailing Mastodon-style status URLs (https://instance/@user/id)
+			text = re.sub(r'\s*https?://[^\s]+/@[^\s]+/\d+\s*$', '', text).strip()
 
 		if return_only_text:
 			return text
 
+		# Handle quotes: format as "Person: their comment. Quoting person2: quoted text. time"
+		quote_formatted = ""
+		if hasattr(s, 'quote') and s.quote:
+			quote_text = self.process_status(s.quote, True)
+			quote_wrapped = StatusWrapper(s.quote, quote_text)
+			quote_formatted = self.template_to_string(quote_wrapped, self.prefs.quoteTemplate)
+
 		wrapped = StatusWrapper(s, text)
-		return self.template_to_string(wrapped, template)
+
+		if quote_formatted:
+			# For quotes, remove timestamp from main template and add it at the very end
+			main_template = template if template else self.prefs.postTemplate
+			# Remove $created_at$ from main template for quote posts
+			temp_template = main_template.replace(" $created_at$", "").replace("$created_at$ ", "").replace("$created_at$", "")
+			result = self.template_to_string(wrapped, temp_template)
+			result += " " + quote_formatted
+			# Add timestamp at the very end
+			created_at = getattr(s, 'created_at', None)
+			if created_at:
+				result += " " + self.parse_date(created_at)
+		else:
+			result = self.template_to_string(wrapped, template)
+
+		return result
 
 	def process_notification(self, n):
 		"""Process a Mastodon notification for display"""

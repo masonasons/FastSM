@@ -44,6 +44,10 @@ class mastodon(object):
 		self.prefs.list_timelines = self.prefs.get("list_timelines", [])
 		self.prefs.search_timelines = self.prefs.get("search_timelines", [])
 		self.prefs.custom_timelines = self.prefs.get("custom_timelines", [])  # [{type, id, name}, ...]
+		self.prefs.instance_timelines = self.prefs.get("instance_timelines", [])  # [{url, name}, ...]
+
+		# Remote API instances for instance timelines (unauthenticated)
+		self.remote_apis = {}
 		self.prefs.footer = self.prefs.get("footer", "")
 		self.prefs.soundpack = self.prefs.get("soundpack", "default")
 		self.prefs.soundpan = self.prefs.get("soundpan", 0)
@@ -208,6 +212,16 @@ class mastodon(object):
 			except:
 				self.prefs.custom_timelines.remove(ct)
 
+		# Restore instance timelines (remote instance local timelines)
+		for inst in list(self.prefs.instance_timelines):
+			try:
+				inst_url = inst.get('url', '')
+				inst_name = inst.get('name', inst_url + ' Local')
+				if inst_url:
+					self.timelines.append(timeline.timeline(self, name=inst_name, type="instance", data=inst_url, silent=True))
+			except:
+				self.prefs.instance_timelines.remove(inst)
+
 		self.stream_listener = None
 		self.stream = None
 		if self.app.prefs.streaming:
@@ -299,17 +313,21 @@ class mastodon(object):
 
 	def _finish_init(self, index):
 		"""Common initialization after platform-specific setup."""
+		import wx
 		if self.app.currentAccount is None:
 			self.app.currentAccount = self
 			# Get display name - both platforms now use UniversalUser with acct
 			acct = getattr(self.me, 'acct', str(self.me))
-			main.window.SetLabel(acct + " - " + application.name + " " + application.version)
+			# Use CallAfter for thread safety
+			wx.CallAfter(main.window.SetLabel, acct + " - " + application.name + " " + application.version)
 
 	def _finish_timeline_init(self):
 		"""Finish timeline initialization (common to all platforms)."""
+		import wx
 		if self.app.currentAccount == self:
-			main.window.list.SetSelection(0)
-			main.window.on_list_change(None)
+			# Use CallAfter for thread safety
+			wx.CallAfter(main.window.list.SetSelection, 0)
+			wx.CallAfter(main.window.on_list_change, None)
 		threading.Thread(target=timeline.timelineThread, args=[self,], daemon=True).start()
 
 	def start_stream(self):

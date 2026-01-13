@@ -1,9 +1,4 @@
 import requests
-from mastodon import MastodonError
-try:
-	from atproto.exceptions import AtProtocolError
-except ImportError:
-	AtProtocolError = Exception
 import platform
 from application import get_app
 from . import misc
@@ -53,10 +48,7 @@ class ViewGui(wx.Dialog):
 			if fetched_status:
 				self.status = fetched_status
 			# else keep self.status as the original
-		except (MastodonError, AtProtocolError) as error:
-			# Failed to fetch, use original status
-			pass
-		except Exception as error:
+		except Exception:
 			# Failed to fetch, use original status
 			pass
 
@@ -196,7 +188,7 @@ class ViewGui(wx.Dialog):
 				status_id = self.status.reblog.id
 			boosters = self.account.api.status_reblogged_by(id=status_id)
 			users = list(boosters)
-		except MastodonError as error:
+		except Exception as error:
 			self.account.app.handle_error(error)
 			return
 		g = UserViewGui(self.account, users, "Boosters")
@@ -388,11 +380,34 @@ class UserViewGui(wx.Dialog):
 
 	def OnFollowers(self, event):
 		user = self.users[self.index]
-		misc.followers(self.account, user.id)
+		user_id = self._get_local_user_id(user)
+		if user_id:
+			misc.followers(self.account, user_id)
 
 	def OnFollowing(self, event):
 		user = self.users[self.index]
-		misc.following(self.account, user.id)
+		user_id = self._get_local_user_id(user)
+		if user_id:
+			misc.following(self.account, user_id)
+
+	def _get_local_user_id(self, user):
+		"""Get the local user ID, resolving remote users if needed."""
+		import speak
+		# If user is from a remote instance, look them up locally first
+		if hasattr(user, '_instance_url'):
+			speak.speak("Looking up user...")
+			try:
+				# Search for user by their acct (username@domain)
+				results = self.account.api.account_search(q=user.acct, limit=1)
+				if results and len(results) > 0:
+					return results[0].id
+				else:
+					speak.speak("User not found on your instance")
+					return None
+			except Exception as e:
+				self.account.app.handle_error(e, "Look up user")
+				return None
+		return user.id
 
 	def OnMessage(self, event):
 		user = self.users[self.index]

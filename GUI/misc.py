@@ -7,12 +7,6 @@ import sound
 from . import chooser, main, tweet, view
 import timeline
 from application import get_app
-from mastodon import MastodonError
-try:
-	from atproto.exceptions import AtProtocolError, InvokeTimeoutError
-except ImportError:
-	AtProtocolError = Exception
-	InvokeTimeoutError = Exception
 
 
 def reply(account, status):
@@ -67,7 +61,7 @@ def follow_user(account, username):
 	try:
 		user = account.follow(username)
 		sound.play(account, "follow")
-	except (MastodonError, AtProtocolError, InvokeTimeoutError) as error:
+	except Exception as error:
 		account.app.handle_error(error, "Follow " + username)
 
 
@@ -83,7 +77,7 @@ def unfollow_user(account, username):
 	try:
 		user = account.unfollow(username)
 		sound.play(account, "unfollow")
-	except (MastodonError, AtProtocolError, InvokeTimeoutError) as error:
+	except Exception as error:
 		account.app.handle_error(error, "Unfollow " + username)
 
 
@@ -146,27 +140,82 @@ def message_user(account, user):
 	NewPost.Show()
 
 
+def get_interaction_id(account, status):
+	"""Get the correct status ID for API interactions.
+
+	For posts from instance timelines, resolves the remote post to a local ID.
+	For posts from mentions timeline, uses the original status ID.
+	Uses caching to avoid repeated lookups.
+
+	Args:
+		account: The account object
+		status: The status to get the ID for
+
+	Returns:
+		The status ID to use for API calls
+	"""
+	# Debug: print status attributes
+	print(f"get_interaction_id called. status.id={status.id}, has _instance_url={hasattr(status, '_instance_url')}, has _resolved_id={hasattr(status, '_resolved_id')}, has _original_status_id={hasattr(status, '_original_status_id')}")
+
+	# Check if already resolved
+	if hasattr(status, '_resolved_id'):
+		print(f"Using cached resolved_id: {status._resolved_id}")
+		return status._resolved_id
+
+	# Check if this is from mentions (has original status ID)
+	if hasattr(status, '_original_status_id'):
+		print(f"Using original_status_id: {status._original_status_id}")
+		return status._original_status_id
+
+	# Check if this is from a remote instance
+	if hasattr(status, '_instance_url'):
+		print(f"Status is from remote instance: {status._instance_url}")
+		# Need to resolve to local ID
+		if hasattr(account, '_platform') and account._platform:
+			try:
+				speak.speak("Resolving remote post...")
+				resolved_id = account._platform.resolve_remote_status(status)
+				print(f"Resolved ID: {resolved_id}")
+				# Check if resolution succeeded (got a different ID)
+				if resolved_id != status.id:
+					return resolved_id
+				else:
+					speak.speak("Could not resolve post")
+			except Exception as e:
+				print(f"Exception during resolve: {e}")
+				speak.speak("Error resolving: " + str(e))
+	else:
+		print("Status does not have _instance_url - treating as local")
+
+	# Default to the status ID
+	return status.id
+
+
 def boost(account, status):
+	print(f"boost() called with status.id={status.id}")
 	try:
-		account.boost(status.id)
+		status_id = get_interaction_id(account, status)
+		print(f"boost() got status_id={status_id}")
+		account.boost(status_id)
 		account.app.prefs.boosts_sent += 1
 		sound.play(account, "send_boost")
-	except (MastodonError, AtProtocolError, InvokeTimeoutError) as error:
+	except Exception as error:
 		account.app.handle_error(error, "boost")
 
 
 def favourite(account, status):
 	try:
+		status_id = get_interaction_id(account, status)
 		if getattr(status, 'favourited', False):
-			account.unfavourite(status.id)
+			account.unfavourite(status_id)
 			status.favourited = False
 			sound.play(account, "unlike")
 		else:
-			account.favourite(status.id)
+			account.favourite(status_id)
 			account.app.prefs.favourites_sent += 1
 			status.favourited = True
 			sound.play(account, "like")
-	except (MastodonError, AtProtocolError, InvokeTimeoutError) as error:
+	except Exception as error:
 		account.app.handle_error(error, "favourite post")
 
 
@@ -194,7 +243,7 @@ def mutual_following(account):
 		mutual = [f for f in following_list if f.id in follower_ids]
 		flw = view.UserViewGui(account, mutual, "Mutual followers")
 		flw.Show()
-	except (MastodonError, AtProtocolError, InvokeTimeoutError) as error:
+	except Exception as error:
 		account.app.handle_error(error, "Get mutual followers")
 
 
@@ -207,7 +256,7 @@ def not_following_me(account):
 		not_following = [f for f in following_list if f.id not in follower_ids]
 		flw = view.UserViewGui(account, not_following, "Users not following me")
 		flw.Show()
-	except (MastodonError, AtProtocolError, InvokeTimeoutError) as error:
+	except Exception as error:
 		account.app.handle_error(error, "Get users not following me")
 
 
@@ -220,7 +269,7 @@ def not_following(account):
 		not_following = [f for f in followers_list if f.id not in following_ids]
 		flw = view.UserViewGui(account, not_following, "Users I don't follow")
 		flw.Show()
-	except (MastodonError, AtProtocolError, InvokeTimeoutError) as error:
+	except Exception as error:
 		account.app.handle_error(error, "Get users I don't follow")
 
 
@@ -278,7 +327,7 @@ def user_search(account, q):
 		users = list(result)
 		u = view.UserViewGui(account, users, "User search for " + q)
 		u.Show()
-	except (MastodonError, AtProtocolError, InvokeTimeoutError) as error:
+	except Exception as error:
 		account.app.handle_error(error, "User search")
 
 
@@ -371,7 +420,7 @@ def delete(account, status):
 		main.window.list2.Delete(account.currentTimeline.index)
 		sound.play(account, "delete")
 		main.window.list2.SetSelection(account.currentTimeline.index)
-	except (MastodonError, AtProtocolError, InvokeTimeoutError) as error:
+	except Exception as error:
 		account.app.handle_error(error, "Delete post")
 
 

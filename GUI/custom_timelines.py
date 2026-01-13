@@ -36,6 +36,52 @@ def add_custom_timeline(account, tl_type, tl_id, tl_name, focus=True):
     return True
 
 
+def add_instance_timeline(account, instance_url, focus=True):
+    """Add an instance timeline (local timeline from a remote instance).
+
+    Args:
+        account: The account to add the timeline to
+        instance_url: The URL of the remote instance (e.g., 'mastodon.social')
+        focus: Whether to focus the new timeline
+
+    Returns:
+        True if successful, False otherwise
+    """
+    # Normalize URL
+    if not instance_url.startswith('http'):
+        instance_url = 'https://' + instance_url
+    instance_url = instance_url.rstrip('/')
+
+    # Check if already exists
+    for inst in account.prefs.instance_timelines:
+        if inst.get('url') == instance_url:
+            if focus:
+                get_app().alert("This instance timeline is already open.", "Error")
+            return False
+
+    # Create timeline name from instance URL
+    # Extract domain from URL
+    domain = instance_url.replace('https://', '').replace('http://', '')
+    tl_name = f"{domain} Local"
+
+    # Add the timeline
+    account.timelines.append(timeline.timeline(account, name=tl_name, type="instance", data=instance_url))
+
+    # Save to preferences
+    account.prefs.instance_timelines.append({
+        'url': instance_url,
+        'name': tl_name
+    })
+
+    main.window.refreshTimelines()
+    if focus:
+        main.window.list.SetSelection(len(account.timelines) - 1)
+        account.currentIndex = len(account.timelines) - 1
+        main.window.on_list_change(None)
+
+    return True
+
+
 class CustomTimelinesDialog(wx.Dialog):
     """Dialog for browsing and adding custom timelines."""
 
@@ -175,9 +221,31 @@ class CustomTimelinesDialog(wx.Dialog):
             return
 
         tl = self.timelines[selection]
+        tl_type = tl.get('type', 'feed')
+
+        # Handle instance timeline specially - prompt for instance URL
+        if tl_type == 'instance':
+            dlg = wx.TextEntryDialog(
+                self,
+                "Enter the instance URL (e.g., mastodon.social, fosstodon.org):",
+                "Instance Timeline"
+            )
+            if dlg.ShowModal() == wx.ID_OK:
+                instance_url = dlg.GetValue().strip()
+                dlg.Destroy()
+                if instance_url:
+                    success = add_instance_timeline(self.account, instance_url)
+                    if success:
+                        self.Destroy()
+                else:
+                    get_app().alert("Please enter an instance URL.", "Error")
+            else:
+                dlg.Destroy()
+            return
+
         success = add_custom_timeline(
             self.account,
-            tl['type'] if 'type' in tl else 'feed',
+            tl_type,
             tl['id'],
             tl['name']
         )
