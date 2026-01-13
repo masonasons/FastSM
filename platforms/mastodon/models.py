@@ -153,6 +153,7 @@ def mastodon_status_to_universal(status, platform_data=None) -> Optional[Univers
         spoiler_text=get_attr(status, 'spoiler_text', None),
         card=get_attr(status, 'card', None),
         poll=get_attr(status, 'poll', None),
+        quote_approval=get_attr(status, 'quote_approval', None),
         _platform_data=platform_data or status,
         _platform='mastodon',
     )

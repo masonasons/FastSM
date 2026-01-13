@@ -4,6 +4,7 @@ from GUI import main
 import time
 import speak
 import sys
+from platforms.mastodon.models import mastodon_status_to_universal, mastodon_notification_to_universal
 
 class MastodonStreamListener(StreamListener):
 	"""Handles Mastodon streaming events"""
@@ -15,6 +16,11 @@ class MastodonStreamListener(StreamListener):
 	def on_update(self, status):
 		"""Called when a new status appears in the home timeline"""
 		try:
+			# Convert to universal status
+			status = mastodon_status_to_universal(status)
+			if not status:
+				return
+
 			# Add to home timeline
 			if len(self.account.timelines) > 0:
 				self.account.timelines[0].load(items=[status])
@@ -22,7 +28,7 @@ class MastodonStreamListener(StreamListener):
 			# Note: Mentions are handled by on_notification to avoid duplicates
 
 			# Check if it's from us (add to Sent)
-			if status.account.id == self.account.me.id:
+			if str(status.account.id) == str(self.account.me.id):
 				for tl in self.account.timelines:
 					if tl.type == "user" and tl.name == "Sent":
 						tl.load(items=[status])
@@ -30,9 +36,9 @@ class MastodonStreamListener(StreamListener):
 
 			# Check user timelines
 			for tl in self.account.timelines:
-				if tl.type == "list" and status.account.id in tl.members:
+				if tl.type == "list" and str(status.account.id) in [str(m) for m in tl.members]:
 					tl.load(items=[status])
-				if tl.type == "user" and tl.user and status.account.id == tl.user.id:
+				if tl.type == "user" and tl.user and str(status.account.id) == str(tl.user.id):
 					tl.load(items=[status])
 		except Exception as e:
 			print(f"Stream update error: {e}")
@@ -42,21 +48,24 @@ class MastodonStreamListener(StreamListener):
 		try:
 			# Add to notifications timeline (but not mentions - they have their own timeline)
 			if notification.type != "mention":
-				for tl in self.account.timelines:
-					if tl.type == "notifications":
-						tl.load(items=[notification])
-						break
+				uni_notif = mastodon_notification_to_universal(notification)
+				if uni_notif:
+					for tl in self.account.timelines:
+						if tl.type == "notifications":
+							tl.load(items=[uni_notif])
+							break
 
 			# Add mentions to mentions timeline as STATUS (not notification)
 			if notification.type == "mention" and hasattr(notification, 'status') and notification.status:
-				# Extract the status and give it the notification ID for dedup
-				status = notification.status
+				# Convert to universal status
+				status = mastodon_status_to_universal(notification.status)
+				if not status:
+					return
+
 				# Store original ID and set notification ID as primary for timeline tracking
-				# Use str() to match REST API format for proper deduplication
-				original_status_id = status.id
+				status._original_status_id = str(status.id)
 				status.id = str(notification.id)
 				status._notification_id = str(notification.id)
-				status._original_status_id = original_status_id
 
 				for tl in self.account.timelines:
 					if tl.type == "mentions":
@@ -78,9 +87,10 @@ class MastodonStreamListener(StreamListener):
 	def on_delete(self, status_id):
 		"""Called when a status is deleted"""
 		try:
+			status_id_str = str(status_id)
 			for tl in self.account.timelines:
 				for i, status in enumerate(tl.statuses):
-					if hasattr(status, 'id') and status.id == status_id:
+					if hasattr(status, 'id') and str(status.id) == status_id_str:
 						tl.statuses.pop(i)
 						if tl == self.account.currentTimeline and self.account == self.account.app.currentAccount:
 							main.window.refreshList()
@@ -91,10 +101,15 @@ class MastodonStreamListener(StreamListener):
 	def on_status_update(self, status):
 		"""Called when a status is edited"""
 		try:
+			# Convert to universal status
+			uni_status = mastodon_status_to_universal(status)
+			if not uni_status:
+				return
+
 			for tl in self.account.timelines:
 				for i, s in enumerate(tl.statuses):
-					if hasattr(s, 'id') and s.id == status.id:
-						tl.statuses[i] = status
+					if hasattr(s, 'id') and str(s.id) == str(uni_status.id):
+						tl.statuses[i] = uni_status
 						if tl == self.account.currentTimeline and self.account == self.account.app.currentAccount:
 							main.window.refreshList()
 						break

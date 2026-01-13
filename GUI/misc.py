@@ -16,6 +16,13 @@ def reply(account, status):
 
 
 def quote(account, status):
+	# Check if quoting is allowed for this status
+	quote_approval = getattr(status, 'quote_approval', None)
+	if quote_approval:
+		current_user = getattr(quote_approval, 'current_user', None)
+		if current_user in ('denied', 'unknown'):
+			speak.speak("This post cannot be quoted. The author has disabled quoting.")
+			return
 	NewPost = tweet.TweetGui(account, type="quote", status=status)
 	NewPost.Show()
 
