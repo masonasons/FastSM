@@ -17,6 +17,30 @@ from models import (
 _html_tag_re = re.compile(r'<[^>]+>')
 
 
+def parse_datetime(value):
+    """Parse a datetime from various formats (string or datetime object)."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        # Try ISO format parsing
+        try:
+            # Handle ISO format with Z suffix
+            if value.endswith('Z'):
+                value = value[:-1] + '+00:00'
+            return datetime.fromisoformat(value)
+        except (ValueError, TypeError):
+            pass
+        # Try common formats
+        for fmt in ('%Y-%m-%dT%H:%M:%S.%f%z', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S'):
+            try:
+                return datetime.strptime(value, fmt)
+            except (ValueError, TypeError):
+                continue
+    return None
+
+
 def strip_html(text: str) -> str:
     """Strip HTML tags and decode entities."""
     text = _html_tag_re.sub('', text)
@@ -47,7 +71,7 @@ def mastodon_user_to_universal(user, platform_data=None) -> Optional[UniversalUs
         followers_count=get_attr(user, 'followers_count', 0),
         following_count=get_attr(user, 'following_count', 0),
         statuses_count=get_attr(user, 'statuses_count', 0),
-        created_at=get_attr(user, 'created_at', None),
+        created_at=parse_datetime(get_attr(user, 'created_at')),
         url=get_attr(user, 'url', None),
         bot=get_attr(user, 'bot', False),
         locked=get_attr(user, 'locked', False),
@@ -139,7 +163,7 @@ def mastodon_status_to_universal(status, platform_data=None) -> Optional[Univers
         account=account,
         content=content,
         text=text,
-        created_at=get_attr(status, 'created_at', datetime.now()),
+        created_at=parse_datetime(get_attr(status, 'created_at')) or datetime.now(),
         favourites_count=get_attr(status, 'favourites_count', 0),
         boosts_count=get_attr(status, 'reblogs_count', 0),
         replies_count=get_attr(status, 'replies_count', 0),
@@ -180,7 +204,7 @@ def mastodon_notification_to_universal(notification) -> Optional[UniversalNotifi
         id=str(get_attr(notification, 'id', '')),
         type=get_attr(notification, 'type', 'unknown'),
         account=account,
-        created_at=get_attr(notification, 'created_at', datetime.now()),
+        created_at=parse_datetime(get_attr(notification, 'created_at')) or datetime.now(),
         status=status,
         _platform_data=notification,
         _platform='mastodon',
