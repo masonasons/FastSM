@@ -619,14 +619,16 @@ class timeline(object):
 
 				if not back and not self.initial:
 					if not self.app.prefs.reversed:
-						self.index += newitems
+						# Use filtered count (len(objs2)) for index adjustment, not total newitems
+						self.index += len(objs2)
 						if self.app.currentAccount == self.account and self.account.currentTimeline == self and len(self.statuses) > 0:
 							try:
 								main.window.list2.SetSelection(self.index)
 							except:
 								pass
 				if back and self.app.prefs.reversed:
-					self.index += newitems
+					# Use filtered count (len(objs2)) for index adjustment, not total newitems
+					self.index += len(objs2)
 					if self.app.currentAccount == self.account and self.account.currentTimeline == self and len(self.statuses) > 0:
 						main.window.list2.SetSelection(self.index)
 
