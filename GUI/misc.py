@@ -260,10 +260,11 @@ def pin_toggle(account, status):
 		# Toggle pin status
 		if getattr(actual_status, '_pinned', False) or getattr(actual_status, 'pinned', False):
 			# Unpin
-			if hasattr(account, '_platform') and account._platform:
-				success = account._platform.unpin_status(status_id)
+			if hasattr(account, 'unpin_status'):
+				success = account.unpin_status(status_id)
 			else:
-				success = account.api.status_unpin(id=status_id)
+				account.api.status_unpin(id=status_id)
+				success = True
 			if success:
 				actual_status._pinned = False
 				actual_status.pinned = False
@@ -271,10 +272,11 @@ def pin_toggle(account, status):
 				sound.play(account, "unlike")
 		else:
 			# Pin
-			if hasattr(account, '_platform') and account._platform:
-				success = account._platform.pin_status(status_id)
+			if hasattr(account, 'pin_status'):
+				success = account.pin_status(status_id)
 			else:
-				success = account.api.status_pin(id=status_id)
+				account.api.status_pin(id=status_id)
+				success = True
 			if success:
 				actual_status._pinned = True
 				actual_status.pinned = True

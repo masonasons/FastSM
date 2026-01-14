@@ -137,7 +137,7 @@ class MastodonAccount(PlatformAccount):
     def get_pinned_statuses(self, **kwargs) -> List[UniversalStatus]:
         """Get user's own pinned statuses."""
         try:
-            statuses = self.api.account_statuses(id=self.me_id, pinned=True)
+            statuses = self.api.account_statuses(id=self.me.id, pinned=True)
             result = self._convert_statuses(statuses)
             for status in result:
                 status._pinned = True
