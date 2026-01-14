@@ -134,6 +134,36 @@ class MastodonAccount(PlatformAccount):
             self.user_cache.add_users_from_status(status)
         return result
 
+    def get_pinned_statuses(self, **kwargs) -> List[UniversalStatus]:
+        """Get user's own pinned statuses."""
+        try:
+            statuses = self.api.account_statuses(id=self.me_id, pinned=True)
+            result = self._convert_statuses(statuses)
+            for status in result:
+                status._pinned = True
+                self.user_cache.add_users_from_status(status)
+            return result
+        except MastodonError:
+            return []
+
+    def get_scheduled_statuses(self, **kwargs) -> List[UniversalStatus]:
+        """Get user's scheduled statuses."""
+        try:
+            statuses = self.api.scheduled_statuses()
+            # Scheduled statuses have a different format
+            result = []
+            for s in statuses:
+                # Convert scheduled status to a pseudo-status for display
+                status = mastodon_status_to_universal(s.params, scheduled_at=s.scheduled_at, scheduled_id=s.id)
+                if status:
+                    status._scheduled = True
+                    status._scheduled_id = s.id
+                    status._scheduled_at = s.scheduled_at
+                    result.append(status)
+            return result
+        except MastodonError:
+            return []
+
     def get_user_statuses(self, user_id: str, limit: int = 40, filter: str = None, include_pins: bool = True, **kwargs) -> List[UniversalStatus]:
         """Get statuses from a specific user.
 
@@ -591,6 +621,22 @@ class MastodonAccount(PlatformAccount):
         """Remove favourite from a status."""
         try:
             self.api.status_unfavourite(id=status_id)
+            return True
+        except MastodonError:
+            return False
+
+    def pin_status(self, status_id: str) -> bool:
+        """Pin a status to your profile."""
+        try:
+            self.api.status_pin(id=status_id)
+            return True
+        except MastodonError:
+            return False
+
+    def unpin_status(self, status_id: str) -> bool:
+        """Unpin a status from your profile."""
+        try:
+            self.api.status_unpin(id=status_id)
             return True
         except MastodonError:
             return False

@@ -235,6 +235,55 @@ def favourite(account, status):
 		account.app.handle_error(error, "favourite post")
 
 
+def pin_toggle(account, status):
+	"""Toggle pin status on a post (only works for your own posts)."""
+	try:
+		# Get the actual status (not reblog wrapper)
+		actual_status = status.reblog if hasattr(status, 'reblog') and status.reblog else status
+
+		# Check if this is the user's own post
+		status_author = getattr(actual_status, 'account', None)
+		if not status_author:
+			speak.speak("Cannot pin this post.")
+			return
+
+		author_id = getattr(status_author, 'id', None)
+		if str(author_id) != str(account.me.id):
+			speak.speak("You can only pin your own posts.")
+			return
+
+		status_id = getattr(actual_status, 'id', None)
+		if not status_id:
+			speak.speak("Cannot pin this post.")
+			return
+
+		# Toggle pin status
+		if getattr(actual_status, '_pinned', False) or getattr(actual_status, 'pinned', False):
+			# Unpin
+			if hasattr(account, '_platform') and account._platform:
+				success = account._platform.unpin_status(status_id)
+			else:
+				success = account.api.status_unpin(id=status_id)
+			if success:
+				actual_status._pinned = False
+				actual_status.pinned = False
+				speak.speak("Unpinned.")
+				sound.play(account, "unlike")
+		else:
+			# Pin
+			if hasattr(account, '_platform') and account._platform:
+				success = account._platform.pin_status(status_id)
+			else:
+				success = account.api.status_pin(id=status_id)
+			if success:
+				actual_status._pinned = True
+				actual_status.pinned = True
+				speak.speak("Pinned.")
+				sound.play(account, "like")
+	except Exception as error:
+		account.app.handle_error(error, "pin/unpin post")
+
+
 def followers(account, id=-1):
 	if id == -1:
 		id = account.me.id

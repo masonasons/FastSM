@@ -163,6 +163,20 @@ class timeline(object):
 			self.removable = True
 			if not silent:
 				sound.play(self.account, "open")
+		elif self.type == "pinned":
+			# User's pinned posts
+			if hasattr(self.account, '_platform') and self.account._platform:
+				self.func = lambda **kwargs: self.account._platform.get_pinned_statuses(**kwargs)
+			else:
+				self.func = lambda **kwargs: self.account.api.account_statuses(id=self.account.me.id, pinned=True, **kwargs)
+			self.removable = True
+		elif self.type == "scheduled":
+			# User's scheduled posts
+			if hasattr(self.account, '_platform') and self.account._platform:
+				self.func = lambda **kwargs: self.account._platform.get_scheduled_statuses(**kwargs)
+			else:
+				self.func = lambda **kwargs: self.account.api.scheduled_statuses(**kwargs)
+			self.removable = True
 
 		if self.type != "conversation":
 			threading.Thread(target=self.load, daemon=True).start()

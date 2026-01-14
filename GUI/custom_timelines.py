@@ -245,6 +245,14 @@ class CustomTimelinesDialog(wx.Dialog):
                 {'type': 'federated', 'id': 'federated', 'name': 'Federated Timeline', 'description': 'Posts from all known instances'},
             ]
 
+        # Add Mastodon-specific timelines
+        self.timelines.extend([
+            {'type': 'pinned', 'id': 'pinned', 'name': 'Pinned Posts', 'description': 'Your pinned posts'},
+            {'type': 'scheduled', 'id': 'scheduled', 'name': 'Scheduled Posts', 'description': 'Posts scheduled for later'},
+            {'type': 'instance', 'id': 'instance', 'name': 'Instance Timeline', 'description': 'Local timeline from another instance'},
+            {'type': 'remote_user', 'id': 'remote_user', 'name': 'Remote User', 'description': 'Timeline of a user on another instance'},
+        ])
+
         for tl in self.timelines:
             self.list.Append(f"{tl['name']} - {tl.get('description', '')}")
 

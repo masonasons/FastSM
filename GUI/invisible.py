@@ -192,4 +192,9 @@ class invisible_interface(object):
 		if status:
 			misc.unfollow(get_app().currentAccount, status)
 
+	def PinToggle(self):
+		status = main.window.get_current_status()
+		if status:
+			misc.pin_toggle(get_app().currentAccount, status)
+
 inv=invisible_interface()
