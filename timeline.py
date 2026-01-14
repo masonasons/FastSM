@@ -36,6 +36,7 @@ class timeline(object):
 		self.hide = False
 		self._loading = False  # Flag to prevent concurrent load operations
 		self._stop_loading_all = False  # Flag to stop load_all_previous
+		self._loading_all_active = False  # Flag to track if load_all_previous is running
 
 		for i in self.app.timeline_settings:
 			if i.account_id == self.account.me.id and i.tl == self.name:
@@ -333,6 +334,7 @@ class timeline(object):
 	def load_all_previous(self):
 		"""Load all previous posts in a loop until the timeline is fully loaded or an error occurs."""
 		self._stop_loading_all = False
+		self._loading_all_active = True
 		total_loaded = 0
 
 		speak.speak("Loading all previous posts...")
@@ -365,6 +367,8 @@ class timeline(object):
 
 		if self._stop_loading_all:
 			speak.speak(f"Loading stopped. {total_loaded} posts loaded.")
+
+		self._loading_all_active = False
 
 	def stop_loading_all(self):
 		"""Stop the load_all_previous operation."""
