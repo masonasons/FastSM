@@ -73,7 +73,8 @@ class ChooseGui(wx.Dialog):
 			try:
 				user = self.account.app.lookup_user_name(self.account, self.returnvalue)
 				if user != -1:
-					self.account.api.account_mute(id=user.id)
+					from . import mute_dialog
+					mute_dialog.show_mute_dialog(self.account, user)
 			except MastodonError as e:
 				self.account.app.handle_error(e,"Mute")
 		elif self.type==self.TYPE_UNMUTE:

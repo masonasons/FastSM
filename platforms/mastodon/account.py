@@ -699,10 +699,20 @@ class MastodonAccount(PlatformAccount):
         except MastodonError:
             return False
 
-    def mute(self, user_id: str) -> bool:
-        """Mute a user."""
+    def mute(self, user_id: str, duration: int = 0, notifications: bool = True) -> bool:
+        """Mute a user.
+
+        Args:
+            user_id: The user ID to mute
+            duration: Mute duration in seconds (0 = indefinite)
+            notifications: Whether to also mute notifications
+        """
         try:
-            self.api.account_mute(id=user_id)
+            self.api.account_mute(
+                id=user_id,
+                notifications=notifications,
+                duration=duration if duration > 0 else None
+            )
             return True
         except MastodonError:
             return False
