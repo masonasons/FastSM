@@ -38,8 +38,10 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnLists, m_lists)
 		m_custom_timelines = menu.Append(-1, "Add Custom Timeline\tCtrl+Shift+T", "custom_timelines")
 		self.Bind(wx.EVT_MENU, self.OnCustomTimelines, m_custom_timelines)
-		m_filter_timeline = menu.Append(-1, "Filter Timeline\tCtrl+Shift+F", "filter_timeline")
+		m_filter_timeline = menu.Append(-1, "Client Filters\tCtrl+Shift+F", "filter_timeline")
 		self.Bind(wx.EVT_MENU, self.OnFilterTimeline, m_filter_timeline)
+		m_server_filters = menu.Append(-1, "Server Filters", "server_filters")
+		self.Bind(wx.EVT_MENU, self.OnServerFilters, m_server_filters)
 		m_followers = menu.Append(-1, "List Followers\tCtrl+[", "followers")
 		self.Bind(wx.EVT_MENU, self.OnFollowers, m_followers)
 		m_friends = menu.Append(-1, "List Following\tCtrl+]", "following")
@@ -631,6 +633,10 @@ class MainGui(wx.Frame):
 
 	def OnFilterTimeline(self, event=None):
 		timeline_filter.show_filter_dialog(get_app().currentAccount)
+
+	def OnServerFilters(self, event=None):
+		from . import server_filters
+		server_filters.show_server_filters_dialog(get_app().currentAccount)
 
 	def OnUserProfile(self, event=None):
 		status = self.get_current_status()
