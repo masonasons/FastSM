@@ -641,9 +641,18 @@ class timeline(object):
 					self.play()
 				self.app.prefs.statuses_received += newitems
 				if speech:
-					announcement = f"{newitems} new item"
-					if newitems != 1:
-						announcement += "s"
+					# Count how many passed the filter
+					filtered_count = len(objs2)
+					if hasattr(self, '_filter_settings') and self._filter_settings:
+						# Filter is applied - show both counts
+						announcement = f"{newitems} new item"
+						if newitems != 1:
+							announcement += "s"
+						announcement += f", {filtered_count} shown"
+					else:
+						announcement = f"{newitems} new item"
+						if newitems != 1:
+							announcement += "s"
 					speak.speak(announcement)
 			if self.initial:
 				self.initial = False
