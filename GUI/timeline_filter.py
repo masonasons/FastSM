@@ -216,7 +216,8 @@ class TimelineFilterDialog(wx.Dialog):
             selection = main_window.window.list2.GetSelection()
             if selection >= 0 and selection < len(self.timeline.statuses):
                 status = self.timeline.statuses[selection]
-                return getattr(status, 'id', None)
+                status_id = getattr(status, 'id', None)
+                return str(status_id) if status_id is not None else None
         except:
             pass
         return None
@@ -229,9 +230,10 @@ class TimelineFilterDialog(wx.Dialog):
             main_window.window.list2.SetSelection(0)
             return
 
-        # Find the status by ID
+        # Find the status by ID (compare as strings to handle type mismatches)
         for i, status in enumerate(self.timeline.statuses):
-            if getattr(status, 'id', None) == status_id:
+            sid = getattr(status, 'id', None)
+            if sid is not None and str(sid) == status_id:
                 self.timeline.index = i
                 main_window.window.list2.SetSelection(i)
                 return
