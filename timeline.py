@@ -186,6 +186,14 @@ class timeline(object):
 				self.func = lambda **kwargs: self.account.api.scheduled_statuses(**kwargs)
 			self.removable = True
 
+		# Load saved filter settings if any
+		from GUI.timeline_filter import get_saved_filter
+		saved_filter = get_saved_filter(self.account, self)
+		if saved_filter:
+			self._filter_settings = saved_filter
+			self._unfiltered_statuses = []
+			self._is_filtered = True
+
 		if self.type != "conversation":
 			threading.Thread(target=self.load, daemon=True).start()
 		else:

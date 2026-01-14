@@ -256,6 +256,9 @@ class TimelineFilterDialog(wx.Dialog):
             'no_media': self.show_no_media.GetValue(),
         }
 
+        # Save to account prefs for persistence
+        _save_filter_settings(self.account, self.timeline)
+
         # Filter statuses from the unfiltered list
         filtered = []
         for status in self.timeline._unfiltered_statuses:
@@ -286,6 +289,9 @@ class TimelineFilterDialog(wx.Dialog):
         if hasattr(self.timeline, '_filter_settings'):
             del self.timeline._filter_settings
 
+        # Remove from saved prefs
+        _clear_filter_settings(self.account, self.timeline)
+
         # Refresh the list and restore position
         main_window.window.refreshList()
         self._restore_selection(current_id)
@@ -302,3 +308,64 @@ def show_filter_dialog(account):
 
     dlg = TimelineFilterDialog(main_window.window, timeline)
     dlg.ShowModal()
+
+
+def _get_timeline_filter_key(timeline):
+    """Get a unique key for storing filter settings for this timeline."""
+    # Use type and data to create a unique key
+    if timeline.data:
+        return f"{timeline.type}:{timeline.data}"
+    return timeline.type
+
+
+def _save_filter_settings(account, timeline):
+    """Save filter settings to account prefs."""
+    if not hasattr(account.prefs, 'saved_filters'):
+        account.prefs.saved_filters = {}
+
+    key = _get_timeline_filter_key(timeline)
+    account.prefs.saved_filters[key] = timeline._filter_settings
+
+
+def _clear_filter_settings(account, timeline):
+    """Remove saved filter settings for a timeline."""
+    if not hasattr(account.prefs, 'saved_filters'):
+        return
+
+    key = _get_timeline_filter_key(timeline)
+    if key in account.prefs.saved_filters:
+        del account.prefs.saved_filters[key]
+
+
+def get_saved_filter(account, timeline):
+    """Get saved filter settings for a timeline, if any."""
+    if not hasattr(account.prefs, 'saved_filters'):
+        return None
+
+    key = _get_timeline_filter_key(timeline)
+    return account.prefs.saved_filters.get(key)
+
+
+def apply_saved_filter(timeline):
+    """Apply saved filter settings to a timeline if they exist."""
+    account = timeline.account
+    saved = get_saved_filter(account, timeline)
+    if not saved:
+        return False
+
+    # Store unfiltered statuses
+    if not hasattr(timeline, '_unfiltered_statuses'):
+        timeline._unfiltered_statuses = list(timeline.statuses)
+
+    # Apply filter settings
+    timeline._filter_settings = saved
+
+    # Filter statuses
+    filtered = []
+    for status in timeline._unfiltered_statuses:
+        if should_show_status(status, timeline._filter_settings, timeline.app):
+            filtered.append(status)
+
+    timeline.statuses = filtered
+    timeline._is_filtered = True
+    return True
