@@ -432,10 +432,16 @@ def next_from_user(account):
 def delete(account, status):
 	try:
 		account.api.status_delete(id=status.id)
-		account.currentTimeline.statuses.remove(status)
-		main.window.list2.Delete(account.currentTimeline.index)
+		# Remove from all timelines by ID (not object identity)
+		status_id_str = str(status.id)
+		for tl in account.timelines:
+			for i, s in enumerate(tl.statuses):
+				if hasattr(s, 'id') and str(s.id) == status_id_str:
+					tl.statuses.pop(i)
+					break
+		# Update GUI for current timeline
+		main.window.refreshList()
 		sound.play(account, "delete")
-		main.window.list2.SetSelection(account.currentTimeline.index)
 	except Exception as error:
 		account.app.handle_error(error, "Delete post")
 

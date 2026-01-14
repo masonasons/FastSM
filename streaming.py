@@ -4,6 +4,7 @@ from GUI import main
 import time
 import speak
 import sys
+import wx
 from platforms.mastodon.models import mastodon_status_to_universal, mastodon_notification_to_universal
 
 class MastodonStreamListener(StreamListener):
@@ -88,13 +89,16 @@ class MastodonStreamListener(StreamListener):
 		"""Called when a status is deleted"""
 		try:
 			status_id_str = str(status_id)
+			needs_refresh = False
 			for tl in self.account.timelines:
 				for i, status in enumerate(tl.statuses):
 					if hasattr(status, 'id') and str(status.id) == status_id_str:
 						tl.statuses.pop(i)
 						if tl == self.account.currentTimeline and self.account == self.account.app.currentAccount:
-							main.window.refreshList()
+							needs_refresh = True
 						break
+			if needs_refresh:
+				wx.CallAfter(main.window.refreshList)
 		except Exception as e:
 			print(f"Stream delete error: {e}")
 
@@ -106,13 +110,16 @@ class MastodonStreamListener(StreamListener):
 			if not uni_status:
 				return
 
+			needs_refresh = False
 			for tl in self.account.timelines:
 				for i, s in enumerate(tl.statuses):
 					if hasattr(s, 'id') and str(s.id) == str(uni_status.id):
 						tl.statuses[i] = uni_status
 						if tl == self.account.currentTimeline and self.account == self.account.app.currentAccount:
-							main.window.refreshList()
+							needs_refresh = True
 						break
+			if needs_refresh:
+				wx.CallAfter(main.window.refreshList)
 		except Exception as e:
 			print(f"Stream status update error: {e}")
 
