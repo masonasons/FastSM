@@ -23,7 +23,7 @@ author = APP_AUTHOR
 
 # Regex patterns
 url_re = re.compile(r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?]))")
-url_re2 = re.compile("(?:\w+://|www\.)[^ ,.?!#%=+][^ ]*")
+url_re2 = re.compile(r"(?:\w+://|www\.)[^ ,.?!#%=+][^ ]*")
 bad_chars = "'\\.,[](){}:;\""
 html_tag_re = re.compile(r'<[^>]+>')
 
