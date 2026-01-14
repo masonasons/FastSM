@@ -86,7 +86,11 @@ class Application:
 		threading.Thread(target=self.cfu).start()
 
 		self.prefs = config.Config(name="FastSM", autosave=True)
-		self.confpath = self.prefs._user_config_home + "/FastSM"
+		# In portable mode, userdata folder is already app-specific, don't add /FastSM
+		if config.is_portable_mode():
+			self.confpath = self.prefs._user_config_home
+		else:
+			self.confpath = self.prefs._user_config_home + "/FastSM"
 
 		if platform.system() == "Darwin":
 			try:
@@ -208,7 +212,11 @@ class Application:
 		"""Check if an account has credentials saved (no dialogs needed)."""
 		import config
 		try:
-			prefs = config.Config(name="FastSM/account"+str(index), autosave=False)
+			# In portable mode, don't add FastSM prefix (userdata is already app-specific)
+			if config.is_portable_mode():
+				prefs = config.Config(name="account"+str(index), autosave=False)
+			else:
+				prefs = config.Config(name="FastSM/account"+str(index), autosave=False)
 			platform_type = prefs.get("platform_type", "")
 
 			if platform_type == "bluesky":

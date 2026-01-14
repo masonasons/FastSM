@@ -79,6 +79,9 @@ class Config(MutableMapping):
 	@property
 	def config_file(self):
 		"""Get the path to the config file."""
+		# In portable mode, don't add app name subdirectory (userdata is already app-specific)
+		if is_portable_mode():
+			return os.path.join(self._user_config_home, "config.json")
 		return os.path.join(self._user_config_home, self._name, "config.json")
 
 	def _convert_nested(self, data):

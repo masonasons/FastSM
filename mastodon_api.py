@@ -35,8 +35,13 @@ class mastodon(object):
 		self._initial_loads_lock = threading.Lock()
 		self.stream_listener = None
 		self.stream = None
-		self.prefs = config.Config(name="FastSM/account"+str(index), autosave=True)
-		self.confpath = self.prefs._user_config_home+"/FastSM/account"+str(index)
+		# In portable mode, don't add FastSM prefix (userdata is already app-specific)
+		if config.is_portable_mode():
+			self.prefs = config.Config(name="account"+str(index), autosave=True)
+			self.confpath = self.prefs._user_config_home+"/account"+str(index)
+		else:
+			self.prefs = config.Config(name="FastSM/account"+str(index), autosave=True)
+			self.confpath = self.prefs._user_config_home+"/FastSM/account"+str(index)
 
 		# Platform backend (initialized after authentication)
 		self._platform = None
