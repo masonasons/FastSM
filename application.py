@@ -78,22 +78,12 @@ class Application:
 		if self._initialized:
 			return
 
-		import time
-		import sys
-		_load_start = time.time()
-		def _log(msg):
-			print(f"  [{time.time() - _load_start:.2f}s] load: {msg}")
-			sys.stdout.flush()
-
-		_log("Importing modules...")
 		import sound
 		from GUI import main
 		import mastodon_api as t
 		import timeline
 
 		threading.Thread(target=self.cfu).start()
-
-		_log("Loading config...")
 		self.prefs = config.Config(name="FastSM", autosave=True)
 		# In portable mode, userdata folder is already app-specific, don't add /FastSM
 		if config.is_portable_mode():
@@ -193,14 +183,11 @@ class Application:
 		# User cache is now in-memory only per-account, no global cache needed
 		self.users = []
 
-		_log("Loading timeline settings...")
 		self.load_timeline_settings()
 
-		_log("Loading accounts...")
 		# Load accounts - first one on main thread, rest in parallel if already configured
 		if self.prefs.accounts > 0:
 			# First account must be on main thread (handles auth dialogs, sets currentAccount)
-			_log("Adding first account session...")
 			self.add_session()
 
 			# Load remaining accounts in parallel if more than one
@@ -225,7 +212,6 @@ class Application:
 				for i in sequential:
 					self.add_session(i)
 
-		_log("All accounts loaded, initialization complete")
 		self._initialized = True
 
 	def add_session(self, index=None):
