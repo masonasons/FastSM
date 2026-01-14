@@ -75,7 +75,7 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnUrl, m_url)
 		m_tweet_url=menu2.Append(-1, "Open URL of Post\tCtrl+Shift+O", "post_url")
 		self.Bind(wx.EVT_MENU, self.OnTweetUrl, m_tweet_url)
-		m_delete = menu2.Append(-1, "Delete Post\tDelete", "post")
+		m_delete = menu2.Append(-1, "Delete Post" if platform.system() == "Darwin" else "Delete Post\tDelete", "post")
 		self.Bind(wx.EVT_MENU, self.OnDelete, m_delete)
 		m_copy = menu2.Append(-1, "Copy post to clipboard\tCtrl+C", "copy")
 		self.Bind(wx.EVT_MENU, self.onCopy, m_copy)
@@ -97,7 +97,7 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnMuteUser, m_mute_user)
 		m_unmute_user=menu2.Append(-1, "Unmute", "unmute")
 		self.Bind(wx.EVT_MENU, self.OnUnmuteUser, m_unmute_user)
-		m_view=menu2.Append(-1, "View post\tReturn", "view")
+		m_view=menu2.Append(-1, "View post" if platform.system() == "Darwin" else "View post\tReturn", "view")
 		self.Bind(wx.EVT_MENU, self.OnView, m_view)
 		m_user_profile=menu2.Append(-1, "User Profile\tCtrl+Shift+U", "profile")
 		self.Bind(wx.EVT_MENU, self.OnUserProfile, m_user_profile)
@@ -147,9 +147,9 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnCloseTimeline, self.m_close_timeline)
 		self.menuBar.Append(menu3, "Time&line")
 		menu4 = wx.Menu()
-		m_play_external = menu4.Append(-1, "Play media\tCtrl+Return", "play_external")
+		m_play_external = menu4.Append(-1, "Play media" if platform.system() == "Darwin" else "Play media\tCtrl+Return", "play_external")
 		self.Bind(wx.EVT_MENU, self.OnPlayExternal, m_play_external)
-		m_stop_audio = menu4.Append(-1, "Stop audio\tCtrl+Shift+Return", "stop_audio")
+		m_stop_audio = menu4.Append(-1, "Stop audio" if platform.system() == "Darwin" else "Stop audio\tCtrl+Shift+Return", "stop_audio")
 		self.Bind(wx.EVT_MENU, self.OnStopAudio, m_stop_audio)
 		m_volup = menu4.Append(-1, "Volume up\tAlt+Up", "volup")
 		self.Bind(wx.EVT_MENU, self.OnVolup, m_volup)
@@ -186,13 +186,14 @@ class MainGui(wx.Frame):
 		self.menuBar.Append(menu6, "&Help")
 		self.SetMenuBar(self.menuBar)
 
-		# Add accelerator for context menu (Alt+M)
-		self.context_menu_id = wx.NewIdRef()
-		self.Bind(wx.EVT_MENU, self.OnPostContextMenu, id=self.context_menu_id)
-		accel = wx.AcceleratorTable([
-			(wx.ACCEL_ALT, ord('M'), self.context_menu_id),
-		])
-		self.SetAcceleratorTable(accel)
+		# Add accelerator for context menu (Alt+M) - not on Mac due to focus issues
+		if platform.system() != "Darwin":
+			self.context_menu_id = wx.NewIdRef()
+			self.Bind(wx.EVT_MENU, self.OnPostContextMenu, id=self.context_menu_id)
+			accel = wx.AcceleratorTable([
+				(wx.ACCEL_ALT, ord('M'), self.context_menu_id),
+			])
+			self.SetAcceleratorTable(accel)
 
 		self.list_label=wx.StaticText(self.panel, -1, label="Timelines")
 		self.list=wx.ListBox(self.panel, -1)
