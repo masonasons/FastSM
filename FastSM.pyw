@@ -26,14 +26,15 @@ def _clear_requests_pycache():
 			pass
 	return False
 
-# Try to import requests, clear pycache if it fails
-try:
-	import requests
-except Exception:
-	if _clear_requests_pycache():
-		# Retry after clearing cache
-		import importlib
+# Try to import requests, clear pycache if it fails (only when running from source)
+if not getattr(sys, 'frozen', False):
+	try:
 		import requests
+	except Exception:
+		if _clear_requests_pycache():
+			# Retry after clearing cache
+			import importlib
+			import requests
 
 import threading
 
