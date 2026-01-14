@@ -126,6 +126,14 @@ class MastodonAccount(PlatformAccount):
             self.user_cache.add_users_from_status(status)
         return result
 
+    def get_bookmarks(self, limit: int = 40, **kwargs) -> List[UniversalStatus]:
+        """Get bookmarked statuses."""
+        statuses = self.api.bookmarks(limit=limit, **kwargs)
+        result = self._convert_statuses(statuses)
+        for status in result:
+            self.user_cache.add_users_from_status(status)
+        return result
+
     def get_user_statuses(self, user_id: str, limit: int = 40, **kwargs) -> List[UniversalStatus]:
         """Get statuses from a specific user."""
         statuses = self.api.account_statuses(id=user_id, limit=limit, **kwargs)
@@ -161,6 +169,8 @@ class MastodonAccount(PlatformAccount):
     def get_available_timelines(self) -> List[dict]:
         """Get available custom timelines for this platform."""
         return [
+            {'type': 'favourites', 'id': 'favourites', 'name': 'Favourites', 'description': 'Posts you have favourited'},
+            {'type': 'bookmarks', 'id': 'bookmarks', 'name': 'Bookmarks', 'description': 'Posts you have bookmarked'},
             {'type': 'local', 'id': 'local', 'name': 'Local Timeline', 'description': 'Posts from users on this instance'},
             {'type': 'federated', 'id': 'federated', 'name': 'Federated Timeline', 'description': 'Posts from all known instances'},
             {'type': 'instance', 'id': 'instance', 'name': 'Instance Timeline', 'description': 'Local timeline from another instance'},

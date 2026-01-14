@@ -10,9 +10,16 @@ import speak
 
 def add_custom_timeline(account, tl_type, tl_id, tl_name, focus=True):
     """Add a custom timeline to the account."""
-    # Check if already exists
+    # Check if already exists in preferences
     for ct in account.prefs.custom_timelines:
         if ct.get('type') == tl_type and ct.get('id') == tl_id:
+            if focus:
+                get_app().alert("This timeline is already open.", "Error")
+            return False
+
+    # Also check if timeline is already open (e.g., favourites, bookmarks)
+    for tl in account.timelines:
+        if tl.type == tl_type:
             if focus:
                 get_app().alert("This timeline is already open.", "Error")
             return False
@@ -222,8 +229,12 @@ class CustomTimelinesDialog(wx.Dialog):
         speak.speak("Loading saved feeds...")
 
         def load():
+            # Always include Likes as an option
+            self.timelines = [
+                {'type': 'favourites', 'id': 'favourites', 'name': 'Likes', 'description': 'Posts you have liked'},
+            ]
             if hasattr(self.account, '_platform') and self.account._platform:
-                self.timelines = self.account._platform.get_saved_feeds()
+                self.timelines.extend(self.account._platform.get_saved_feeds())
             wx.CallAfter(self._update_list)
 
         threading.Thread(target=load, daemon=True).start()

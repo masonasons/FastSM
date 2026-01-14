@@ -83,6 +83,13 @@ class timeline(object):
 				self.func = self.account._platform.get_favourites
 			else:
 				self.func = self.account.api.favourites
+			self.removable = True
+		elif self.type == "bookmarks":
+			if hasattr(self.account, '_platform') and self.account._platform:
+				self.func = self.account._platform.get_bookmarks
+			else:
+				self.func = self.account.api.bookmarks
+			self.removable = True
 		elif self.type == "user":
 			if hasattr(self.account, '_platform') and self.account._platform:
 				user_id = self.user.id if self.user else self.data
@@ -215,7 +222,7 @@ class timeline(object):
 			pass
 
 	def hide_tl(self):
-		if self.type == "user" and self.name != "Sent" or self.type == "list" or self.type == "search" or self.type == "conversation" or self.type == "instance" or self.type == "remote_user":
+		if self.type == "user" and self.name != "Sent" or self.type == "list" or self.type == "search" or self.type == "conversation" or self.type == "instance" or self.type == "remote_user" or self.type == "favourites" or self.type == "bookmarks":
 			self.app.alert("You can't hide this timeline. Try closing it instead.", "Error")
 			return
 		self.hide = True

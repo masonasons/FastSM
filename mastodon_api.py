@@ -181,7 +181,6 @@ class mastodon(object):
 		timeline.add(self, "Notifications", "notifications")
 		timeline.add(self, "Mentions", "mentions")
 		timeline.add(self, "Conversations", "conversations")
-		timeline.add(self, "Favourites", "favourites")
 		timeline.add(self, "Sent", "user", self.me.acct, self.me)
 
 		# Restore saved timelines (avoid API calls during startup for speed)
@@ -295,7 +294,6 @@ class mastodon(object):
 		timeline.add(self, "Notifications", "notifications")
 		timeline.add(self, "Mentions", "mentions")
 		# No conversations - Bluesky doesn't support DMs
-		timeline.add(self, "Favourites", "favourites")
 		timeline.add(self, "Sent", "user", self.me.acct, self.me)
 
 		# Restore saved user timelines and searches (no lists for Bluesky)
