@@ -496,6 +496,9 @@ class Application:
 										obj = getattr(fallback_obj, "acct", obj)
 								else:
 									obj = demojied
+							elif last_attr == 'note':
+								# Strip HTML from bio/note field
+								obj = self.strip_html(str(obj))
 							template = template.replace("$" + t[1] + "$", str(obj))
 					except Exception as e:
 						pass  # Leave placeholder if we can't resolve it
@@ -515,6 +518,9 @@ class Application:
 							else:
 								if t[1] == "created_at":
 									template = template.replace("$" + t[1] + "$", self.parse_date(getattr(s, t[1])))
+								elif t[1] == "note":
+									# Strip HTML from bio/note field
+									template = template.replace("$" + t[1] + "$", self.strip_html(str(getattr(s, t[1]))))
 								else:
 									template = template.replace("$" + t[1] + "$", str(getattr(s, t[1])))
 						except:
