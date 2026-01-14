@@ -46,6 +46,7 @@ errors.log
 *.exe
 *.dll
 *.pyd
+*.zip
 FastSM.build/
 FastSM.dist/
 FastSM.onefile-build/
