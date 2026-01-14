@@ -427,12 +427,15 @@ class timeline(object):
 		self._stop_loading_all = False
 		self._loading_all_active = True
 		total_loaded = 0
+		total_shown = 0
 
 		speak.speak("Loading all previous posts...")
 
 		while not self._stop_loading_all:
-			# Get current count before loading
-			count_before = len(self.statuses)
+			# Get current count before loading - use unfiltered list if filter applied
+			status_list = getattr(self, '_unfiltered_statuses', None) or self.statuses
+			count_before = len(status_list)
+			shown_before = len(self.statuses)
 
 			# Try to load previous
 			try:
@@ -441,23 +444,35 @@ class timeline(object):
 				speak.speak(f"Stopped loading: {e}")
 				break
 
-			# Check if we got any new items
-			count_after = len(self.statuses)
+			# Check if we got any new items (from unfiltered list)
+			status_list = getattr(self, '_unfiltered_statuses', None) or self.statuses
+			count_after = len(status_list)
 			new_items = count_after - count_before
+
+			# Also track shown items
+			shown_after = len(self.statuses)
+			new_shown = shown_after - shown_before
 
 			if new_items == 0:
 				# No more items to load - timeline fully loaded
-				speak.speak(f"Timeline fully loaded. {total_loaded} posts loaded in total.")
+				if hasattr(self, '_filter_settings') and self._filter_settings:
+					speak.speak(f"Timeline fully loaded. {total_loaded} posts loaded, {total_shown} shown.")
+				else:
+					speak.speak(f"Timeline fully loaded. {total_loaded} posts loaded in total.")
 				break
 
 			total_loaded += new_items
+			total_shown += new_shown
 
 			# Small delay to avoid hammering the API
 			import time
 			time.sleep(0.5)
 
 		if self._stop_loading_all:
-			speak.speak(f"Loading stopped. {total_loaded} posts loaded.")
+			if hasattr(self, '_filter_settings') and self._filter_settings:
+				speak.speak(f"Loading stopped. {total_loaded} posts loaded, {total_shown} shown.")
+			else:
+				speak.speak(f"Loading stopped. {total_loaded} posts loaded.")
 
 		self._loading_all_active = False
 
