@@ -446,10 +446,28 @@ class mastodon(object):
 		if self.prefs.platform_type == "bluesky":
 			return
 
-		try:
-			self.stream = self.api.stream_user(self.stream_listener, run_async=False, reconnect_async=True)
-		except Exception as e:
-			speak.speak("Stream error: " + str(e))
+		import time
+		retry_count = 0
+		max_retries = 5
+		base_delay = 5  # seconds
+
+		while retry_count < max_retries:
+			try:
+				self.stream = self.api.stream_user(self.stream_listener, run_async=False, reconnect_async=True)
+				# If stream exits normally, reset retry count
+				retry_count = 0
+			except Exception as e:
+				error_str = str(e)
+				# Don't spam errors for common transient issues
+				if "Missing field" not in error_str:
+					speak.speak("Stream error: " + error_str)
+				retry_count += 1
+				if retry_count < max_retries:
+					# Exponential backoff
+					delay = base_delay * (2 ** (retry_count - 1))
+					time.sleep(delay)
+				else:
+					speak.speak(f"Stream failed after {max_retries} attempts")
 
 	def followers(self, id):
 		# Use platform backend if available
