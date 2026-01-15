@@ -96,10 +96,20 @@ if os.path.exists(os.path.expandvars(r"%temp%\gen_py")):
 import wx
 wx_app = wx.App(redirect=False)
 
+# --- THEME INTEGRATION START ---
+from GUI import theme
+theme.install_theme_handler()
+# --- THEME INTEGRATION END ---
+
 import speak
 from GUI import main
 fastsm_app = get_app()
 fastsm_app.load()
+
+# Explicitly apply theme to main window since it might be created before install_theme_handler fully propagates in some race conditions
+if theme.is_os_dark_mode():
+	theme.style_window(main.window)
+
 if fastsm_app.prefs.window_shown:
 	main.window.Show()
 else:

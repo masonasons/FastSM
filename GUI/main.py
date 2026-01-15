@@ -9,6 +9,7 @@ import wx
 from keyboard_handler.wx_handler import WXKeyboardHandler
 import speak
 from . import account_options, accounts, chooser, custom_timelines, explore_dialog, hashtag_dialog, invisible, lists, misc, options, profile, search, timeline_filter, timelines, tray, tweet, view
+from . import theme  # Import theme module
 import sound
 import timeline
 import threading
@@ -18,6 +19,11 @@ class MainGui(wx.Frame):
 		self.invisible=False
 		self._find_text = ""  # Current search text for find in timeline
 		wx.Frame.__init__(self, None, title=title,size=(800,600))
+		
+		# Apply Dark Mode if OS is dark
+		if theme.is_os_dark_mode():
+			theme.style_window(self)
+
 		self.Center()
 		if platform.system()!="Darwin":
 			self.trayicon=tray.TaskBarIcon(self)
@@ -217,7 +223,12 @@ class MainGui(wx.Frame):
 			# Use CHAR_HOOK for Option+M since it produces special characters
 			self.list2.Bind(wx.EVT_CHAR_HOOK, self.OnListCharHook)
 			self.list.Bind(wx.EVT_CHAR_HOOK, self.OnListCharHook)
+		
 		self.panel.Layout()
+        
+        # Ensure main panel also gets styled if needed
+		if theme.is_os_dark_mode():
+			theme.style_window(self.panel)
 
 	def _load_keymap_file(self, path):
 		"""Load a keymap file and return dict of key -> action mappings."""
@@ -1216,7 +1227,7 @@ class MainGui(wx.Frame):
 				os.system("open "+url)
 
 	# Alias for invisible interface
-	OnPostUrl = OnTweetUrl
+	OnPost = OnTweet
 
 	def OnAddToList(self, event=None):
 		status = self.get_current_status()
