@@ -283,7 +283,7 @@ class MainGui(wx.Frame):
 		# Use Ctrl+M (actual Control key) for context menu on Mac
 		if event.RawControlDown() and not event.AltDown() and not event.ShiftDown():
 			if key == ord('M') or key == ord('m'):
-				self.OnPostContextMenu()
+				self.OnPostContextMenu(None)
 				return  # Don't skip - consume the event
 		event.Skip()
 
@@ -517,7 +517,7 @@ class MainGui(wx.Frame):
 		else:
 			speak.speak("No messages in this conversation")
 
-	def OnPostContextMenu(self, event):
+	def OnPostContextMenu(self, event=None):
 		"""Show context menu for posts list - context-aware based on timeline type."""
 		# Make sure we have a valid selection
 		if self.list2.GetSelection() < 0:
