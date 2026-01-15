@@ -5,6 +5,7 @@ import os
 from application import get_app
 from . import main, misc
 import speak
+import mastodon_api
 
 class AccountsGui(wx.Dialog):
 	def __init__(self):
@@ -56,13 +57,18 @@ class AccountsGui(wx.Dialog):
 
 	def New(self, event):
 		app = get_app()
-		app.add_session()
-		app.prefs.accounts+=1
-		app.currentAccount=app.accounts[len(app.accounts)-1]
-		main.window.refreshTimelines()
-		main.window.on_list_change(None)
-		main.window.SetLabel(app.currentAccount.me.acct+" - "+application.name+" "+application.version)
-		self.Destroy()
+		try:
+			app.add_session()
+			app.prefs.accounts+=1
+			app.currentAccount=app.accounts[len(app.accounts)-1]
+			main.window.refreshTimelines()
+			main.window.on_list_change(None)
+			main.window.SetLabel(app.currentAccount.me.acct+" - "+application.name+" "+application.version)
+			self.Destroy()
+		except mastodon_api.AccountSetupCancelled:
+			# User cancelled - just close the dialog without adding account
+			speak.speak("Account setup cancelled.")
+			return
 
 	def Load(self, event):
 		app = get_app()

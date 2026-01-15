@@ -615,6 +615,23 @@ class BlueskyAccount(PlatformAccount):
             self.app.handle_error(e, "delete")
             return False
 
+    def is_status_pinned(self, status_id: str) -> bool:
+        """Check if a status is pinned to the user's profile."""
+        try:
+            profile_response = self.client.com.atproto.repo.get_record({
+                'repo': self.client.me.did,
+                'collection': 'app.bsky.actor.profile',
+                'rkey': 'self'
+            })
+            if profile_response and profile_response.value:
+                current_pinned = getattr(profile_response.value, 'pinnedPost', None) or getattr(profile_response.value, 'pinned_post', None)
+                if current_pinned:
+                    pinned_uri = getattr(current_pinned, 'uri', None) or (current_pinned.get('uri') if isinstance(current_pinned, dict) else None)
+                    return pinned_uri == status_id
+            return False
+        except Exception:
+            return False
+
     def pin_status(self, status_id: str) -> bool:
         """Pin a status to your profile by updating the profile record."""
         try:
@@ -631,16 +648,19 @@ class BlueskyAccount(PlatformAccount):
             
             # Try to get current profile record, handle if it doesn't exist
             current_value = None
+            current_cid = None
             try:
                 profile_response = self.client.com.atproto.repo.get_record({
                     'repo': self.client.me.did,
                     'collection': 'app.bsky.actor.profile',
                     'rkey': 'self'
                 })
-                current_value = profile_response.value if profile_response else None
+                if profile_response:
+                    current_value = profile_response.value
+                    current_cid = getattr(profile_response, 'cid', None)
             except Exception:
                 # Profile record doesn't exist yet, will create new one
-                current_value = None
+                pass
             
             # Create strong reference to the post
             pinned_post = {
@@ -648,34 +668,33 @@ class BlueskyAccount(PlatformAccount):
                 'cid': post_cid
             }
             
-            # Build updated profile record
-            updated_profile = {
-                '$type': 'app.bsky.actor.profile',
-                'pinnedPost': pinned_post
-            }
+            # Build updated profile record preserving all existing fields
+            updated_profile = {'$type': 'app.bsky.actor.profile'}
             
             if current_value:
-                # Preserve existing profile data
-                display_name = getattr(current_value, 'display_name', None) or getattr(current_value, 'displayName', None)
-                if display_name:
-                    updated_profile['displayName'] = display_name
-                description = getattr(current_value, 'description', None)
-                if description:
-                    updated_profile['description'] = description
-                avatar = getattr(current_value, 'avatar', None)
-                if avatar:
-                    updated_profile['avatar'] = avatar
-                banner = getattr(current_value, 'banner', None)
-                if banner:
-                    updated_profile['banner'] = banner
+                # Copy all existing fields from current profile
+                for field in ['displayName', 'display_name', 'description', 'avatar', 'banner', 
+                              'labels', 'joinedViaStarterPack', 'createdAt']:
+                    val = getattr(current_value, field, None)
+                    if val is not None:
+                        # Normalize display_name to displayName
+                        key = 'displayName' if field == 'display_name' else field
+                        updated_profile[key] = val
             
-            # Put the updated profile (creates if doesn't exist)
-            self.client.com.atproto.repo.put_record({
+            # Set the pinned post
+            updated_profile['pinnedPost'] = pinned_post
+            
+            # Put the updated profile with swap to prevent race conditions
+            put_params = {
                 'repo': self.client.me.did,
                 'collection': 'app.bsky.actor.profile',
                 'rkey': 'self',
                 'record': updated_profile
-            })
+            }
+            if current_cid:
+                put_params['swapRecord'] = current_cid
+            
+            self.client.com.atproto.repo.put_record(put_params)
             
             return True
         except (AtProtocolError, InvokeTimeoutError) as e:
@@ -687,13 +706,16 @@ class BlueskyAccount(PlatformAccount):
         try:
             # Try to get current profile record
             current_value = None
+            current_cid = None
             try:
                 profile_response = self.client.com.atproto.repo.get_record({
                     'repo': self.client.me.did,
                     'collection': 'app.bsky.actor.profile',
                     'rkey': 'self'
                 })
-                current_value = profile_response.value if profile_response else None
+                if profile_response:
+                    current_value = profile_response.value
+                    current_cid = getattr(profile_response, 'cid', None)
             except Exception:
                 # No profile record, nothing to unpin
                 return True
@@ -701,32 +723,39 @@ class BlueskyAccount(PlatformAccount):
             if not current_value:
                 return True  # Nothing to unpin
             
-            # Build updated profile record without pinnedPost
-            updated_profile = {
-                '$type': 'app.bsky.actor.profile'
-            }
+            # Check if there's a pinned post and if it matches the one we want to unpin
+            current_pinned = getattr(current_value, 'pinnedPost', None) or getattr(current_value, 'pinned_post', None)
+            if not current_pinned:
+                return True  # Nothing pinned
             
-            # Preserve existing profile data (but not pinnedPost)
-            display_name = getattr(current_value, 'display_name', None) or getattr(current_value, 'displayName', None)
-            if display_name:
-                updated_profile['displayName'] = display_name
-            description = getattr(current_value, 'description', None)
-            if description:
-                updated_profile['description'] = description
-            avatar = getattr(current_value, 'avatar', None)
-            if avatar:
-                updated_profile['avatar'] = avatar
-            banner = getattr(current_value, 'banner', None)
-            if banner:
-                updated_profile['banner'] = banner
+            pinned_uri = getattr(current_pinned, 'uri', None) or (current_pinned.get('uri') if isinstance(current_pinned, dict) else None)
+            if pinned_uri and pinned_uri != status_id:
+                # Different post is pinned, don't unpin it
+                return False
             
-            # Put the updated profile without pinnedPost
-            self.client.com.atproto.repo.put_record({
+            # Build updated profile record preserving all existing fields except pinnedPost
+            updated_profile = {'$type': 'app.bsky.actor.profile'}
+            
+            # Copy all existing fields except pinnedPost
+            for field in ['displayName', 'display_name', 'description', 'avatar', 'banner', 
+                          'labels', 'joinedViaStarterPack', 'createdAt']:
+                val = getattr(current_value, field, None)
+                if val is not None:
+                    # Normalize display_name to displayName
+                    key = 'displayName' if field == 'display_name' else field
+                    updated_profile[key] = val
+            
+            # Put the updated profile without pinnedPost, with swap to prevent race conditions
+            put_params = {
                 'repo': self.client.me.did,
                 'collection': 'app.bsky.actor.profile',
                 'rkey': 'self',
                 'record': updated_profile
-            })
+            }
+            if current_cid:
+                put_params['swapRecord'] = current_cid
+            
+            self.client.com.atproto.repo.put_record(put_params)
             
             return True
         except (AtProtocolError, InvokeTimeoutError) as e:
@@ -924,3 +953,90 @@ class BlueskyAccount(PlatformAccount):
     def get_popular_feeds(self, limit: int = 50, query: str = None) -> List[dict]:
         """Get popular feeds (wrapper for search_feeds)."""
         return self.search_feeds(query or '', limit=limit)
+
+    # ============ Profile Methods ============
+
+    def get_own_profile(self) -> dict:
+        """Get current user's profile for editing.
+        
+        Returns dict with 'display_name', 'note', 'fields', 'locked' keys.
+        Note: Bluesky doesn't support fields or locked accounts.
+        """
+        try:
+            profile = self.client.get_profile(actor=self.client.me.did)
+            return {
+                'display_name': getattr(profile, 'display_name', '') or getattr(profile, 'displayName', '') or '',
+                'note': getattr(profile, 'description', '') or '',
+                'fields': [],  # Bluesky doesn't support profile fields
+                'locked': False  # Bluesky doesn't have locked accounts
+            }
+        except (AtProtocolError, InvokeTimeoutError):
+            return {}
+
+    def update_profile(self, display_name: str = None, note: str = None, 
+                       fields: List[dict] = None, locked: bool = None) -> bool:
+        """Update current user's profile.
+        
+        Args:
+            display_name: New display name
+            note: New bio/description
+            fields: Ignored (Bluesky doesn't support profile fields)
+            locked: Ignored (Bluesky doesn't have locked accounts)
+        """
+        try:
+            # Get current profile record
+            current_value = None
+            current_cid = None
+            try:
+                profile_response = self.client.com.atproto.repo.get_record({
+                    'repo': self.client.me.did,
+                    'collection': 'app.bsky.actor.profile',
+                    'rkey': 'self'
+                })
+                if profile_response:
+                    current_value = profile_response.value
+                    current_cid = getattr(profile_response, 'cid', None)
+            except Exception:
+                pass
+            
+            # Build updated profile
+            updated_profile = {'$type': 'app.bsky.actor.profile'}
+            
+            # Preserve existing fields
+            if current_value:
+                for field in ['avatar', 'banner', 'labels', 'joinedViaStarterPack', 
+                              'createdAt', 'pinnedPost']:
+                    val = getattr(current_value, field, None)
+                    if val is not None:
+                        updated_profile[field] = val
+            
+            # Set new values (or preserve old if not provided)
+            if display_name is not None:
+                updated_profile['displayName'] = display_name
+            elif current_value:
+                old_name = getattr(current_value, 'display_name', None) or getattr(current_value, 'displayName', None)
+                if old_name:
+                    updated_profile['displayName'] = old_name
+            
+            if note is not None:
+                updated_profile['description'] = note
+            elif current_value:
+                old_desc = getattr(current_value, 'description', None)
+                if old_desc:
+                    updated_profile['description'] = old_desc
+            
+            # Put the updated profile
+            put_params = {
+                'repo': self.client.me.did,
+                'collection': 'app.bsky.actor.profile',
+                'rkey': 'self',
+                'record': updated_profile
+            }
+            if current_cid:
+                put_params['swapRecord'] = current_cid
+            
+            self.client.com.atproto.repo.put_record(put_params)
+            return True
+        except (AtProtocolError, InvokeTimeoutError) as e:
+            self.app.handle_error(e, "update profile")
+            return False

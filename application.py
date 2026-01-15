@@ -179,8 +179,17 @@ class Application:
 		self.prefs.wrap = self.prefs.get("wrap", False)
 		# Content warning handling: 'hide' = show CW only, 'show' = show CW + text, 'ignore' = show text only
 		self.prefs.cw_mode = self.prefs.get("cw_mode", "hide")
-		# Keymap for invisible interface (default inherits from default.keymap)
-		self.prefs.keymap = self.prefs.get("keymap", "default")
+		# Keymap for invisible interface - auto-detect Windows 11
+		default_keymap = "default"
+		if platform.system() == "Windows":
+			# Windows 11 has build number >= 22000
+			try:
+				build = int(platform.version().split('.')[-1])
+				if build >= 22000:
+					default_keymap = "win11"
+			except:
+				pass
+		self.prefs.keymap = self.prefs.get("keymap", default_keymap)
 
 		if self.prefs.invisible:
 			main.window.register_keys()
@@ -193,7 +202,13 @@ class Application:
 		# Load accounts - first one on main thread, rest in parallel if already configured
 		if self.prefs.accounts > 0:
 			# First account must be on main thread (handles auth dialogs, sets currentAccount)
-			self.add_session()
+			if not self.add_session():
+				# User cancelled first account setup - reset accounts count and exit cleanly
+				self.prefs.accounts = 0
+				import speak
+				speak.speak("Account setup cancelled. Please add an account to use FastSM.")
+				self._initialized = True
+				return
 
 			# Load remaining accounts in parallel if more than one
 			if self.prefs.accounts > 1:
@@ -215,16 +230,28 @@ class Application:
 
 				# Load unconfigured accounts sequentially on main thread (need dialogs)
 				for i in sequential:
-					self.add_session(i)
+					if not self.add_session(i):
+						# User cancelled - reduce account count
+						self.prefs.accounts = len(self.accounts)
+						break
 
 		self._initialized = True
 
 	def add_session(self, index=None):
-		"""Add a new account session."""
+		"""Add a new account session.
+		
+		Returns:
+			True if account was added successfully, False if cancelled or failed.
+		"""
 		import mastodon_api as t
 		if index is None:
 			index = len(self.accounts)
-		self.accounts.append(t.mastodon(self, index))
+		try:
+			self.accounts.append(t.mastodon(self, index))
+			return True
+		except t.AccountSetupCancelled:
+			# User cancelled account setup
+			return False
 
 	def _is_account_configured(self, index):
 		"""Check if an account has credentials saved (no dialogs needed)."""

@@ -22,8 +22,8 @@ class MainGui(wx.Frame):
 		if platform.system()!="Darwin":
 			self.trayicon=tray.TaskBarIcon(self)
 		self.handler=WXKeyboardHandler(self)
-		self.handler.register_key("control+win+shift+t",self.ToggleWindow)
-		self.handler.register_key("alt+win+shift+q",self.OnClose)
+		# Note: Global hotkeys are registered later via register_keys() from keymap.keymap
+		# Don't register them here to avoid duplicates
 		self.Bind(wx.EVT_CLOSE, self.OnClose)
 		self.panel = wx.Panel(self)
 		self.main_box = wx.BoxSizer(wx.VERTICAL)
@@ -73,6 +73,8 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnQuote, m_quote)
 		m_like=menu2.Append(-1, "Like/Unlike\tCtrl+K", "favourite")
 		self.Bind(wx.EVT_MENU, self.OnLikeToggle, m_like)
+		m_pin=menu2.Append(-1, "Pin/Unpin\tCtrl+P", "pin")
+		self.Bind(wx.EVT_MENU, self.OnPinToggle, m_pin)
 		m_url=menu2.Append(-1, "Open URL\tCtrl+O", "url")
 		self.Bind(wx.EVT_MENU, self.OnUrl, m_url)
 		m_tweet_url=menu2.Append(-1, "Open URL of Post\tCtrl+Shift+O", "post_url")
@@ -691,12 +693,10 @@ class MainGui(wx.Frame):
 						user_id = None
 					if user_id:
 						account = get_app().currentAccount
-						relationships = account.api.account_relationships([user_id])
-						if relationships and len(relationships) > 0:
-							rel = relationships[0]
-							is_following = getattr(rel, 'following', False)
-							is_muting = getattr(rel, 'muting', False)
-							is_blocking = getattr(rel, 'blocking', False)
+						rel = misc.get_relationship(account, user_id)
+						is_following = rel.get('following', False)
+						is_muting = rel.get('muting', False)
+						is_blocking = rel.get('blocking', False)
 			except:
 				pass
 
@@ -736,9 +736,8 @@ class MainGui(wx.Frame):
 				try:
 					if hasattr(item, 'account'):
 						account = get_app().currentAccount
-						relationships = account.api.account_relationships([item.account.id])
-						if relationships and len(relationships) > 0:
-							is_blocking = getattr(relationships[0], 'blocking', False)
+						rel = misc.get_relationship(account, item.account.id)
+						is_blocking = rel.get('blocking', False)
 				except:
 					pass
 
@@ -764,13 +763,11 @@ class MainGui(wx.Frame):
 				try:
 					if hasattr(item, 'account'):
 						account = get_app().currentAccount
-						relationships = account.api.account_relationships([item.account.id])
-						if relationships and len(relationships) > 0:
-							rel = relationships[0]
-							is_following = getattr(rel, 'following', False)
-							is_muting = getattr(rel, 'muting', False)
-							is_blocking = getattr(rel, 'blocking', False)
-							is_showing_reblogs = getattr(rel, 'showing_reblogs', True)
+						rel = misc.get_relationship(account, item.account.id)
+						is_following = rel.get('following', False)
+						is_muting = rel.get('muting', False)
+						is_blocking = rel.get('blocking', False)
+						is_showing_reblogs = rel.get('showing_reblogs', True)
 				except:
 					pass
 
@@ -857,13 +854,11 @@ class MainGui(wx.Frame):
 					user_id = item.account.id if hasattr(item, 'account') else (notif_status.account.id if notif_status else None)
 					if user_id:
 						account = get_app().currentAccount
-						relationships = account.api.account_relationships([user_id])
-						if relationships and len(relationships) > 0:
-							rel = relationships[0]
-							is_following = getattr(rel, 'following', False)
-							is_muting = getattr(rel, 'muting', False)
-							is_blocking = getattr(rel, 'blocking', False)
-							is_showing_reblogs = getattr(rel, 'showing_reblogs', True)
+						rel = misc.get_relationship(account, user_id)
+						is_following = rel.get('following', False)
+						is_muting = rel.get('muting', False)
+						is_blocking = rel.get('blocking', False)
+						is_showing_reblogs = rel.get('showing_reblogs', True)
 				except:
 					pass
 
@@ -952,13 +947,11 @@ class MainGui(wx.Frame):
 			try:
 				user_id = status_to_check.account.id
 				account = get_app().currentAccount
-				relationships = account.api.account_relationships([user_id])
-				if relationships and len(relationships) > 0:
-					rel = relationships[0]
-					is_following = getattr(rel, 'following', False)
-					is_muting = getattr(rel, 'muting', False)
-					is_blocking = getattr(rel, 'blocking', False)
-					is_showing_reblogs = getattr(rel, 'showing_reblogs', True)
+				rel = misc.get_relationship(account, user_id)
+				is_following = rel.get('following', False)
+				is_muting = rel.get('muting', False)
+				is_blocking = rel.get('blocking', False)
+				is_showing_reblogs = rel.get('showing_reblogs', True)
 			except:
 				pass
 
@@ -977,6 +970,28 @@ class MainGui(wx.Frame):
 			self.Bind(wx.EVT_MENU, self.OnBlockToggle, m_block)
 
 			menu.AppendSeparator()
+
+			# Pin/Unpin option (only for own posts) - before Delete
+			status_author = getattr(status_to_check, 'account', None)
+			if status_author and str(getattr(status_author, 'id', '')) == str(get_app().currentAccount.me.id):
+				# Check pinned state from server
+				is_pinned = False
+				try:
+					platform = getattr(get_app().currentAccount, '_platform', get_app().currentAccount)
+					if hasattr(platform, 'is_status_pinned'):
+						# Bluesky - check profile record
+						is_pinned = platform.is_status_pinned(status_to_check.id)
+					elif hasattr(platform, 'get_status'):
+						# Mastodon - check status pinned field
+						fresh_status = platform.get_status(status_to_check.id)
+						if fresh_status:
+							is_pinned = getattr(fresh_status, 'pinned', False)
+							if not is_pinned and hasattr(fresh_status, '_platform_data'):
+								is_pinned = getattr(fresh_status._platform_data, 'pinned', False)
+				except:
+					pass
+				m_pin = menu.Append(-1, "Unpin" if is_pinned else "Pin")
+				self.Bind(wx.EVT_MENU, self.OnPinToggle, m_pin)
 
 			m_delete = menu.Append(-1, "Delete")
 			self.Bind(wx.EVT_MENU, self.OnDelete, m_delete)
@@ -1296,6 +1311,12 @@ class MainGui(wx.Frame):
 		if status:
 			misc.message(get_app().currentAccount, status)
 
+	def OnPinToggle(self, event=None):
+		"""Toggle pin state for a status (only works for your own posts)."""
+		status = self.get_current_status()
+		if status:
+			misc.pin_toggle(get_app().currentAccount, status)
+
 	def OnLikeToggle(self, event=None):
 		"""Toggle favourite/like state for a status."""
 		status = self.get_current_status()
@@ -1357,17 +1378,11 @@ class MainGui(wx.Frame):
 	def _toggle_block_user(self, account, user):
 		"""Toggle block state for a specific user."""
 		try:
-			relationships = account.api.account_relationships([user.id])
-			if relationships and len(relationships) > 0:
-				rel = relationships[0]
-				if getattr(rel, 'blocking', False):
-					account.unblock(user.acct)
-					sound.play(account, "unblock")
-					speak.speak(f"Unblocked {user.acct}")
-				else:
-					account.block(user.acct)
-					sound.play(account, "block")
-					speak.speak(f"Blocked {user.acct}")
+			rel = misc.get_relationship(account, user.id)
+			if rel.get('blocking', False):
+				account.unblock(user.acct)
+				sound.play(account, "unblock")
+				speak.speak(f"Unblocked {user.acct}")
 			else:
 				account.block(user.acct)
 				sound.play(account, "block")
@@ -1422,20 +1437,28 @@ class MainGui(wx.Frame):
 	def _toggle_follow_user(self, account, user):
 		"""Toggle follow state for a specific user."""
 		try:
-			# Check current relationship
-			relationships = account.api.account_relationships([user.id])
-			if relationships and len(relationships) > 0:
-				rel = relationships[0]
-				if getattr(rel, 'following', False):
-					account.unfollow(user.acct)
-					sound.play(account, "unfollow")
-					speak.speak(f"Unfollowed {user.acct}")
-				else:
-					account.follow(user.acct)
-					sound.play(account, "follow")
-					speak.speak(f"Followed {user.acct}")
+			platform_type = getattr(account.prefs, 'platform_type', 'mastodon')
+			is_following = False
+			
+			if platform_type == 'bluesky':
+				# Bluesky: check viewer state from profile
+				platform = getattr(account, '_platform', None)
+				if platform and hasattr(platform, 'get_user'):
+					fresh_user = platform.get_user(user.id)
+					if fresh_user and hasattr(fresh_user, '_platform_data'):
+						viewer = getattr(fresh_user._platform_data, 'viewer', None)
+						if viewer:
+							is_following = getattr(viewer, 'following', None) is not None
 			else:
-				# No relationship data, assume not following
+				# Mastodon: use get_relationship helper
+				rel = misc.get_relationship(account, user.id)
+				is_following = rel.get('following', False)
+			
+			if is_following:
+				account.unfollow(user.acct)
+				sound.play(account, "unfollow")
+				speak.speak(f"Unfollowed {user.acct}")
+			else:
 				account.follow(user.acct)
 				sound.play(account, "follow")
 				speak.speak(f"Followed {user.acct}")
@@ -1457,18 +1480,16 @@ class MainGui(wx.Frame):
 		user = u[0]
 		try:
 			# Check current relationship
-			relationships = account.api.account_relationships([user.id])
-			if relationships and len(relationships) > 0:
-				rel = relationships[0]
-				is_showing_reblogs = getattr(rel, 'showing_reblogs', True)
-				# Toggle reblogs visibility - use account_follow with reblogs parameter
-				account.api.account_follow(id=user.id, reblogs=not is_showing_reblogs)
-				if is_showing_reblogs:
-					speak.speak(f"Hiding boosts from {user.acct}")
-					sound.play(account, "mute")
-				else:
-					speak.speak(f"Showing boosts from {user.acct}")
-					sound.play(account, "unmute")
+			rel = misc.get_relationship(account, user.id)
+			is_showing_reblogs = rel.get('showing_reblogs', True)
+			# Toggle reblogs visibility - use account_follow with reblogs parameter
+			account.api.account_follow(id=user.id, reblogs=not is_showing_reblogs)
+			if is_showing_reblogs:
+				speak.speak(f"Hiding boosts from {user.acct}")
+				sound.play(account, "mute")
+			else:
+				speak.speak(f"Showing boosts from {user.acct}")
+				sound.play(account, "unmute")
 		except Exception as error:
 			account.app.handle_error(error, "toggle boosts visibility")
 
@@ -1495,19 +1516,13 @@ class MainGui(wx.Frame):
 		"""Toggle mute state for a specific user."""
 		try:
 			# Check current relationship
-			relationships = account.api.account_relationships([user.id])
-			if relationships and len(relationships) > 0:
-				rel = relationships[0]
-				if getattr(rel, 'muting', False):
-					account.unmute(user.id)
-					sound.play(account, "unmute")
-					speak.speak(f"Unmuted {user.acct}")
-				else:
-					# Use mute dialog for options
-					from . import mute_dialog
-					mute_dialog.show_mute_dialog(account, user)
+			rel = misc.get_relationship(account, user.id)
+			if rel.get('muting', False):
+				account.unmute(user.id)
+				sound.play(account, "unmute")
+				speak.speak(f"Unmuted {user.acct}")
 			else:
-				# No relationship data, show mute dialog
+				# Use mute dialog for options
 				from . import mute_dialog
 				mute_dialog.show_mute_dialog(account, user)
 		except Exception as error:

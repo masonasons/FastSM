@@ -95,17 +95,11 @@ class ChooseGui(wx.Dialog):
 			try:
 				user = self.account.app.lookup_user_name(self.account, self.returnvalue)
 				if user != -1:
-					relationships = self.account.api.account_relationships([user.id])
-					if relationships and len(relationships) > 0:
-						rel = relationships[0]
-						if getattr(rel, 'following', False):
-							self.account.unfollow(self.returnvalue)
-							sound.play(self.account, "unfollow")
-						else:
-							self.account.follow(self.returnvalue)
-							sound.play(self.account, "follow")
+					rel = misc.get_relationship(self.account, user.id)
+					if rel.get('following', False):
+						self.account.unfollow(self.returnvalue)
+						sound.play(self.account, "unfollow")
 					else:
-						# No relationship data, assume not following
 						self.account.follow(self.returnvalue)
 						sound.play(self.account, "follow")
 			except MastodonError as e:
@@ -115,18 +109,12 @@ class ChooseGui(wx.Dialog):
 			try:
 				user = self.account.app.lookup_user_name(self.account, self.returnvalue)
 				if user != -1:
-					relationships = self.account.api.account_relationships([user.id])
-					if relationships and len(relationships) > 0:
-						rel = relationships[0]
-						if getattr(rel, 'muting', False):
-							self.account.api.account_unmute(id=user.id)
-							sound.play(self.account, "unmute")
-						else:
-							# Use mute dialog for options
-							from . import mute_dialog
-							mute_dialog.show_mute_dialog(self.account, user)
+					rel = misc.get_relationship(self.account, user.id)
+					if rel.get('muting', False):
+						self.account.api.account_unmute(id=user.id)
+						sound.play(self.account, "unmute")
 					else:
-						# No relationship data, show mute dialog
+						# Use mute dialog for options
 						from . import mute_dialog
 						mute_dialog.show_mute_dialog(self.account, user)
 			except MastodonError as e:
@@ -136,17 +124,11 @@ class ChooseGui(wx.Dialog):
 			try:
 				user = self.account.app.lookup_user_name(self.account, self.returnvalue)
 				if user != -1:
-					relationships = self.account.api.account_relationships([user.id])
-					if relationships and len(relationships) > 0:
-						rel = relationships[0]
-						if getattr(rel, 'blocking', False):
-							self.account.unblock(self.returnvalue)
-							sound.play(self.account, "unblock")
-						else:
-							self.account.block(self.returnvalue)
-							sound.play(self.account, "block")
+					rel = misc.get_relationship(self.account, user.id)
+					if rel.get('blocking', False):
+						self.account.unblock(self.returnvalue)
+						sound.play(self.account, "unblock")
 					else:
-						# No relationship data, assume not blocking
 						self.account.block(self.returnvalue)
 						sound.play(self.account, "block")
 			except MastodonError as e:

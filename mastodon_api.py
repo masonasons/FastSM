@@ -18,6 +18,11 @@ from models import UserCache
 from platforms.mastodon import MastodonAccount
 
 
+class AccountSetupCancelled(Exception):
+	"""Raised when user cancels account setup."""
+	pass
+
+
 class mastodon(object):
 	"""Multi-platform account wrapper. Despite the name, supports both Mastodon and Bluesky."""
 
@@ -69,7 +74,7 @@ class mastodon(object):
 			# New account - ask user which platform
 			selected = select_platform(main.window)
 			if selected is None:
-				sys.exit()
+				raise AccountSetupCancelled("Platform selection cancelled")
 			self.prefs.platform_type = selected
 
 		# Initialize based on platform type
@@ -92,7 +97,9 @@ class mastodon(object):
 			self.prefs.instance_url = ask(caption="Mastodon Instance",
 				message="Enter your Mastodon instance URL (e.g., mastodon.social, fosstodon.org):")
 			if self.prefs.instance_url is None:
-				sys.exit()
+				# Clear platform_type so user is asked again next time
+				self.prefs.platform_type = ""
+				raise AccountSetupCancelled("Instance URL entry cancelled")
 			# Ensure https://
 			if not self.prefs.instance_url.startswith("https://") and not self.prefs.instance_url.startswith("http://"):
 				self.prefs.instance_url = "https://" + self.prefs.instance_url
@@ -110,7 +117,8 @@ class mastodon(object):
 				self.prefs.client_secret = client_secret
 			except MastodonError as e:
 				speak.speak("Error registering app: " + str(e))
-				sys.exit()
+				self.prefs.platform_type = ""
+				raise AccountSetupCancelled(f"App registration failed: {e}")
 
 		# Authenticate if needed
 		if self.prefs.access_token == "":
@@ -129,13 +137,15 @@ class mastodon(object):
 				auth_code = ask(caption="Authorization Code",
 					message="Enter the authorization code from your browser:")
 				if auth_code is None:
-					sys.exit()
+					self.prefs.platform_type = ""
+					raise AccountSetupCancelled("Authorization code entry cancelled")
 
 				access_token = temp_api.log_in(code=auth_code, scopes=['read', 'write', 'follow', 'push'])
 				self.prefs.access_token = access_token
 			except MastodonError as e:
 				speak.speak("Error during authentication: " + str(e))
-				sys.exit()
+				self.prefs.platform_type = ""
+				raise AccountSetupCancelled(f"Authentication failed: {e}")
 
 		# Initialize the API
 		self.api = Mastodon(
@@ -150,9 +160,10 @@ class mastodon(object):
 			self.me = self.api.account_verify_credentials()
 		except MastodonError as e:
 			speak.speak("Error verifying credentials: " + str(e))
-			# Clear tokens and try again
+			# Clear tokens and platform_type
 			self.prefs.access_token = ""
-			sys.exit()
+			self.prefs.platform_type = ""
+			raise AccountSetupCancelled(f"Credential verification failed: {e}")
 
 		# Get instance info for character limit (use cached if available)
 		cached_max_chars = self.prefs.get("cached_max_chars", 0)
@@ -296,7 +307,9 @@ class mastodon(object):
 		if self.prefs.bluesky_handle == "" or self.prefs.bluesky_password == "":
 			creds = get_bluesky_credentials(main.window)
 			if creds is None:
-				sys.exit()
+				# Clear platform_type so user is asked again next time
+				self.prefs.platform_type = ""
+				raise AccountSetupCancelled("Bluesky credentials entry cancelled")
 			self.prefs.bluesky_handle = creds['handle']
 			self.prefs.bluesky_password = creds['password']
 			self.prefs.bluesky_service = creds['service_url']
@@ -304,17 +317,21 @@ class mastodon(object):
 		# Initialize the client and login
 		try:
 			self.api = Client(base_url=self.prefs.bluesky_service)
-			raw_profile = self.api.login(self.prefs.bluesky_handle, self.prefs.bluesky_password)
+			login_response = self.api.login(self.prefs.bluesky_handle, self.prefs.bluesky_password)
+			# Get full profile with follower counts etc. (login response doesn't have these)
+			raw_profile = self.api.get_profile(actor=self.api.me.did)
 			self.me = bluesky_profile_to_universal(raw_profile)
 		except AtProtocolError as e:
 			speak.speak("Error logging into Bluesky: " + str(e))
-			# Clear credentials
+			# Clear credentials and platform_type so user is asked again
 			self.prefs.bluesky_handle = ""
 			self.prefs.bluesky_password = ""
-			sys.exit()
+			self.prefs.platform_type = ""
+			raise AccountSetupCancelled(f"Bluesky login failed: {e}")
 		except Exception as e:
 			speak.speak("Error connecting to Bluesky: " + str(e))
-			sys.exit()
+			self.prefs.platform_type = ""
+			raise AccountSetupCancelled(f"Bluesky connection failed: {e}")
 
 		# Set platform properties
 		self.max_chars = 300  # Bluesky character limit

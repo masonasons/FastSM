@@ -9,6 +9,47 @@ import timeline
 from application import get_app
 
 
+def get_relationship(account, user_id):
+	"""Get relationship info for a user, works for both Mastodon and Bluesky.
+	
+	Returns dict with: following, muting, blocking, showing_reblogs (all booleans)
+	"""
+	result = {
+		'following': False,
+		'muting': False,
+		'blocking': False,
+		'showing_reblogs': True
+	}
+	
+	try:
+		platform_type = getattr(account.prefs, 'platform_type', 'mastodon')
+		
+		if platform_type == 'bluesky':
+			# Bluesky: get user profile and check viewer state
+			platform = getattr(account, '_platform', None)
+			if platform and hasattr(platform, 'get_user'):
+				user = platform.get_user(user_id)
+				if user and hasattr(user, '_platform_data'):
+					viewer = getattr(user._platform_data, 'viewer', None)
+					if viewer:
+						result['following'] = getattr(viewer, 'following', None) is not None
+						result['muting'] = getattr(viewer, 'muted', False)
+						result['blocking'] = getattr(viewer, 'blocking', None) is not None
+		else:
+			# Mastodon: use account_relationships API
+			relationships = account.api.account_relationships([user_id])
+			if relationships and len(relationships) > 0:
+				rel = relationships[0]
+				result['following'] = getattr(rel, 'following', False)
+				result['muting'] = getattr(rel, 'muting', False)
+				result['blocking'] = getattr(rel, 'blocking', False)
+				result['showing_reblogs'] = getattr(rel, 'showing_reblogs', True)
+	except:
+		pass
+	
+	return result
+
+
 def reply(account, status):
 	users = account.app.get_users_in_status(account, status)
 	NewPost = tweet.TweetGui(account, users + " ", type="reply", status=status)
@@ -308,21 +349,30 @@ def pin_toggle(account, status):
 			speak.speak("Cannot pin this post.")
 			return
 
-		# Toggle pin status
-		if getattr(actual_status, '_pinned', False) or getattr(actual_status, 'pinned', False):
+		# Fetch pinned state - use is_status_pinned if available (Bluesky), otherwise get_status (Mastodon)
+		is_pinned = False
+		if hasattr(platform, 'is_status_pinned'):
+			# Bluesky - check profile record
+			is_pinned = platform.is_status_pinned(status_id)
+		elif hasattr(platform, 'get_status'):
+			# Mastodon - check status pinned field
+			fresh_status = platform.get_status(status_id)
+			if fresh_status:
+				is_pinned = getattr(fresh_status, 'pinned', False)
+				if not is_pinned and hasattr(fresh_status, '_platform_data'):
+					is_pinned = getattr(fresh_status._platform_data, 'pinned', False)
+
+		# Toggle pin status based on server state
+		if is_pinned:
 			# Unpin
 			success = platform.unpin_status(status_id)
 			if success:
-				actual_status._pinned = False
-				actual_status.pinned = False
 				speak.speak("Unpinned.")
 				sound.play(account, "unlike")
 		else:
 			# Pin
 			success = platform.pin_status(status_id)
 			if success:
-				actual_status._pinned = True
-				actual_status.pinned = True
 				speak.speak("Pinned.")
 				sound.play(account, "like")
 	except Exception as error:
@@ -621,7 +671,13 @@ def next_from_user(account):
 
 def delete(account, status):
 	try:
-		account.api.status_delete(id=status.id)
+		# Use platform backend for cross-platform support
+		platform = getattr(account, '_platform', None)
+		if platform and hasattr(platform, 'delete_status'):
+			platform.delete_status(status.id)
+		else:
+			# Fallback to direct API call (Mastodon)
+			account.api.status_delete(id=status.id)
 		# Remove from all timelines by ID (not object identity)
 		status_id_str = str(status.id)
 		for tl in account.timelines:

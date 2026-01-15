@@ -406,46 +406,44 @@ class UserViewGui(wx.Dialog):
 
 		# Check relationship with this user
 		try:
-			relationships = self.account.api.account_relationships(id=user.id)
-			if relationships and len(relationships) > 0:
-				rel = relationships[0]
-				following = getattr(rel, 'following', False)
-				muting = getattr(rel, 'muting', False)
-				blocking = getattr(rel, 'blocking', False)
-				showing_reblogs = getattr(rel, 'showing_reblogs', True)
+			rel = misc.get_relationship(self.account, user.id)
+			following = rel['following']
+			muting = rel['muting']
+			blocking = rel['blocking']
+			showing_reblogs = rel['showing_reblogs']
 
-				if following:
-					self.unfollow.Enable(True)
-					self.follow.Enable(False)
-					# Show/hide boosts only available when following
-					if self.show_boosts is not None:
-						if showing_reblogs:
-							self.hide_boosts.Enable(True)
-							self.show_boosts.Enable(False)
-						else:
-							self.hide_boosts.Enable(False)
-							self.show_boosts.Enable(True)
-				else:
-					self.unfollow.Enable(False)
-					self.follow.Enable(True)
-					# Disable boosts buttons when not following
-					if self.show_boosts is not None:
+			if following:
+				self.unfollow.Enable(True)
+				self.follow.Enable(False)
+				# Show/hide boosts only available when following
+				if self.show_boosts is not None:
+					if showing_reblogs:
+						self.hide_boosts.Enable(True)
 						self.show_boosts.Enable(False)
+					else:
 						self.hide_boosts.Enable(False)
+						self.show_boosts.Enable(True)
+			else:
+				self.unfollow.Enable(False)
+				self.follow.Enable(True)
+				# Disable boosts buttons when not following
+				if self.show_boosts is not None:
+					self.show_boosts.Enable(False)
+					self.hide_boosts.Enable(False)
 
-				if muting:
-					self.unmute.Enable(True)
-					self.mute.Enable(False)
-				else:
-					self.unmute.Enable(False)
-					self.mute.Enable(True)
+			if muting:
+				self.unmute.Enable(True)
+				self.mute.Enable(False)
+			else:
+				self.unmute.Enable(False)
+				self.mute.Enable(True)
 
-				if blocking:
-					self.unblock.Enable(True)
-					self.block.Enable(False)
-				else:
-					self.unblock.Enable(False)
-					self.block.Enable(True)
+			if blocking:
+				self.unblock.Enable(True)
+				self.block.Enable(False)
+			else:
+				self.unblock.Enable(False)
+				self.block.Enable(True)
 		except:
 			self.follow.Enable(True)
 			self.unfollow.Enable(True)

@@ -903,3 +903,49 @@ class MastodonAccount(PlatformAccount):
             return result
         except MastodonError:
             return []
+
+    # ============ Profile Methods ============
+
+    def get_own_profile(self) -> dict:
+        """Get current user's profile for editing.
+        
+        Returns dict with 'display_name', 'note', 'fields', 'locked' keys.
+        """
+        try:
+            profile = self.api.account_verify_credentials()
+            fields = []
+            for field in getattr(profile, 'fields', []):
+                fields.append({
+                    'name': getattr(field, 'name', '') or field.get('name', ''),
+                    'value': getattr(field, 'value', '') or field.get('value', '')
+                })
+            return {
+                'display_name': getattr(profile, 'display_name', ''),
+                'note': getattr(profile, 'note', ''),
+                'fields': fields,
+                'locked': getattr(profile, 'locked', False)
+            }
+        except MastodonError:
+            return {}
+
+    def update_profile(self, display_name: str = None, note: str = None, 
+                       fields: List[dict] = None, locked: bool = None) -> bool:
+        """Update current user's profile.
+        
+        Args:
+            display_name: New display name
+            note: New bio/description
+            fields: List of dicts with 'name' and 'value' keys (up to 4)
+            locked: Whether to lock the account
+        """
+        try:
+            self.api.account_update_credentials(
+                display_name=display_name,
+                note=note,
+                fields=fields,
+                locked=locked
+            )
+            return True
+        except MastodonError as e:
+            self.app.handle_error(e, "update profile")
+            return False
