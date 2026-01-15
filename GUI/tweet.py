@@ -42,7 +42,6 @@ class TweetGui(wx.Dialog):
 		if platform.system() == "Darwin":
 			self.text.MacCheckSpelling(True)
 		self.main_box.Add(self.text, 0, wx.ALL, 10)
-		self.text.SetFocus()
 		self.text.Bind(wx.EVT_TEXT, self.Chars)
 		if self.type != "message":
 			self.text.AppendText(inittext)
@@ -185,6 +184,7 @@ class TweetGui(wx.Dialog):
 		self.Chars(None)
 		self.text.Bind(wx.EVT_CHAR, self.onKeyPress)
 		self.panel.Layout()
+		self.text.SetFocus()
 
 	def _platform_supports(self, feature):
 		"""Check if the current account's platform supports a feature."""
