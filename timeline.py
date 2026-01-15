@@ -695,6 +695,13 @@ class timeline(object):
 				# Notify account that this timeline's initial load is complete
 				if hasattr(self.account, '_on_timeline_initial_load_complete'):
 					self.account._on_timeline_initial_load_complete()
+			else:
+				# On refresh: if user hasn't moved, check if server marker changed
+				# This handles the case where another client updated the position
+				if not self._position_moved:
+					synced = self.sync_position_from_server()
+					if synced and self.app.currentAccount == self.account and self.account.currentTimeline == self:
+						wx.CallAfter(main.window.list2.SetSelection, self.index)
 		if self == self.account.timelines[len(self.account.timelines) - 1] and not self.account.ready:
 			self.account.ready = True
 			sound.play(self.account, "ready")
