@@ -359,11 +359,14 @@ class TimelineFilterDialog(wx.Dialog):
 def show_filter_dialog(account):
     """Show the timeline filter dialog for the current timeline."""
     from . import main as main_window
+    import platform
     timeline = account.currentTimeline
     if not timeline:
         return
 
-    dlg = TimelineFilterDialog(main_window.window, timeline)
+    # On Mac, use None as parent to avoid menu state issues
+    parent = None if platform.system() == "Darwin" else main_window.window
+    dlg = TimelineFilterDialog(parent, timeline)
     dlg.ShowModal()
 
 
