@@ -184,7 +184,11 @@ class TweetGui(wx.Dialog):
 		self.Chars(None)
 		self.text.Bind(wx.EVT_CHAR, self.onKeyPress)
 		self.panel.Layout()
-		self.text.SetFocus()
+		# Use CallAfter on Mac to ensure focus is set after dialog is fully shown
+		if platform.system() == "Darwin":
+			wx.CallAfter(self.text.SetFocus)
+		else:
+			self.text.SetFocus()
 
 	def _platform_supports(self, feature):
 		"""Check if the current account's platform supports a feature."""
