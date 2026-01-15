@@ -268,15 +268,21 @@ class ExploreDialog(wx.Dialog):
 
     def OnFollow(self, event):
         """Follow the selected user."""
+        import sound
+        import speak
         index = self.list.GetSelection()
         if index == wx.NOT_FOUND or index >= len(self.items):
             return
 
         item = self.items[index]
         if self.current_category in ('users', 'suggested_users'):
-            acct = getattr(item, 'acct', '')
-            if acct:
-                misc.follow_user(self.account, acct)
+            user_id = getattr(item, 'id', None)
+            if user_id:
+                try:
+                    self.account.follow(user_id)
+                    sound.play(self.account, "follow")
+                except Exception as error:
+                    self.account.app.handle_error(error, "Follow user")
 
     def OnOpenTimeline(self, event):
         """Open a timeline for the selected item."""

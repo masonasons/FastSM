@@ -509,7 +509,7 @@ class timeline(object):
 						tl = self._fetch_multiple_pages(self.prev_kwargs, fetch_pages)
 					else:
 						tl = self.func(**self.prev_kwargs)
-			except MastodonError as error:
+			except Exception as error:
 				self.app.handle_error(error, self.account.me.acct + "'s " + self.name)
 				# Still notify initial load complete even on error
 				if self.initial:
