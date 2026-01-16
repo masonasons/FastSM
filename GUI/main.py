@@ -218,7 +218,7 @@ class MainGui(wx.Frame):
 			self.list2.Bind(wx.EVT_CHAR_HOOK, self.OnListCharHook)
 			self.list.Bind(wx.EVT_CHAR_HOOK, self.OnListCharHook)
 		self.panel.Layout()
-		theme.apply_theme(self)
+		# Note: theme is applied in FastSM.pyw after prefs are loaded
 
 	def _load_keymap_file(self, path):
 		"""Load a keymap file and return dict of key -> action mappings."""

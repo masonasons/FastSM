@@ -97,9 +97,11 @@ import wx
 wx_app = wx.App(redirect=False)
 
 import speak
-from GUI import main
+from GUI import main, theme
 fastsm_app = get_app()
 fastsm_app.load()
+# Apply theme after prefs are loaded
+theme.apply_theme(main.window)
 if fastsm_app.prefs.window_shown:
 	main.window.Show()
 else:
