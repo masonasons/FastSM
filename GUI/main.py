@@ -333,6 +333,60 @@ class MainGui(wx.Frame):
 			return None
 		return item
 
+	def _sync_status_state_across_buffers(self, account, status_id, **state_updates):
+		"""Sync status state (favourited, reblogged, etc.) across all buffers.
+
+		Args:
+			account: The account whose timelines to update
+			status_id: The ID of the status to update
+			**state_updates: Key-value pairs of state to update (e.g., favourited=True)
+		"""
+		status_id_str = str(status_id)
+		for tl in account.timelines:
+			for status in tl.statuses:
+				# Check the status itself
+				matched = False
+				if str(getattr(status, 'id', '')) == status_id_str:
+					matched = True
+					target = status
+				# Check if it's a reblog containing the status
+				elif hasattr(status, 'reblog') and status.reblog:
+					reblog_id = getattr(status.reblog, 'id', '')
+					# Also check _original_status_id for mentions
+					orig_id = getattr(status.reblog, '_original_status_id', reblog_id)
+					if str(reblog_id) == status_id_str or str(orig_id) == status_id_str:
+						matched = True
+						target = status.reblog
+				# Check _original_status_id for mentions (status could be notification-wrapped)
+				elif hasattr(status, '_original_status_id'):
+					if str(status._original_status_id) == status_id_str:
+						matched = True
+						target = status
+
+				if matched:
+					for key, value in state_updates.items():
+						setattr(target, key, value)
+					# Clear display cache so it gets re-rendered
+					if hasattr(status, '_display_cache'):
+						try:
+							delattr(status, '_display_cache')
+						except (AttributeError, TypeError):
+							pass
+
+				# Also check notification statuses
+				if tl.type == "notifications" and hasattr(status, 'status') and status.status:
+					notif_status = status.status
+					notif_id = getattr(notif_status, 'id', '')
+					orig_id = getattr(notif_status, '_original_status_id', notif_id)
+					if str(notif_id) == status_id_str or str(orig_id) == status_id_str:
+						for key, value in state_updates.items():
+							setattr(notif_status, key, value)
+						if hasattr(status, '_display_cache'):
+							try:
+								delattr(status, '_display_cache')
+							except (AttributeError, TypeError):
+								pass
+
 	def ToggleWindow(self):
 		# Window hiding not supported on Mac
 		if platform.system() == "Darwin":
@@ -1120,7 +1174,8 @@ class MainGui(wx.Frame):
 			speak.speak("No user found")
 			return
 		u2 = [i.acct for i in u]
-		chooser.chooser(account, "User Timeline", "Choose user timeline", u2, "userTimeline")
+		# Use direct type to pass user objects, avoiding lookup issues
+		chooser.chooser(account, "User Timeline", "Choose user timeline", u2, "userTimeline_direct", user_objects=u)
 
 	def OnSearch(self, event=None):
 		s=search.SearchGui(get_app().currentAccount)
@@ -1207,7 +1262,8 @@ class MainGui(wx.Frame):
 			speak.speak("No user found")
 			return
 		u2 = [i.acct for i in u]
-		chooser.chooser(account, "User Profile", "Choose user profile", u2, "profile")
+		# Use direct type to pass user objects, avoiding lookup issues
+		chooser.chooser(account, "User Profile", "Choose user profile", u2, "profile_direct", user_objects=u)
 
 	def OnUrl(self, event=None):
 		status = self.get_current_status()
@@ -1401,13 +1457,15 @@ class MainGui(wx.Frame):
 				status_to_check = status.reblog if hasattr(status, 'reblog') and status.reblog else status
 				if getattr(status_to_check, 'favourited', False):
 					account.unfavourite(status_id)
-					status_to_check.favourited = False
+					new_state = False
 					sound.play(account, "unlike")
 				else:
 					account.favourite(status_id)
 					account.app.prefs.favourites_sent += 1
-					status_to_check.favourited = True
+					new_state = True
 					sound.play(account, "like")
+				# Sync state across all buffers
+				self._sync_status_state_across_buffers(account, status_id, favourited=new_state)
 			except Exception as error:
 				account.app.handle_error(error, "toggle favourite")
 
@@ -1422,13 +1480,15 @@ class MainGui(wx.Frame):
 				status_to_check = status.reblog if hasattr(status, 'reblog') and status.reblog else status
 				if getattr(status_to_check, 'reblogged', False):
 					account.unboost(status_id)
-					status_to_check.reblogged = False
+					new_state = False
 					sound.play(account, "delete")
 				else:
 					account.boost(status_id)
 					account.app.prefs.boosts_sent += 1
-					status_to_check.reblogged = True
+					new_state = True
 					sound.play(account, "send_repost")
+				# Sync state across all buffers
+				self._sync_status_state_across_buffers(account, status_id, reblogged=new_state)
 			except Exception as error:
 				account.app.handle_error(error, "toggle boost")
 

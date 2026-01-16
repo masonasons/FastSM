@@ -459,9 +459,8 @@ class Application:
 			acct = ""
 
 		if status:
-			status_text = self.strip_html(getattr(status, 'content', ''))
-			if len(status_text) > 280:
-				status_text = status_text[:280] + "..."
+			# Use text field if available, otherwise strip HTML from content
+			status_text = getattr(status, 'text', '') or self.strip_html(getattr(status, 'content', ''))
 			# Add poll info for notifications with polls
 			if hasattr(status, 'poll') and status.poll:
 				poll = status.poll
@@ -548,16 +547,17 @@ class Application:
 		if template == "":
 			template = self.prefs.postTemplate
 
-		# Handle $text$ specially - for reblogs, get text from reblog; also strip HTML
+		# Prepare text content now, but replace AFTER other substitutions
+		# to prevent $..$ patterns in post text from being interpreted as template vars
+		text_content = None
 		if "$text$" in template:
 			if hasattr(s, 'reblog') and s.reblog:
 				# For reblogs, get text from the reblogged status
-				text = getattr(s.reblog, 'text', '') or self.strip_html(getattr(s.reblog, 'content', ''))
+				text_content = getattr(s.reblog, 'text', '') or self.strip_html(getattr(s.reblog, 'content', ''))
 			else:
-				text = getattr(s, 'text', '') or self.strip_html(getattr(s, 'content', ''))
+				text_content = getattr(s, 'text', '') or self.strip_html(getattr(s, 'content', ''))
 			if self.prefs.demojify_post:
-				text = self.demojify(text)
-			template = template.replace("$text$", text)
+				text_content = self.demojify(text_content)
 
 		temp = template.split(" ")
 		for i in range(len(temp)):
@@ -623,6 +623,9 @@ class Application:
 								template = template.replace("$" + t[1] + "$", str(getattr(s, t[1])))
 							except Exception as e:
 								print(e)
+		# Replace $text$ last to prevent post content with $..$ from being interpreted as template vars
+		if text_content is not None:
+			template = template.replace("$text$", text_content)
 		return template
 
 	def get_users_in_status(self, account, s):

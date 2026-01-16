@@ -1,6 +1,23 @@
 FastSM Changelog
 ================
 
+0.2.2
+-----
+
+Bug Fixes:
+
+* Fixed conversation view for boosted posts - now shows replies to the original post, not the boost wrapper
+* Fixed favorite/boost state not syncing across buffers - state now updates in all timelines where the post appears
+* Fixed template variables in post text being interpreted - $text$ patterns in posts no longer get expanded
+* Fixed notification text truncation - removed 280 character limit, full text now shown
+* View Image button now only enabled for posts with actual image attachments (not video/audio/gifv)
+
+New Features:
+
+* Direct message sound support
+  - Mentions with visibility "direct" now play the "messages" sound instead of "mentions"
+  - When mentions timeline is hidden and a mention arrives in notifications, plays appropriate sound (mentions or messages)
+
 0.2.1
 -----
 

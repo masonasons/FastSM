@@ -27,11 +27,15 @@ class ChooseGui(wx.Dialog):
 	TYPE_UNMUTE="unmute"
 	TYPE_URL="url"
 	TYPE_USER_TIMELINE="userTimeline"
+	# Types that work with user objects directly (no lookup needed)
+	TYPE_PROFILE_DIRECT="profile_direct"
+	TYPE_USER_TIMELINE_DIRECT="userTimeline_direct"
 
-	def __init__(self,account,title="Choose",text="Choose a thing",list=[],type=""):
+	def __init__(self,account,title="Choose",text="Choose a thing",list=[],type="",user_objects=None):
 		self.account=account
 		self.type=type
 		self.returnvalue=""
+		self.user_objects = user_objects or []  # Store user objects for direct use
 		wx.Dialog.__init__(self, None, title=title, size=(350,200))
 		self.Bind(wx.EVT_CLOSE, self.OnClose)
 		self.panel = wx.Panel(self)
@@ -56,7 +60,12 @@ class ChooseGui(wx.Dialog):
 		self.returnvalue=self.chooser.GetValue().strip("@")
 		self.Destroy()
 		if self.type==self.TYPE_PROFILE:
-			user=view.UserViewGui(self.account,[self.account.app.lookup_user_name(self.account,self.returnvalue)],self.returnvalue+"'s profile")
+			looked_up = self.account.app.lookup_user_name(self.account, self.returnvalue)
+			if looked_up == -1 or looked_up is None:
+				import speak
+				speak.speak(f"Could not find user {self.returnvalue}")
+				return
+			user=view.UserViewGui(self.account,[looked_up],self.returnvalue+"'s profile")
 			user.Show()
 		elif self.type==self.TYPE_URL:
 			self.account.app.openURL(self.returnvalue)
@@ -108,6 +117,25 @@ class ChooseGui(wx.Dialog):
 		elif self.type==self.TYPE_USER_TIMELINE:
 			# Show filter selection dialog for user timelines
 			self._show_filter_dialog(self.returnvalue)
+		elif self.type==self.TYPE_PROFILE_DIRECT:
+			# Use user object directly (no lookup needed)
+			idx = self.chooser.GetSelection()
+			if idx >= 0 and idx < len(self.user_objects):
+				user = self.user_objects[idx]
+				viewer = view.UserViewGui(self.account, [user], user.acct + "'s profile")
+				viewer.Show()
+			else:
+				import speak
+				speak.speak("Could not find user")
+		elif self.type==self.TYPE_USER_TIMELINE_DIRECT:
+			# Use user object directly for timeline
+			idx = self.chooser.GetSelection()
+			if idx >= 0 and idx < len(self.user_objects):
+				user = self.user_objects[idx]
+				self._show_filter_dialog(user.acct)
+			else:
+				import speak
+				speak.speak("Could not find user")
 		elif self.type==self.TYPE_FOLLOW_TOGGLE:
 			# Toggle follow state - check relationship first
 			try:
@@ -256,7 +284,7 @@ class ChooseGui(wx.Dialog):
 	def OnClose(self, event):
 		self.Destroy()
 
-def chooser(account,title="choose",text="Choose some stuff",list=[],type=""):
-	chooser=ChooseGui(account,title,text,list,type)
+def chooser(account,title="choose",text="Choose some stuff",list=[],type="",user_objects=None):
+	chooser=ChooseGui(account,title,text,list,type,user_objects=user_objects)
 	chooser.Show()
 	return chooser.returnvalue

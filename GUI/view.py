@@ -137,7 +137,15 @@ class ViewGui(wx.Dialog):
 		self.view_image.Bind(wx.EVT_BUTTON, self.OnViewImage)
 		self.main_box.Add(self.view_image, 0, wx.ALL, 10)
 
-		if not hasattr(self.status, 'media_attachments') or not self.status.media_attachments:
+		# Only enable View Image button if there are image attachments
+		has_images = False
+		if hasattr(self.status, 'media_attachments') and self.status.media_attachments:
+			for attachment in self.status.media_attachments:
+				media_type = getattr(attachment, 'type', '') or ''
+				if media_type.lower() == 'image':
+					has_images = True
+					break
+		if not has_images:
 			self.view_image.Enable(False)
 
 		self.reply = wx.Button(self.panel, -1, "&Reply")

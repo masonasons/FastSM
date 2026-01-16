@@ -832,9 +832,31 @@ class BlueskyAccount(PlatformAccount):
             return False
 
     def unfollow(self, user_id: str) -> bool:
-        """Unfollow a user."""
+        """Unfollow a user.
+
+        The atproto library's unfollow() expects a follow_uri, not a DID.
+        We need to fetch the user's profile to get the follow record URI.
+        """
         try:
-            self.client.unfollow(user_id)
+            # Get the user's profile which includes viewer relationship info
+            profile = self.client.get_profile(user_id)
+            if not profile:
+                self.app.handle_error(Exception("Could not fetch user profile"), "unfollow")
+                return False
+
+            # Get the follow URI from viewer.following
+            viewer = getattr(profile, 'viewer', None)
+            if not viewer:
+                self.app.handle_error(Exception("No viewer info - may not be following"), "unfollow")
+                return False
+
+            follow_uri = getattr(viewer, 'following', None)
+            if not follow_uri:
+                self.app.handle_error(Exception("Not following this user"), "unfollow")
+                return False
+
+            # Now unfollow using the follow record URI
+            self.client.unfollow(follow_uri)
             return True
         except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "unfollow")
@@ -850,11 +872,32 @@ class BlueskyAccount(PlatformAccount):
             return False
 
     def unblock(self, user_id: str) -> bool:
-        """Unblock a user."""
+        """Unblock a user.
+
+        Similar to unfollow, we need to get the block record URI from the profile's viewer info.
+        """
         try:
-            # Need to find and delete the block record
-            # This is more complex in AT Protocol
-            return False
+            # Get the user's profile which includes viewer relationship info
+            profile = self.client.get_profile(user_id)
+            if not profile:
+                self.app.handle_error(Exception("Could not fetch user profile"), "unblock")
+                return False
+
+            # Get the block URI from viewer.blocking
+            viewer = getattr(profile, 'viewer', None)
+            if not viewer:
+                self.app.handle_error(Exception("No viewer info"), "unblock")
+                return False
+
+            block_uri = getattr(viewer, 'blocking', None)
+            if not block_uri:
+                self.app.handle_error(Exception("Not blocking this user"), "unblock")
+                return False
+
+            # Delete the block record using the URI's rkey
+            rkey = extract_rkey_from_uri(block_uri)
+            self.client.app.bsky.graph.block.delete(self._me.id, rkey)
+            return True
         except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "unblock")
             return False

@@ -273,8 +273,14 @@ class timeline(object):
 	def load_conversation(self):
 		status = self.status
 
+		# For boosted posts, use the reblogged status for conversation context
+		# This ensures we get replies to the original post, not the boost wrapper
+		actual_status = status
+		if hasattr(status, 'reblog') and status.reblog:
+			actual_status = status.reblog
+
 		# Get the actual status ID (for mentions, id is notification_id, real id is in _original_status_id)
-		status_id = getattr(status, '_original_status_id', None) or status.id
+		status_id = getattr(actual_status, '_original_status_id', None) or actual_status.id
 
 		# Try to use get_status_context for full thread (works better for Bluesky)
 		if hasattr(self.account, '_platform') and self.account._platform:
@@ -286,15 +292,15 @@ class timeline(object):
 				# Build thread: ancestors -> current status -> descendants
 				for ancestor in ancestors:
 					self.statuses.append(ancestor)
-				self.statuses.append(status)
+				self.statuses.append(actual_status)
 				for descendant in descendants:
 					self.statuses.append(descendant)
 			except Exception:
 				# Fall back to recursive method
-				self.process_status(status)
+				self.process_status(actual_status)
 		else:
 			# Fall back to recursive method for Mastodon API
-			self.process_status(status)
+			self.process_status(actual_status)
 
 		if self.app.prefs.reversed:
 			self.statuses.reverse()
@@ -307,7 +313,7 @@ class timeline(object):
 			if hasattr(self.account, '_on_timeline_initial_load_complete'):
 				self.account._on_timeline_initial_load_complete()
 
-	def play(self):
+	def play(self, items=None):
 		if self.type == "user":
 			if not os.path.exists("sounds/" + self.account.prefs.soundpack + "/" + self.user.acct + ".ogg"):
 				sound.play(self.account, "user")
@@ -319,7 +325,48 @@ class timeline(object):
 			elif self.type == "list":
 				sound.play(self.account, "list")
 			elif self.type == "notifications":
+				# Check if any of the items are mentions (when mentions are hidden)
+				if items:
+					has_mention = False
+					has_direct_mention = False
+					# Check if mentions timeline is hidden
+					mentions_hidden = False
+					for tl in self.account.timelines:
+						if tl.type == "mentions" and tl.hide:
+							mentions_hidden = True
+							break
+
+					if mentions_hidden:
+						for item in items:
+							# Check if this is a mention notification
+							notif_type = getattr(item, 'type', None)
+							if notif_type == 'mention':
+								has_mention = True
+								# Check if it's a direct message
+								status = getattr(item, 'status', None)
+								if status:
+									visibility = getattr(status, 'visibility', None)
+									if visibility == 'direct':
+										has_direct_mention = True
+										break
+
+					if has_direct_mention:
+						sound.play(self.account, "messages")
+						return
+					elif has_mention:
+						sound.play(self.account, "mentions")
+						return
+
 				sound.play(self.account, "notification")
+			elif self.type == "mentions":
+				# Check if any items are direct messages
+				if items:
+					for item in items:
+						visibility = getattr(item, 'visibility', None)
+						if visibility == 'direct':
+							sound.play(self.account, "messages")
+							return
+				sound.play(self.account, self.name)
 			else:
 				sound.play(self.account, self.name)
 
@@ -667,7 +714,7 @@ class timeline(object):
 					else:
 						self.index = len(self.statuses) - 1
 				if not self.mute and not self.hide:
-					self.play()
+					self.play(tl)
 				self.app.prefs.statuses_received += newitems
 				if speech:
 					# Count how many passed the filter
