@@ -152,7 +152,12 @@ class Application:
 		self.prefs.sync_timeline_position = self.prefs.get("sync_timeline_position", False)
 		# Dark mode: 'off', 'on', or 'auto' (follow system)
 		self.prefs.dark_mode = self.prefs.get("dark_mode", "off")
-		# Confirm before unfollowing via toggle
+		# Confirmation settings for menu/hotkey actions
+		self.prefs.confirm_boost = self.prefs.get("confirm_boost", False)
+		self.prefs.confirm_unboost = self.prefs.get("confirm_unboost", False)
+		self.prefs.confirm_favorite = self.prefs.get("confirm_favorite", False)
+		self.prefs.confirm_unfavorite = self.prefs.get("confirm_unfavorite", False)
+		self.prefs.confirm_follow = self.prefs.get("confirm_follow", False)
 		self.prefs.confirm_unfollow = self.prefs.get("confirm_unfollow", False)
 
 		if self.prefs.invisible:

@@ -176,7 +176,7 @@ class ChooseGui(wx.Dialog):
 						sound.play(self.account, "unfollow")
 					else:
 						# Check if confirmation is required
-						if self.account.app.prefs.confirm_unfollow:
+						if self.account.app.prefs.confirm_follow:
 							dlg = wx.MessageDialog(self, f"Are you sure you want to follow {user.acct}?", "Confirm Follow", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
 							if dlg.ShowModal() != wx.ID_YES:
 								dlg.Destroy()

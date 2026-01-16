@@ -1484,10 +1484,24 @@ class MainGui(wx.Frame):
 				# Get the actual status for state checking
 				status_to_check = status.reblog if hasattr(status, 'reblog') and status.reblog else status
 				if getattr(status_to_check, 'favourited', False):
+					# Check if confirmation is required
+					if get_app().prefs.confirm_unfavorite:
+						dlg = wx.MessageDialog(self, "Are you sure you want to unfavorite this post?", "Confirm Unfavorite", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+						if dlg.ShowModal() != wx.ID_YES:
+							dlg.Destroy()
+							return
+						dlg.Destroy()
 					account.unfavourite(status_id)
 					new_state = False
 					sound.play(account, "unlike")
 				else:
+					# Check if confirmation is required
+					if get_app().prefs.confirm_favorite:
+						dlg = wx.MessageDialog(self, "Are you sure you want to favorite this post?", "Confirm Favorite", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+						if dlg.ShowModal() != wx.ID_YES:
+							dlg.Destroy()
+							return
+						dlg.Destroy()
 					account.favourite(status_id)
 					account.app.prefs.favourites_sent += 1
 					new_state = True
@@ -1507,10 +1521,24 @@ class MainGui(wx.Frame):
 				# Get the actual status for state checking
 				status_to_check = status.reblog if hasattr(status, 'reblog') and status.reblog else status
 				if getattr(status_to_check, 'reblogged', False):
+					# Check if confirmation is required
+					if get_app().prefs.confirm_unboost:
+						dlg = wx.MessageDialog(self, "Are you sure you want to unboost this post?", "Confirm Unboost", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+						if dlg.ShowModal() != wx.ID_YES:
+							dlg.Destroy()
+							return
+						dlg.Destroy()
 					account.unboost(status_id)
 					new_state = False
 					sound.play(account, "delete")
 				else:
+					# Check if confirmation is required
+					if get_app().prefs.confirm_boost:
+						dlg = wx.MessageDialog(self, "Are you sure you want to boost this post?", "Confirm Boost", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+						if dlg.ShowModal() != wx.ID_YES:
+							dlg.Destroy()
+							return
+						dlg.Destroy()
 					account.boost(status_id)
 					account.app.prefs.boosts_sent += 1
 					new_state = True
@@ -1671,7 +1699,7 @@ class MainGui(wx.Frame):
 				speak.speak(f"Unfollowed {user.acct}")
 			else:
 				# Check if confirmation is required
-				if get_app().prefs.confirm_unfollow:
+				if get_app().prefs.confirm_follow:
 					dlg = wx.MessageDialog(self, f"Are you sure you want to follow {user.acct}?", "Confirm Follow", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
 					if dlg.ShowModal() != wx.ID_YES:
 						dlg.Destroy()

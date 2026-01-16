@@ -166,9 +166,6 @@ class advanced(wx.Panel, wx.Dialog):
 		self.sync_timeline_position=wx.CheckBox(self, -1, "Sync home timeline position with Mastodon (Mastodon only)")
 		self.main_box.Add(self.sync_timeline_position, 0, wx.ALL, 10)
 		self.sync_timeline_position.SetValue(get_app().prefs.sync_timeline_position)
-		self.confirm_unfollow=wx.CheckBox(self, -1, "Confirm before unfollowing (via follow toggle)")
-		self.main_box.Add(self.confirm_unfollow, 0, wx.ALL, 10)
-		self.confirm_unfollow.SetValue(get_app().prefs.confirm_unfollow)
 
 		# Dark mode setting
 		dark_mode_label = wx.StaticText(self, -1, "Dark mode:")
@@ -181,6 +178,38 @@ class advanced(wx.Panel, wx.Dialog):
 		dark_mode_map = {'off': 0, 'on': 1, 'auto': 2}
 		self.dark_mode.SetSelection(dark_mode_map.get(get_app().prefs.dark_mode, 0))
 		self.main_box.Add(self.dark_mode, 0, wx.ALL, 10)
+
+class confirmation(wx.Panel, wx.Dialog):
+	def __init__(self, parent):
+		super(confirmation, self).__init__(parent)
+		self.main_box = wx.BoxSizer(wx.VERTICAL)
+
+		info_label = wx.StaticText(self, -1, "Show confirmation dialogs for the following actions (menu/hotkeys only):")
+		self.main_box.Add(info_label, 0, wx.ALL, 10)
+
+		self.confirm_boost=wx.CheckBox(self, -1, "Boosting")
+		self.main_box.Add(self.confirm_boost, 0, wx.ALL, 10)
+		self.confirm_boost.SetValue(get_app().prefs.confirm_boost)
+
+		self.confirm_unboost=wx.CheckBox(self, -1, "Unboosting")
+		self.main_box.Add(self.confirm_unboost, 0, wx.ALL, 10)
+		self.confirm_unboost.SetValue(get_app().prefs.confirm_unboost)
+
+		self.confirm_favorite=wx.CheckBox(self, -1, "Favoriting")
+		self.main_box.Add(self.confirm_favorite, 0, wx.ALL, 10)
+		self.confirm_favorite.SetValue(get_app().prefs.confirm_favorite)
+
+		self.confirm_unfavorite=wx.CheckBox(self, -1, "Unfavoriting")
+		self.main_box.Add(self.confirm_unfavorite, 0, wx.ALL, 10)
+		self.confirm_unfavorite.SetValue(get_app().prefs.confirm_unfavorite)
+
+		self.confirm_follow=wx.CheckBox(self, -1, "Following")
+		self.main_box.Add(self.confirm_follow, 0, wx.ALL, 10)
+		self.confirm_follow.SetValue(get_app().prefs.confirm_follow)
+
+		self.confirm_unfollow=wx.CheckBox(self, -1, "Unfollowing")
+		self.main_box.Add(self.confirm_unfollow, 0, wx.ALL, 10)
+		self.confirm_unfollow.SetValue(get_app().prefs.confirm_unfollow)
 
 class OptionsGui(wx.Dialog):
 	def __init__(self):
@@ -195,6 +224,8 @@ class OptionsGui(wx.Dialog):
 		self.notebook.AddPage(self.templates, "Templates")
 		self.advanced=advanced(self.notebook)
 		self.notebook.AddPage(self.advanced, "Advanced")
+		self.confirmation=confirmation(self.notebook)
+		self.notebook.AddPage(self.confirmation, "Confirmation")
 		self.main_box.Add(self.notebook, 0, wx.ALL, 10)
 		self.ok = wx.Button(self.panel, wx.ID_OK, "&OK")
 		self.ok.SetDefault()
@@ -233,7 +264,6 @@ class OptionsGui(wx.Dialog):
 		get_app().prefs.streaming=self.advanced.streaming.GetValue()
 		get_app().prefs.load_all_previous=self.advanced.load_all_previous.GetValue()
 		get_app().prefs.sync_timeline_position=self.advanced.sync_timeline_position.GetValue()
-		get_app().prefs.confirm_unfollow=self.advanced.confirm_unfollow.GetValue()
 		# Dark mode setting
 		dark_mode_values = ['off', 'on', 'auto']
 		get_app().prefs.dark_mode = dark_mode_values[self.advanced.dark_mode.GetSelection()]
@@ -258,6 +288,13 @@ class OptionsGui(wx.Dialog):
 		if get_app().prefs.fetch_pages>10:
 			get_app().prefs.fetch_pages=10
 		get_app().prefs.single_api_on_startup=self.advanced.single_api_on_startup.GetValue()
+		# Confirmation settings
+		get_app().prefs.confirm_boost=self.confirmation.confirm_boost.GetValue()
+		get_app().prefs.confirm_unboost=self.confirmation.confirm_unboost.GetValue()
+		get_app().prefs.confirm_favorite=self.confirmation.confirm_favorite.GetValue()
+		get_app().prefs.confirm_unfavorite=self.confirmation.confirm_unfavorite.GetValue()
+		get_app().prefs.confirm_follow=self.confirmation.confirm_follow.GetValue()
+		get_app().prefs.confirm_unfollow=self.confirmation.confirm_unfollow.GetValue()
 		if get_app().prefs.reversed!=self.general.reversed.GetValue():
 			reverse=True
 		else:
