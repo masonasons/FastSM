@@ -87,6 +87,8 @@ def get_hidden_imports():
         "datetime",
         "pickle",
         "pyperclip",
+        # Spell check
+        "enchant",
     ]
 
 
@@ -213,6 +215,7 @@ def build_windows(script_dir: Path, output_dir: Path) -> tuple:
     cmd.extend(["--collect-all", "accessible_output2"])
     cmd.extend(["--collect-all", "sound_lib"])
     cmd.extend(["--collect-all", "keyboard_handler"])
+    cmd.extend(["--collect-all", "enchant"])
 
     # Add main script
     cmd.append(str(main_script))
