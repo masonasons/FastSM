@@ -215,7 +215,9 @@ def build_windows(script_dir: Path, output_dir: Path) -> tuple:
     cmd.extend(["--collect-all", "accessible_output2"])
     cmd.extend(["--collect-all", "sound_lib"])
     cmd.extend(["--collect-all", "keyboard_handler"])
-    cmd.extend(["--collect-all", "enchant"])
+    # Enchant is imported inside try/except so PyInstaller can't trace it
+    cmd.extend(["--collect-submodules", "enchant"])
+    cmd.extend(["--collect-data", "enchant"])
 
     # Add main script
     cmd.append(str(main_script))
