@@ -13,9 +13,21 @@ import webbrowser
 import platform
 import os
 import sys
+import wx
 
 from models import UserCache
 from platforms.mastodon import MastodonAccount
+
+
+class AccountSetupCancelled(Exception):
+	"""Raised when user cancels account setup."""
+	pass
+
+
+def _exit_app():
+	"""Safely exit the application from within wxPython context."""
+	# Raise exception to stop current code execution, then schedule exit
+	raise AccountSetupCancelled()
 
 
 class mastodon(object):
@@ -69,7 +81,7 @@ class mastodon(object):
 			# New account - ask user which platform
 			selected = select_platform(main.window)
 			if selected is None:
-				sys.exit()
+				_exit_app()
 			self.prefs.platform_type = selected
 
 		# Initialize based on platform type
@@ -92,7 +104,7 @@ class mastodon(object):
 			self.prefs.instance_url = ask(caption="Mastodon Instance",
 				message="Enter your Mastodon instance URL (e.g., mastodon.social, fosstodon.org):")
 			if self.prefs.instance_url is None:
-				sys.exit()
+				_exit_app()
 			# Ensure https://
 			if not self.prefs.instance_url.startswith("https://") and not self.prefs.instance_url.startswith("http://"):
 				self.prefs.instance_url = "https://" + self.prefs.instance_url
@@ -110,7 +122,7 @@ class mastodon(object):
 				self.prefs.client_secret = client_secret
 			except MastodonError as e:
 				speak.speak("Error registering app: " + str(e))
-				sys.exit()
+				_exit_app()
 
 		# Authenticate if needed
 		if self.prefs.access_token == "":
@@ -129,13 +141,13 @@ class mastodon(object):
 				auth_code = ask(caption="Authorization Code",
 					message="Enter the authorization code from your browser:")
 				if auth_code is None:
-					sys.exit()
+					_exit_app()
 
 				access_token = temp_api.log_in(code=auth_code, scopes=['read', 'write', 'follow', 'push'])
 				self.prefs.access_token = access_token
 			except MastodonError as e:
 				speak.speak("Error during authentication: " + str(e))
-				sys.exit()
+				_exit_app()
 
 		# Initialize the API
 		self.api = Mastodon(
@@ -152,7 +164,7 @@ class mastodon(object):
 			speak.speak("Error verifying credentials: " + str(e))
 			# Clear tokens and try again
 			self.prefs.access_token = ""
-			sys.exit()
+			_exit_app()
 
 		# Get instance info for character limit (use cached if available)
 		cached_max_chars = self.prefs.get("cached_max_chars", 0)
@@ -296,7 +308,7 @@ class mastodon(object):
 		if self.prefs.bluesky_handle == "" or self.prefs.bluesky_password == "":
 			creds = get_bluesky_credentials(main.window)
 			if creds is None:
-				sys.exit()
+				_exit_app()
 			self.prefs.bluesky_handle = creds['handle']
 			self.prefs.bluesky_password = creds['password']
 			self.prefs.bluesky_service = creds['service_url']
@@ -311,10 +323,10 @@ class mastodon(object):
 			# Clear credentials
 			self.prefs.bluesky_handle = ""
 			self.prefs.bluesky_password = ""
-			sys.exit()
+			_exit_app()
 		except Exception as e:
 			speak.speak("Error connecting to Bluesky: " + str(e))
-			sys.exit()
+			_exit_app()
 
 		# Set platform properties
 		self.max_chars = 300  # Bluesky character limit

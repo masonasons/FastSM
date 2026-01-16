@@ -190,9 +190,17 @@ class Application:
 	def add_session(self, index=None):
 		"""Add a new account session."""
 		import mastodon_api as t
+		import wx
 		if index is None:
 			index = len(self.accounts)
-		self.accounts.append(t.mastodon(self, index))
+		try:
+			self.accounts.append(t.mastodon(self, index))
+		except t.AccountSetupCancelled:
+			# User cancelled account setup - exit gracefully if no accounts
+			if len(self.accounts) == 0:
+				wx.CallAfter(wx.Exit)
+				return
+			# Otherwise just skip this account
 
 	def _is_account_configured(self, index):
 		"""Check if an account has credentials saved (no dialogs needed)."""
