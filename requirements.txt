@@ -4,6 +4,7 @@ pyinstaller
 pyperclip
 requests
 wxpython
+Pillow
 git+https://github.com/accessibleapps/accessible_output2
 git+https://github.com/accessibleapps/keyboard_handler
 git+https://github.com/accessibleapps/sound_lib

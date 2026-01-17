@@ -898,52 +898,161 @@ class NotificationViewGui(wx.Dialog):
 class ViewImageGui(wx.Dialog):
 
 	def __init__(self, status):
-		self.url = None
+		self.urls = []
+		self.current_index = 0
+		self.descriptions = []
+
 		# Check if this is a user object (for profile images)
 		if hasattr(status, 'avatar'):
-			self.url = status.avatar
+			self.urls.append(status.avatar)
+			self.descriptions.append("Profile image")
 		# Check for media attachments on a status
 		elif hasattr(status, 'media_attachments') and status.media_attachments:
 			for media in status.media_attachments:
-				self.url = getattr(media, 'url', None) or getattr(media, 'preview_url', None)
-				if self.url:
-					break
+				media_type = getattr(media, 'type', '') or ''
+				if media_type.lower() == 'image':
+					url = getattr(media, 'url', None) or getattr(media, 'preview_url', None)
+					if url:
+						self.urls.append(url)
+						desc = getattr(media, 'description', None) or "No description"
+						self.descriptions.append(desc)
 
-		if not self.url:
-			wx.Dialog.__init__(self, None, title="Image", size=(400, 300))
-			self.Bind(wx.EVT_CLOSE, self.OnClose)
-			self.panel = wx.Panel(self)
-			self.main_box = wx.BoxSizer(wx.VERTICAL)
-			self.text = wx.StaticText(self.panel, -1, "No image available")
-			self.main_box.Add(self.text, 0, wx.ALL, 10)
-			self.close = wx.Button(self.panel, wx.ID_CANCEL, "&Close")
-			self.close.Bind(wx.EVT_BUTTON, self.OnClose)
-			self.main_box.Add(self.close, 0, wx.ALL, 10)
-			self.panel.SetSizer(self.main_box)
-			self.panel.Layout()
-			return
-
-		image = requests.get(self.url)
-		f = open(get_app().confpath + "/temp_image", "wb")
-		f.write(image.content)
-		f.close()
-		self.image = wx.Image(get_app().confpath + "/temp_image", wx.BITMAP_TYPE_ANY).ConvertToBitmap()
-		self.size = (self.image.GetWidth(), self.image.GetHeight())
-		wx.Dialog.__init__(self, None, title="Image", size=self.size)
-		self.SetClientSize(self.size)
+		wx.Dialog.__init__(self, None, title="Image Viewer", size=(800, 600))
 		self.Bind(wx.EVT_CLOSE, self.OnClose)
+		self.Bind(wx.EVT_CHAR_HOOK, self.OnKeyDown)
+
 		self.panel = wx.Panel(self)
 		self.main_box = wx.BoxSizer(wx.VERTICAL)
-		self.text_label = wx.StaticText(self.panel, -1, "Image")
-		self.main_box.Add(self.text_label, 0, wx.LEFT | wx.TOP, 10)
-		self.text = wx.StaticBitmap(self.panel, -1, self.image, (10, 5), self.size)
-		self.main_box.Add(self.text, 0, wx.ALL, 10)
+
+		if not self.urls:
+			self.text = wx.StaticText(self.panel, -1, "No image available")
+			self.main_box.Add(self.text, 0, wx.ALL, 10)
+		else:
+			# Image counter label
+			self.counter_label = wx.StaticText(self.panel, -1, "")
+			self.main_box.Add(self.counter_label, 0, wx.ALL, 5)
+
+			# Description (read-only text field for accessibility)
+			self.desc_label = wx.StaticText(self.panel, -1, "&Description:")
+			self.main_box.Add(self.desc_label, 0, wx.LEFT | wx.TOP, 10)
+			self.description = wx.TextCtrl(self.panel, -1, "", style=wx.TE_MULTILINE | wx.TE_READONLY, size=(780, 60), name="Image description")
+			self.main_box.Add(self.description, 0, wx.ALL, 5)
+
+			# Image display area
+			self.image_panel = wx.Panel(self.panel, size=(780, 400))
+			self.main_box.Add(self.image_panel, 1, wx.EXPAND | wx.ALL, 5)
+			self.bitmap_ctrl = None
+
+			# Navigation buttons (if multiple images)
+			if len(self.urls) > 1:
+				nav_sizer = wx.BoxSizer(wx.HORIZONTAL)
+				self.prev_btn = wx.Button(self.panel, -1, "&Previous")
+				self.prev_btn.Bind(wx.EVT_BUTTON, self.OnPrevious)
+				nav_sizer.Add(self.prev_btn, 0, wx.ALL, 5)
+				self.next_btn = wx.Button(self.panel, -1, "&Next")
+				self.next_btn.Bind(wx.EVT_BUTTON, self.OnNext)
+				nav_sizer.Add(self.next_btn, 0, wx.ALL, 5)
+				self.main_box.Add(nav_sizer, 0, wx.ALIGN_CENTER, 5)
+
 		self.close = wx.Button(self.panel, wx.ID_CANCEL, "&Close")
 		self.close.Bind(wx.EVT_BUTTON, self.OnClose)
 		self.main_box.Add(self.close, 0, wx.ALL, 10)
+
 		self.panel.SetSizer(self.main_box)
 		self.panel.Layout()
-		self.close.SetFocus()
+
+		if self.urls:
+			self._load_current_image()
+			self.description.SetFocus()
+		else:
+			self.close.SetFocus()
+
+	def _load_current_image(self):
+		"""Load and display the current image."""
+		import io
+		try:
+			from PIL import Image as PILImage
+		except ImportError:
+			# Fallback if PIL not available
+			self.description.SetValue("Error: PIL/Pillow library not installed")
+			return
+
+		url = self.urls[self.current_index]
+		desc = self.descriptions[self.current_index]
+
+		# Update counter and description
+		self.counter_label.SetLabel(f"Image {self.current_index + 1} of {len(self.urls)}")
+		self.description.SetValue(desc)
+
+		try:
+			# Download image
+			response = requests.get(url, timeout=30)
+			response.raise_for_status()
+
+			# Load with PIL (supports many formats including WebP)
+			pil_image = PILImage.open(io.BytesIO(response.content))
+
+			# Convert to RGB if necessary (for formats like RGBA, P, etc.)
+			if pil_image.mode not in ('RGB', 'L'):
+				pil_image = pil_image.convert('RGB')
+
+			# Scale to fit the panel while maintaining aspect ratio
+			panel_size = self.image_panel.GetSize()
+			max_width = panel_size[0] - 20
+			max_height = panel_size[1] - 20
+
+			# Calculate scaling factor
+			img_width, img_height = pil_image.size
+			scale = min(max_width / img_width, max_height / img_height, 1.0)
+
+			if scale < 1.0:
+				new_width = int(img_width * scale)
+				new_height = int(img_height * scale)
+				pil_image = pil_image.resize((new_width, new_height), PILImage.Resampling.LANCZOS)
+
+			# Convert PIL image to wx.Bitmap
+			wx_image = wx.Image(pil_image.size[0], pil_image.size[1])
+			wx_image.SetData(pil_image.tobytes())
+			bitmap = wx_image.ConvertToBitmap()
+
+			# Remove old bitmap control if exists
+			if self.bitmap_ctrl:
+				self.bitmap_ctrl.Destroy()
+
+			# Create new bitmap control
+			self.bitmap_ctrl = wx.StaticBitmap(self.image_panel, -1, bitmap)
+
+		except Exception as e:
+			self.description.SetValue(f"Error loading image: {str(e)}\n\nURL: {url}")
+
+		# Update navigation buttons
+		if len(self.urls) > 1:
+			self.prev_btn.Enable(self.current_index > 0)
+			self.next_btn.Enable(self.current_index < len(self.urls) - 1)
+
+	def OnKeyDown(self, event):
+		"""Handle keyboard navigation."""
+		keycode = event.GetKeyCode()
+		if keycode == wx.WXK_LEFT and len(self.urls) > 1:
+			self.OnPrevious(None)
+		elif keycode == wx.WXK_RIGHT and len(self.urls) > 1:
+			self.OnNext(None)
+		elif keycode == wx.WXK_ESCAPE:
+			self.OnClose(None)
+		else:
+			event.Skip()
+
+	def OnPrevious(self, event):
+		"""Show previous image."""
+		if self.current_index > 0:
+			self.current_index -= 1
+			self._load_current_image()
+
+	def OnNext(self, event):
+		"""Show next image."""
+		if self.current_index < len(self.urls) - 1:
+			self.current_index += 1
+			self._load_current_image()
 
 	def OnClose(self, event):
 		self.Destroy()
