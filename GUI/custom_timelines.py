@@ -343,6 +343,38 @@ class CustomTimelinesDialog(wx.Dialog):
         else:
             self._load_saved_feeds()
 
+    def _get_suggested_values(self):
+        """Get suggested instance and user handle from current post."""
+        default_instance = ""
+        default_handle = ""
+
+        try:
+            # Get current status
+            status = main.window.get_current_status()
+            if not status:
+                return default_instance, default_handle
+
+            # Get users from the status
+            users = self.account.app.get_user_objects_in_status(self.account, status)
+            if not users:
+                return default_instance, default_handle
+
+            # Use the first user's acct (post author)
+            first_user = users[0]
+            acct = getattr(first_user, 'acct', '') or ''
+
+            if '@' in acct:
+                # Remote user: user@instance.org
+                parts = acct.split('@')
+                if len(parts) >= 2:
+                    default_instance = parts[-1]  # The instance part
+                    default_handle = acct  # Full handle
+
+        except Exception:
+            pass
+
+        return default_instance, default_handle
+
     def OnAdd(self, event):
         """Handle add button click."""
         selection = self.list.GetSelection()
@@ -355,10 +387,12 @@ class CustomTimelinesDialog(wx.Dialog):
 
         # Handle instance timeline specially - prompt for instance URL
         if tl_type == 'instance':
+            default_instance, _ = self._get_suggested_values()
             dlg = wx.TextEntryDialog(
                 self,
                 "Enter the instance URL (e.g., mastodon.social, fosstodon.org):",
-                "Instance Timeline"
+                "Instance Timeline",
+                default_instance
             )
             if dlg.ShowModal() == wx.ID_OK:
                 instance_url = dlg.GetValue().strip()
@@ -375,10 +409,12 @@ class CustomTimelinesDialog(wx.Dialog):
 
         # Handle remote user timeline - prompt for full handle
         if tl_type == 'remote_user':
+            _, default_handle = self._get_suggested_values()
             dlg = wx.TextEntryDialog(
                 self,
                 "Enter the full username (e.g., user@mastodon.social or @user@instance.org):",
-                "Remote User Timeline"
+                "Remote User Timeline",
+                default_handle
             )
             if dlg.ShowModal() == wx.ID_OK:
                 full_handle = dlg.GetValue().strip()
