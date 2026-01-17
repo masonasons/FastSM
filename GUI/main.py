@@ -827,6 +827,14 @@ class MainGui(wx.Frame):
 		else:
 			speak.speak("No messages in this conversation")
 
+	def OnViewImage(self, event=None):
+		status = self.get_current_status()
+		if status:
+			viewer = view.ViewImageGui(status)
+			viewer.Show()
+		else:
+			speak.speak("No post selected")
+
 	def OnPostContextMenu(self, event=None):
 		"""Show context menu for posts list - context-aware based on timeline type."""
 		# Make sure we have a valid selection

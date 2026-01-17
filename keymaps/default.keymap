@@ -62,3 +62,4 @@ alt+win+l=FollowToggle
 alt+win+shift+l=MuteToggle
 alt+win+p=PinToggle
 control+win+alt+m=ContextMenu
+control+alt+win+v=ViewImage
