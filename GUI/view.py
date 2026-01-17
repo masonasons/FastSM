@@ -954,6 +954,11 @@ class ViewImageGui(wx.Dialog):
 				nav_sizer.Add(self.next_btn, 0, wx.ALL, 5)
 				self.main_box.Add(nav_sizer, 0, wx.ALIGN_CENTER, 5)
 
+			# AI description button
+			self.ai_btn = wx.Button(self.panel, -1, "&Get AI Description")
+			self.ai_btn.Bind(wx.EVT_BUTTON, self.OnGetAIDescription)
+			self.main_box.Add(self.ai_btn, 0, wx.ALL, 5)
+
 		self.close = wx.Button(self.panel, wx.ID_CANCEL, "&Close")
 		self.close.Bind(wx.EVT_BUTTON, self.OnClose)
 		self.main_box.Add(self.close, 0, wx.ALL, 10)
@@ -1060,3 +1065,37 @@ class ViewImageGui(wx.Dialog):
 
 	def OnClose(self, event):
 		self.Destroy()
+
+	def OnGetAIDescription(self, event):
+		"""Get AI-generated description for the current image."""
+		import threading
+		import speak
+		import ai_describe
+
+		if not self.urls:
+			return
+
+		url = self.urls[self.current_index]
+
+		# Disable button and show loading state
+		self.ai_btn.Disable()
+		self.ai_btn.SetLabel("Getting description...")
+		speak.speak("Getting AI description, please wait...")
+
+		def get_description():
+			success, result = ai_describe.get_image_description(url)
+
+			def update_ui():
+				self.ai_btn.Enable()
+				self.ai_btn.SetLabel("&Get AI Description")
+				if success:
+					self.description.SetValue(result)
+					speak.speak("Description received")
+				else:
+					self.description.SetValue(f"Error: {result}")
+					speak.speak(f"Error: {result}")
+
+			wx.CallAfter(update_ui)
+
+		thread = threading.Thread(target=get_description, daemon=True)
+		thread.start()

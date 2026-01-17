@@ -161,6 +161,13 @@ class Application:
 		self.prefs.confirm_unfavorite = self.prefs.get("confirm_unfavorite", False)
 		self.prefs.confirm_follow = self.prefs.get("confirm_follow", False)
 		self.prefs.confirm_unfollow = self.prefs.get("confirm_unfollow", False)
+		# AI image description settings
+		self.prefs.ai_service = self.prefs.get("ai_service", "none")  # 'none', 'openai', or 'gemini'
+		self.prefs.openai_api_key = self.prefs.get("openai_api_key", "")
+		self.prefs.openai_model = self.prefs.get("openai_model", "gpt-4o-mini")
+		self.prefs.gemini_api_key = self.prefs.get("gemini_api_key", "")
+		self.prefs.gemini_model = self.prefs.get("gemini_model", "gemini-2.0-flash")
+		self.prefs.ai_image_prompt = self.prefs.get("ai_image_prompt", "Describe this image in detail for someone who cannot see it. Include information about the subjects, setting, colors, and any text visible in the image.")
 
 		if self.prefs.invisible:
 			main.window.register_keys()

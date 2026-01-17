@@ -232,6 +232,72 @@ class confirmation(wx.Panel, wx.Dialog):
 		self.confirm_unfollow.SetValue(get_app().prefs.confirm_unfollow)
 		self.SetSizer(self.main_box)
 
+
+class ai(wx.Panel, wx.Dialog):
+	def __init__(self, parent):
+		super(ai, self).__init__(parent)
+		self.main_box = wx.BoxSizer(wx.VERTICAL)
+
+		# AI Service selection
+		service_label = wx.StaticText(self, -1, "AI Service for image descriptions:")
+		self.main_box.Add(service_label, 0, wx.LEFT | wx.TOP, 10)
+		self.ai_service = wx.Choice(self, -1, choices=[
+			"None (disabled)",
+			"OpenAI",
+			"Google Gemini"
+		], name="AI Service")
+		service_map = {'none': 0, 'openai': 1, 'gemini': 2}
+		self.ai_service.SetSelection(service_map.get(get_app().prefs.ai_service, 0))
+		self.main_box.Add(self.ai_service, 0, wx.ALL, 10)
+
+		# OpenAI API Key
+		openai_label = wx.StaticText(self, -1, "OpenAI API Key:")
+		self.main_box.Add(openai_label, 0, wx.LEFT | wx.TOP, 10)
+		self.openai_api_key = wx.TextCtrl(self, -1, "", style=wx.TE_PASSWORD, name="OpenAI API Key")
+		self.openai_api_key.SetValue(get_app().prefs.openai_api_key)
+		self.main_box.Add(self.openai_api_key, 0, wx.EXPAND | wx.ALL, 10)
+
+		# OpenAI Model selection
+		openai_model_label = wx.StaticText(self, -1, "OpenAI Model:")
+		self.main_box.Add(openai_model_label, 0, wx.LEFT | wx.TOP, 10)
+		self.openai_models = ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"]
+		self.openai_model = wx.Choice(self, -1, choices=self.openai_models, name="OpenAI Model")
+		current_openai_model = get_app().prefs.openai_model
+		if current_openai_model in self.openai_models:
+			self.openai_model.SetSelection(self.openai_models.index(current_openai_model))
+		else:
+			self.openai_model.SetSelection(0)
+		self.main_box.Add(self.openai_model, 0, wx.ALL, 10)
+
+		# Gemini API Key
+		gemini_label = wx.StaticText(self, -1, "Google Gemini API Key:")
+		self.main_box.Add(gemini_label, 0, wx.LEFT | wx.TOP, 10)
+		self.gemini_api_key = wx.TextCtrl(self, -1, "", style=wx.TE_PASSWORD, name="Gemini API Key")
+		self.gemini_api_key.SetValue(get_app().prefs.gemini_api_key)
+		self.main_box.Add(self.gemini_api_key, 0, wx.EXPAND | wx.ALL, 10)
+
+		# Gemini Model selection
+		gemini_model_label = wx.StaticText(self, -1, "Gemini Model:")
+		self.main_box.Add(gemini_model_label, 0, wx.LEFT | wx.TOP, 10)
+		self.gemini_models = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash-preview-05-20", "gemini-2.5-pro-preview-05-06"]
+		self.gemini_model = wx.Choice(self, -1, choices=self.gemini_models, name="Gemini Model")
+		current_gemini_model = get_app().prefs.gemini_model
+		if current_gemini_model in self.gemini_models:
+			self.gemini_model.SetSelection(self.gemini_models.index(current_gemini_model))
+		else:
+			self.gemini_model.SetSelection(0)
+		self.main_box.Add(self.gemini_model, 0, wx.ALL, 10)
+
+		# Custom prompt
+		prompt_label = wx.StaticText(self, -1, "Image description prompt:")
+		self.main_box.Add(prompt_label, 0, wx.LEFT | wx.TOP, 10)
+		self.ai_image_prompt = wx.TextCtrl(self, -1, "", style=wx.TE_MULTILINE, size=(-1, 80), name="Image description prompt")
+		self.ai_image_prompt.SetValue(get_app().prefs.ai_image_prompt)
+		self.main_box.Add(self.ai_image_prompt, 0, wx.EXPAND | wx.ALL, 10)
+
+		self.SetSizer(self.main_box)
+
+
 class OptionsGui(wx.Dialog):
 	def __init__(self):
 		wx.Dialog.__init__(self, None, title="Options", size=(350,200), style=wx.DEFAULT_DIALOG_STYLE | wx.TAB_TRAVERSAL)
@@ -247,6 +313,8 @@ class OptionsGui(wx.Dialog):
 		self.notebook.AddPage(self.advanced, "Advanced")
 		self.confirmation=confirmation(self.notebook)
 		self.notebook.AddPage(self.confirmation, "Confirmation")
+		self.ai_tab=ai(self.notebook)
+		self.notebook.AddPage(self.ai_tab, "AI")
 		self.main_box.Add(self.notebook, 1, wx.EXPAND | wx.ALL, 10)
 		self.ok = wx.Button(self.panel, wx.ID_OK, "&OK")
 		self.ok.SetDefault()
@@ -321,6 +389,14 @@ class OptionsGui(wx.Dialog):
 		get_app().prefs.confirm_unfavorite=self.confirmation.confirm_unfavorite.GetValue()
 		get_app().prefs.confirm_follow=self.confirmation.confirm_follow.GetValue()
 		get_app().prefs.confirm_unfollow=self.confirmation.confirm_unfollow.GetValue()
+		# AI settings
+		ai_service_values = ['none', 'openai', 'gemini']
+		get_app().prefs.ai_service = ai_service_values[self.ai_tab.ai_service.GetSelection()]
+		get_app().prefs.openai_api_key = self.ai_tab.openai_api_key.GetValue()
+		get_app().prefs.openai_model = self.ai_tab.openai_models[self.ai_tab.openai_model.GetSelection()]
+		get_app().prefs.gemini_api_key = self.ai_tab.gemini_api_key.GetValue()
+		get_app().prefs.gemini_model = self.ai_tab.gemini_models[self.ai_tab.gemini_model.GetSelection()]
+		get_app().prefs.ai_image_prompt = self.ai_tab.ai_image_prompt.GetValue()
 		if get_app().prefs.reversed!=self.general.reversed.GetValue():
 			reverse=True
 		else:
