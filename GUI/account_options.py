@@ -5,10 +5,6 @@ import wx
 from . import main, theme
 from application import get_app
 
-# On macOS, skip StaticText labels in sizers - VoiceOver reads them as separate items
-# causing jumbled navigation. Controls have accessible names instead.
-_is_macos = platform.system() == "Darwin"
-
 class general(wx.Panel, wx.Dialog):
 	def __init__(self, account, parent):
 		# Try multiple paths for the preview sound
@@ -30,8 +26,7 @@ class general(wx.Panel, wx.Dialog):
 		self.main_box = wx.BoxSizer(wx.VERTICAL)
 		self.soundpack_box = wx.BoxSizer(wx.VERTICAL)
 		self.soundpacklist_label=wx.StaticText(self, -1, "Soundpacks")
-		if not _is_macos:
-			self.main_box.Add(self.soundpacklist_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.soundpacklist_label, 0, wx.LEFT | wx.TOP, 10)
 		self.soundpackslist = wx.ListBox(self, -1, name="Soundpacks")
 		self.soundpack_box.Add(self.soundpackslist, 0, wx.ALL, 10)
 		self.soundpackslist.Bind(wx.EVT_LISTBOX, self.on_soundpacks_list_change)
@@ -64,14 +59,12 @@ class general(wx.Panel, wx.Dialog):
 		if not hasattr(self,"sp"):
 			self.sp="default"
 		self.soundpan_label = wx.StaticText(self, -1, "Sound pan")
-		if not _is_macos:
-			self.main_box.Add(self.soundpan_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.soundpan_label, 0, wx.LEFT | wx.TOP, 10)
 		self.soundpan = wx.Slider(self, -1, int(self.account.prefs.soundpan*50),-50,50,name="Sound pan")
 		self.soundpan.Bind(wx.EVT_SLIDER,self.OnPan)
 		self.main_box.Add(self.soundpan, 0, wx.ALL, 10)
 		self.footer_label = wx.StaticText(self, -1, "Post Footer (Optional)")
-		if not _is_macos:
-			self.main_box.Add(self.footer_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.footer_label, 0, wx.LEFT | wx.TOP, 10)
 		self.footer = wx.TextCtrl(self, -1, "",style=wx.TE_MULTILINE, name="Post Footer (Optional)")
 		self.main_box.Add(self.footer, 0, wx.ALL, 10)
 		self.footer.AppendText(account.prefs.footer)

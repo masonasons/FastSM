@@ -5,11 +5,6 @@ import wx
 import speak
 import sound
 
-# On macOS, skip StaticText labels in sizers - VoiceOver reads them as separate items
-# causing jumbled navigation. Controls have accessible names instead.
-_is_macos = sys_platform.system() == "Darwin"
-
-
 class PollDialog(wx.Dialog):
     """Dialog for viewing poll options and voting."""
 
@@ -68,8 +63,7 @@ class PollDialog(wx.Dialog):
         self.option_controls = []
 
         options_label = wx.StaticText(self.panel, label="&Options:")
-        if not _is_macos:
-            main_sizer.Add(options_label, 0, wx.LEFT | wx.TOP, 10)
+        main_sizer.Add(options_label, 0, wx.LEFT | wx.TOP, 10)
 
         for i, option in enumerate(options):
             option_title = getattr(option, 'title', str(option))
@@ -153,8 +147,7 @@ class PollDialog(wx.Dialog):
 
         # Create read-only text field
         results_label = wx.StaticText(self.panel, label="Poll &Results:")
-        if not _is_macos:
-            main_sizer.Add(results_label, 0, wx.LEFT | wx.TOP, 10)
+        main_sizer.Add(results_label, 0, wx.LEFT | wx.TOP, 10)
 
         self.results_text = wx.TextCtrl(
             self.panel,

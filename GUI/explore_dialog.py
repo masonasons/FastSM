@@ -8,11 +8,6 @@ import wx
 from application import get_app
 from . import misc, theme, view, custom_timelines
 
-# On macOS, skip StaticText labels in sizers - VoiceOver reads them as separate items
-# causing jumbled navigation. Controls have accessible names instead.
-_is_macos = platform.system() == "Darwin"
-
-
 class ExploreDialog(wx.Dialog):
     """Dialog for exploring and discovering content on Mastodon/Bluesky."""
 
@@ -52,8 +47,7 @@ class ExploreDialog(wx.Dialog):
 
         # Category selector
         self.category_label = wx.StaticText(self.panel, -1, "&Category")
-        if not _is_macos:
-            self.main_box.Add(self.category_label, 0, wx.LEFT | wx.TOP, 10)
+        self.main_box.Add(self.category_label, 0, wx.LEFT | wx.TOP, 10)
 
         category_names = [c[1] for c in self.categories]
         self.category_choice = wx.Choice(self.panel, -1, choices=category_names, name="Category")
@@ -63,8 +57,7 @@ class ExploreDialog(wx.Dialog):
 
         # Results list
         self.list_label = wx.StaticText(self.panel, -1, "&Results")
-        if not _is_macos:
-            self.main_box.Add(self.list_label, 0, wx.LEFT, 10)
+        self.main_box.Add(self.list_label, 0, wx.LEFT, 10)
 
         self.list = wx.ListBox(self.panel, -1, size=(480, 200), name="Results")
         self.list.Bind(wx.EVT_LISTBOX, self.OnListChange)

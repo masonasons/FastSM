@@ -5,10 +5,6 @@ import wx
 from . import main, theme
 from application import get_app
 
-# On macOS, skip StaticText labels in sizers - VoiceOver reads them as separate items
-# causing jumbled navigation. Controls have accessible names instead.
-_is_macos = platform.system() == "Darwin"
-
 class general(wx.Panel, wx.Dialog):
 	def __init__(self, parent):
 		super(general, self).__init__(parent)
@@ -46,8 +42,7 @@ class general(wx.Panel, wx.Dialog):
 
 		# Content warning handling - use accessible name instead of separate label
 		cw_label = wx.StaticText(self, -1, "Content warnings:")
-		if not _is_macos:
-			self.main_box.Add(cw_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(cw_label, 0, wx.LEFT | wx.TOP, 10)
 		self.cw_mode = wx.Choice(self, -1, choices=[
 			"Hide post text (show CW only)",
 			"Show CW followed by post text",
@@ -64,44 +59,37 @@ class templates(wx.Panel, wx.Dialog):
 		super(templates, self).__init__(parent)
 		self.main_box = wx.BoxSizer(wx.VERTICAL)
 		self.postTemplate_label = wx.StaticText(self, -1, "Post template")
-		if not _is_macos:
-			self.main_box.Add(self.postTemplate_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.postTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.postTemplate = wx.TextCtrl(self, -1, "", name="Post template")
 		self.main_box.Add(self.postTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.postTemplate.AppendText(get_app().prefs.postTemplate)
 		self.quoteTemplate_label = wx.StaticText(self, -1, "Quote template")
-		if not _is_macos:
-			self.main_box.Add(self.quoteTemplate_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.quoteTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.quoteTemplate = wx.TextCtrl(self, -1, "", name="Quote template")
 		self.main_box.Add(self.quoteTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.quoteTemplate.AppendText(get_app().prefs.quoteTemplate)
 		self.boostTemplate_label = wx.StaticText(self, -1, "Boost template")
-		if not _is_macos:
-			self.main_box.Add(self.boostTemplate_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.boostTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.boostTemplate = wx.TextCtrl(self, -1, "", name="Boost template")
 		self.main_box.Add(self.boostTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.boostTemplate.AppendText(get_app().prefs.boostTemplate)
 		self.copyTemplate_label = wx.StaticText(self, -1, "Copy template")
-		if not _is_macos:
-			self.main_box.Add(self.copyTemplate_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.copyTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.copyTemplate = wx.TextCtrl(self, -1, "", name="Copy template")
 		self.main_box.Add(self.copyTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.copyTemplate.AppendText(get_app().prefs.copyTemplate)
 		self.messageTemplate_label = wx.StaticText(self, -1, "Direct Message template")
-		if not _is_macos:
-			self.main_box.Add(self.messageTemplate_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.messageTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.messageTemplate = wx.TextCtrl(self, -1, "", name="Direct Message template")
 		self.main_box.Add(self.messageTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.messageTemplate.AppendText(get_app().prefs.messageTemplate)
 		self.userTemplate_label = wx.StaticText(self, -1, "User template")
-		if not _is_macos:
-			self.main_box.Add(self.userTemplate_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.userTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.userTemplate = wx.TextCtrl(self, -1, "", name="User template")
 		self.main_box.Add(self.userTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.userTemplate.AppendText(get_app().prefs.userTemplate)
 		self.notificationTemplate_label = wx.StaticText(self, -1, "Notification template")
-		if not _is_macos:
-			self.main_box.Add(self.notificationTemplate_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.notificationTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.notificationTemplate = wx.TextCtrl(self, -1, "", name="Notification template")
 		self.main_box.Add(self.notificationTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.notificationTemplate.AppendText(get_app().prefs.notificationTemplate)
@@ -147,8 +135,7 @@ class advanced(wx.Panel, wx.Dialog):
 
 			# Keymap selection
 			keymap_label = wx.StaticText(self, -1, "Keymap:")
-			if not _is_macos:
-				self.main_box.Add(keymap_label, 0, wx.LEFT | wx.TOP, 10)
+			self.main_box.Add(keymap_label, 0, wx.LEFT | wx.TOP, 10)
 			self.keymaps = self._get_available_keymaps()
 			self.keymap_choice = wx.Choice(self, -1, choices=self.keymaps, name="Keymap")
 			current_keymap = get_app().prefs.keymap
@@ -161,26 +148,22 @@ class advanced(wx.Panel, wx.Dialog):
 		self.main_box.Add(self.position, 0, wx.ALL, 10)
 		self.position.SetValue(get_app().prefs.position)
 		self.update_time_label = wx.StaticText(self, -1, "Update time, in minutes")
-		if not _is_macos:
-			self.main_box.Add(self.update_time_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.update_time_label, 0, wx.LEFT | wx.TOP, 10)
 		self.update_time = wx.TextCtrl(self, -1, "", name="Update time, in minutes")
 		self.main_box.Add(self.update_time, 0, wx.EXPAND | wx.ALL, 10)
 		self.update_time.AppendText(str(get_app().prefs.update_time))
 		self.user_limit_label = wx.StaticText(self, -1, "Max API calls when fetching users in user viewer")
-		if not _is_macos:
-			self.main_box.Add(self.user_limit_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.user_limit_label, 0, wx.LEFT | wx.TOP, 10)
 		self.user_limit = wx.TextCtrl(self, -1, "", name="Max API calls when fetching users in user viewer")
 		self.main_box.Add(self.user_limit, 0, wx.EXPAND | wx.ALL, 10)
 		self.user_limit.AppendText(str(get_app().prefs.user_limit))
 		self.count_label = wx.StaticText(self, -1, "Number of posts to fetch per call (Maximum is 40)")
-		if not _is_macos:
-			self.main_box.Add(self.count_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.count_label, 0, wx.LEFT | wx.TOP, 10)
 		self.count = wx.TextCtrl(self, -1, "", name="Number of posts to fetch per call (Maximum is 40)")
 		self.main_box.Add(self.count, 0, wx.EXPAND | wx.ALL, 10)
 		self.count.AppendText(str(get_app().prefs.count))
 		self.fetch_pages_label = wx.StaticText(self, -1, "Number of API calls to make when loading timelines (1-10)")
-		if not _is_macos:
-			self.main_box.Add(self.fetch_pages_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.fetch_pages_label, 0, wx.LEFT | wx.TOP, 10)
 		self.fetch_pages = wx.TextCtrl(self, -1, "", name="Number of API calls to make when loading timelines (1-10)")
 		self.main_box.Add(self.fetch_pages, 0, wx.EXPAND | wx.ALL, 10)
 		self.fetch_pages.AppendText(str(get_app().prefs.fetch_pages))
@@ -199,8 +182,7 @@ class advanced(wx.Panel, wx.Dialog):
 
 		# Dark mode setting
 		dark_mode_label = wx.StaticText(self, -1, "Dark mode:")
-		if not _is_macos:
-			self.main_box.Add(dark_mode_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(dark_mode_label, 0, wx.LEFT | wx.TOP, 10)
 		self.dark_mode = wx.Choice(self, -1, choices=[
 			"Off",
 			"On",
@@ -217,8 +199,7 @@ class confirmation(wx.Panel, wx.Dialog):
 		self.main_box = wx.BoxSizer(wx.VERTICAL)
 
 		info_label = wx.StaticText(self, -1, "Show confirmation dialogs for the following actions (menu/hotkeys only):")
-		if not _is_macos:
-			self.main_box.Add(info_label, 0, wx.ALL, 10)
+		self.main_box.Add(info_label, 0, wx.ALL, 10)
 
 		self.confirm_boost=wx.CheckBox(self, -1, "Boosting")
 		self.main_box.Add(self.confirm_boost, 0, wx.ALL, 10)

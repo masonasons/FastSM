@@ -36,12 +36,8 @@ class TweetGui(wx.Dialog):
 		self.Bind(wx.EVT_CLOSE, self.OnClose)
 		self.panel = wx.Panel(self, style=wx.TAB_TRAVERSAL)
 		self.main_box = wx.BoxSizer(wx.VERTICAL)
-		# On macOS, skip StaticText labels - VoiceOver reads them as separate items
-		# causing jumbled navigation. Controls have accessible names instead.
-		is_macos = platform.system() == "Darwin"
 		self.text_label = wx.StaticText(self.panel, -1, "Te&xt")
-		if not is_macos:
-			self.main_box.Add(self.text_label, 0, wx.LEFT | wx.TOP, 10)
+		self.main_box.Add(self.text_label, 0, wx.LEFT | wx.TOP, 10)
 		if self.account.app.prefs.wrap:
 			self.text = wx.TextCtrl(self.panel, -1, "", style=wx.TE_MULTILINE, size=text_box_size, name="Post text")
 		else:
@@ -62,8 +58,7 @@ class TweetGui(wx.Dialog):
 			self.max_length = getattr(self.account, 'max_chars', 500)
 		if self.type == "message":
 			self.text2_label = wx.StaticText(self.panel, -1, "Recipient")
-			if not is_macos:
-				self.main_box.Add(self.text2_label, 0, wx.LEFT | wx.TOP, 10)
+			self.main_box.Add(self.text2_label, 0, wx.LEFT | wx.TOP, 10)
 		if self.type == "reply" or self.type == "quote" or self.type == "message":
 			if self.type == "message":
 				self.text2 = wx.TextCtrl(self.panel, -1, "", style=wx.TE_DONTWRAP, size=text_box_size, name="Recipient")
@@ -85,8 +80,7 @@ class TweetGui(wx.Dialog):
 			self.visibility = None
 			if self._platform_supports('visibility'):
 				self.visibility_label = wx.StaticText(self.panel, -1, "Visibility")
-				if not is_macos:
-					self.main_box.Add(self.visibility_label, 0, wx.LEFT | wx.TOP, 10)
+				self.main_box.Add(self.visibility_label, 0, wx.LEFT | wx.TOP, 10)
 				self.visibility = wx.Choice(self.panel, -1, size=(800,600), name="Visibility")
 				self.visibility.Insert("Public", self.visibility.GetCount())
 				self.visibility.Insert("Unlisted", self.visibility.GetCount())
@@ -112,8 +106,7 @@ class TweetGui(wx.Dialog):
 			self.cw_text = None
 			if self._platform_supports('content_warning'):
 				self.cw_label = wx.StaticText(self.panel, -1, "Content &Warning (optional)")
-				if not is_macos:
-					self.main_box.Add(self.cw_label, 0, wx.LEFT | wx.TOP, 10)
+				self.main_box.Add(self.cw_label, 0, wx.LEFT | wx.TOP, 10)
 				self.cw_text = wx.TextCtrl(self.panel, -1, "", style=wx.TE_DONTWRAP, size=(800, 30), name="Content Warning (optional)")
 				# For replies/edits, copy the original post's content warning if present
 				if (self.type == "reply" or self.type == "edit") and status is not None:
@@ -126,8 +119,7 @@ class TweetGui(wx.Dialog):
 			self.media_list = None
 			if self._platform_supports('media_attachments'):
 				self.media_label = wx.StaticText(self.panel, -1, "&Media Attachments")
-				if not is_macos:
-					self.main_box.Add(self.media_label, 0, wx.LEFT | wx.TOP, 10)
+				self.main_box.Add(self.media_label, 0, wx.LEFT | wx.TOP, 10)
 				self.media_list = wx.ListBox(self.panel, -1, size=(800, 100), name="Media Attachments")
 				self.main_box.Add(self.media_list, 0, wx.ALL, 10)
 
@@ -714,31 +706,27 @@ class SpellCheckDialog(wx.Dialog):
 		self.misspelled = misspelled
 		self.corrected_text = text
 		self.current_index = 0
-		is_macos = platform.system() == "Darwin"
 
 		self.panel = wx.Panel(self, style=wx.TAB_TRAVERSAL)
 		self.main_box = wx.BoxSizer(wx.VERTICAL)
 
 		# Current word display
 		self.word_label = wx.StaticText(self.panel, -1, "Misspelled word:")
-		if not is_macos:
-			self.main_box.Add(self.word_label, 0, wx.ALL, 10)
+		self.main_box.Add(self.word_label, 0, wx.ALL, 10)
 
 		self.word_text = wx.TextCtrl(self.panel, -1, "", style=wx.TE_READONLY, name="Misspelled word")
 		self.main_box.Add(self.word_text, 0, wx.EXPAND | wx.ALL, 10)
 
 		# Replacement field
 		self.replace_label = wx.StaticText(self.panel, -1, "&Replace with:")
-		if not is_macos:
-			self.main_box.Add(self.replace_label, 0, wx.ALL, 10)
+		self.main_box.Add(self.replace_label, 0, wx.ALL, 10)
 
 		self.replace_text = wx.TextCtrl(self.panel, -1, "", name="Replace with")
 		self.main_box.Add(self.replace_text, 0, wx.EXPAND | wx.ALL, 10)
 
 		# Suggestions list
 		self.suggest_label = wx.StaticText(self.panel, -1, "&Suggestions:")
-		if not is_macos:
-			self.main_box.Add(self.suggest_label, 0, wx.ALL, 10)
+		self.main_box.Add(self.suggest_label, 0, wx.ALL, 10)
 
 		self.suggestions = wx.ListBox(self.panel, -1, size=(350, 100), name="Suggestions")
 		self.suggestions.Bind(wx.EVT_LISTBOX, self.OnSuggestionSelect)
