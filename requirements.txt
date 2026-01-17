@@ -1,9 +1,12 @@
 Mastodon.py>=2.0.0
 atproto
-git+https://www.github.com/accessibleapps/sound_lib
-git+https://www.github.com/accessibleapps/accessible_output2
-git+https://www.github.com/accessibleapps/keyboard_handler
-pyenchant
 pyinstaller
 pyperclip
+requests
 wxpython
+git+https://github.com/accessibleapps/platform_utils
+git+https://github.com/accessibleapps/accessible_output2
+git+https://github.com/accessibleapps/keyboard_handler
+# Windows only
+git+https://github.com/accessibleapps/sound_lib ; sys_platform == 'win32'
+pyenchant ; sys_platform == 'win32'

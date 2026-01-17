@@ -25,16 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install Mastodon.py>=2.0.0
-          pip install atproto
-          pip install pyinstaller
-          pip install pyperclip
-          pip install wxpython
-          pip install requests
-          pip install pyenchant
-          pip install git+https://github.com/accessibleapps/sound_lib
-          pip install git+https://github.com/accessibleapps/accessible_output2
-          pip install git+https://github.com/accessibleapps/keyboard_handler
+          pip install -r requirements.txt
 
       - name: Build executable
         run: python build.py
@@ -69,15 +60,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install Mastodon.py>=2.0.0
-          pip install atproto
-          pip install pyinstaller
-          pip install pyperclip
-          pip install wxpython
-          pip install requests
-          pip install git+https://github.com/accessibleapps/platform_utils
-          pip install git+https://github.com/accessibleapps/accessible_output2
-          pip install git+https://github.com/accessibleapps/keyboard_handler
+          pip install -r requirements.txt
 
       - name: Build executable
         run: python build.py
