@@ -75,7 +75,7 @@ jobs:
           pip install pyperclip
           pip install wxpython
           pip install requests
-          pip install keyboard_handler
+          pip install git+https://github.com/accessibleapps/keyboard_handler
 
       - name: Build executable
         run: python build.py
