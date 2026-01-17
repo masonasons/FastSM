@@ -998,11 +998,15 @@ class ViewImageGui(wx.Dialog):
 
 			# Scale to fit the panel while maintaining aspect ratio
 			panel_size = self.image_panel.GetSize()
-			max_width = panel_size[0] - 20
-			max_height = panel_size[1] - 20
+			# Use fallback dimensions if panel not yet laid out
+			max_width = panel_size[0] - 20 if panel_size[0] > 20 else 760
+			max_height = panel_size[1] - 20 if panel_size[1] > 20 else 380
 
 			# Calculate scaling factor
 			img_width, img_height = pil_image.size
+			if img_width <= 0 or img_height <= 0:
+				self.description.SetValue("Error: Invalid image dimensions")
+				return
 			scale = min(max_width / img_width, max_height / img_height, 1.0)
 
 			if scale < 1.0:
