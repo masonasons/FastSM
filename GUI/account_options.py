@@ -7,8 +7,15 @@ from application import get_app
 
 def _get_bundled_path():
 	"""Get the path to bundled resources (for PyInstaller frozen apps)."""
+	import platform as plat
 	if getattr(sys, 'frozen', False):
-		return getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+		if plat.system() == 'Darwin':
+			# macOS .app bundle: Resources are in Contents/Resources
+			# sys.executable is at Contents/MacOS/AppName
+			return os.path.join(os.path.dirname(sys.executable), '..', 'Resources')
+		else:
+			# Windows/Linux: use _MEIPASS or executable directory
+			return getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
 	return None
 
 class general(wx.Panel, wx.Dialog):

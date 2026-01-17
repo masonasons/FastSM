@@ -109,9 +109,16 @@ def _cleanup_finished_handles():
 def _get_bundled_path():
 	"""Get the path to bundled resources (for PyInstaller frozen apps)."""
 	import sys
+	import platform
 	if getattr(sys, 'frozen', False):
 		# Running as frozen app (PyInstaller)
-		return getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+		if platform.system() == 'Darwin':
+			# macOS .app bundle: Resources are in Contents/Resources
+			# sys.executable is at Contents/MacOS/AppName
+			return os.path.join(os.path.dirname(sys.executable), '..', 'Resources')
+		else:
+			# Windows/Linux: use _MEIPASS or executable directory
+			return getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
 	return None
 
 def play(account, filename, pack="", wait=False):
