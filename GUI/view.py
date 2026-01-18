@@ -125,7 +125,8 @@ class ViewGui(wx.Dialog):
 		created_at = getattr(self.status, 'created_at', None)
 		posted_str = self.account.app.parse_date(created_at) if created_at else 'Unknown'
 
-		details = extra + "Posted: " + posted_str + "\r\nFrom: " + source + "\r\nFavourited " + str(getattr(self.status, 'favourites_count', 0) or 0) + " times\r\nBoosted " + str(getattr(self.status, 'boosts_count', 0) or getattr(self.status, 'reblogs_count', 0) or 0) + " times."
+		quotes_count = getattr(self.status, 'quotes_count', 0) or 0
+		details = extra + "Posted: " + posted_str + "\r\nFrom: " + source + "\r\nFavourited " + str(getattr(self.status, 'favourites_count', 0) or 0) + " times\r\nBoosted " + str(getattr(self.status, 'boosts_count', 0) or getattr(self.status, 'reblogs_count', 0) or 0) + " times\r\nQuoted " + str(quotes_count) + " times."
 		self.text2.SetValue(details)
 
 		if platform.system() == "Darwin":
@@ -158,6 +159,14 @@ class ViewGui(wx.Dialog):
 		has_edits = getattr(self.status, 'edited_at', None) is not None
 		if not has_edits or platform_type != 'mastodon':
 			self.view_history.Enable(False)
+
+		self.view_quotes = wx.Button(self.panel, -1, "View &Quotes")
+		self.view_quotes.Bind(wx.EVT_BUTTON, self.OnViewQuotes)
+		self.main_box.Add(self.view_quotes, 0, wx.ALL, 10)
+
+		# Only enable view quotes if there are quotes and on Mastodon
+		if quotes_count == 0 or platform_type != 'mastodon':
+			self.view_quotes.Enable(False)
 
 		# Check if this is a boost or quote
 		has_reblog = hasattr(self.status, 'reblog') and self.status.reblog
@@ -316,6 +325,33 @@ class ViewGui(wx.Dialog):
 			return
 		g = EditHistoryDialog(self.account, history)
 		g.Show()
+
+	def OnViewQuotes(self, event):
+		import speak
+		import timeline
+		from . import main
+		try:
+			status_id = self.status.id
+			if hasattr(self.status, 'reblog') and self.status.reblog:
+				status_id = self.status.reblog.id
+			# Use the internal API request method since Mastodon.py doesn't have status_quotes yet
+			quotes = self.account.api._Mastodon__api_request('GET', f'/api/v1/statuses/{status_id}/quotes')
+			if not quotes:
+				speak.speak("No quotes found")
+				return
+			# Create a temporary timeline with the quotes
+			display_name = getattr(self.status.account, 'display_name', '') or self.status.account.acct
+			tl = timeline.timeline(self.account, name=f"Quotes of {display_name}'s post", type="quotes", data=status_id)
+			tl.statuses = list(quotes)
+			tl.removable = True
+			self.account.timelines.append(tl)
+			main.window.refreshTimelines()
+			main.window.list.SetSelection(len(self.account.timelines) - 1)
+			self.account.currentIndex = len(self.account.timelines) - 1
+			main.window.on_list_change(None)
+			self.Destroy()
+		except Exception as error:
+			self.account.app.handle_error(error, "view quotes")
 
 	def OnFavourite(self, event):
 		misc.favourite(self.account, self.status)
