@@ -238,16 +238,27 @@ class advanced(wx.Panel, wx.Dialog):
 		import requests
 		import os
 		import sys
+		import stat
 		import speak
 
-		# Determine target path
+		# Determine asset name based on platform
+		if sys.platform == 'win32':
+			asset_name = 'yt-dlp.exe'
+		elif sys.platform == 'darwin':
+			asset_name = 'yt-dlp_macos'
+		else:
+			asset_name = 'yt-dlp'
+
+		# Determine target path - use config directory
 		custom_path = self.ytdlp_path.GetValue().strip()
 		if custom_path and os.path.isfile(custom_path):
+			# Update existing custom path
 			ytdlp_path = custom_path
-		elif getattr(sys, 'frozen', False):
-			ytdlp_path = os.path.join(os.path.dirname(sys.executable), 'yt-dlp.exe')
+			set_path_after = False
 		else:
-			ytdlp_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'yt-dlp.exe')
+			# Download to config directory
+			ytdlp_path = os.path.join(get_app().confpath, asset_name)
+			set_path_after = True  # Need to set path since config dir isn't auto-checked
 
 		def do_download_or_update():
 			try:
@@ -282,28 +293,36 @@ class advanced(wx.Panel, wx.Dialog):
 				response.raise_for_status()
 				release = response.json()
 
-				# Find the exe asset
+				# Find the appropriate asset for this platform
 				exe_url = None
 				for asset in release.get('assets', []):
-					if asset['name'] == 'yt-dlp.exe':
+					if asset['name'] == asset_name:
 						exe_url = asset['browser_download_url']
 						break
 
 				if not exe_url:
-					speak.speak("Could not find yt-dlp.exe in latest release")
+					speak.speak(f"Could not find {asset_name} in latest release")
 					return
 
-				# Download the exe
+				# Download the executable
 				exe_response = requests.get(exe_url, timeout=120, stream=True)
 				exe_response.raise_for_status()
+
+				# Ensure config directory exists
+				os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
 				with open(dest_path, 'wb') as f:
 					for chunk in exe_response.iter_content(chunk_size=8192):
 						f.write(chunk)
 
+				# Make executable on Unix systems
+				if sys.platform != 'win32':
+					os.chmod(dest_path, os.stat(dest_path).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
 				speak.speak("yt-dlp downloaded successfully")
-				# Update the path field on main thread
-				wx.CallAfter(self.ytdlp_path.SetValue, dest_path)
+				# Update the path field since we downloaded to config directory
+				if set_path_after:
+					wx.CallAfter(self.ytdlp_path.SetValue, dest_path)
 			except Exception as e:
 				speak.speak(f"Download failed: {e}")
 
