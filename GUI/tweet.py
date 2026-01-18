@@ -682,12 +682,16 @@ class TweetGui(wx.Dialog):
 					speak.speak("Error: " + str(error))
 					status = False
 
-		if self.type == "reply" or self.type == "quote":
+		if self.type == "message":
+			snd = "send_message"
+		elif self.type == "reply" or self.type == "quote":
 			snd = "send_reply"
 		elif self.type == "post" or self.type == "edit":
-			snd = "send_tweet"
-		elif self.type == "message":
-			snd = "send_message"
+			# Check if this is a direct message (visibility='direct')
+			if self.visibility is not None and self.visibility.GetSelection() == 3:
+				snd = "send_message"
+			else:
+				snd = "send_tweet"
 		if status:
 			sound.play(self.account, snd)
 			if hasattr(self, "thread") and not self.thread.GetValue() or not hasattr(self, "thread"):

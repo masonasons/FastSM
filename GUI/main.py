@@ -883,8 +883,11 @@ class MainGui(wx.Frame):
 			m_open = menu.Append(-1, "Open conversation")
 			self.Bind(wx.EVT_MENU, self.OnConversation, m_open)
 
-			m_reply = menu.Append(-1, "Reply")
-			self.Bind(wx.EVT_MENU, self.OnMessage, m_reply)
+			m_reply = menu.Append(-1, "Reply to message")
+			self.Bind(wx.EVT_MENU, self.OnReply, m_reply)
+
+			m_new_dm = menu.Append(-1, "Send new message")
+			self.Bind(wx.EVT_MENU, self.OnMessage, m_new_dm)
 
 			menu.AppendSeparator()
 
@@ -1567,12 +1570,9 @@ class MainGui(wx.Frame):
 				del tl
 
 	def OnReply(self, event=None):
-		if get_app().currentAccount.currentTimeline.type=="conversations":
-			self.OnMessage(None)
-		else:
-			status = self.get_current_status()
-			if status:
-				misc.reply(get_app().currentAccount, status)
+		status = self.get_current_status()
+		if status:
+			misc.reply(get_app().currentAccount, status)
 
 	def OnEdit(self, event=None):
 		status = self.get_current_status()
@@ -1585,12 +1585,9 @@ class MainGui(wx.Frame):
 			misc.edit(get_app().currentAccount, status)
 
 	def OnQuote(self, event=None):
-		if get_app().currentAccount.currentTimeline.type=="conversations":
-			self.OnMessage(None)
-		else:
-			status = self.get_current_status()
-			if status:
-				misc.quote(get_app().currentAccount, status)
+		status = self.get_current_status()
+		if status:
+			misc.quote(get_app().currentAccount, status)
 
 	def OnMessage(self, event=None):
 		status = self.get_current_status()
