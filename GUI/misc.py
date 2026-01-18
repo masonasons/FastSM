@@ -647,9 +647,6 @@ def delete(account, status):
 
 
 def load_conversation(account, status):
-	for i in account.timelines:
-		if i.type == "conversation":
-			return False
 	# For boosts, use the original post's author
 	original_status = status.reblog if hasattr(status, 'reblog') and status.reblog else status
 	display_name = getattr(original_status.account, 'display_name', '') or original_status.account.acct

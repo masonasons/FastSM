@@ -230,6 +230,22 @@ class confirmation(wx.Panel, wx.Dialog):
 		self.confirm_unfollow=wx.CheckBox(self, -1, "Unfollowing")
 		self.main_box.Add(self.confirm_unfollow, 0, wx.ALL, 10)
 		self.confirm_unfollow.SetValue(get_app().prefs.confirm_unfollow)
+
+		self.confirm_block=wx.CheckBox(self, -1, "Blocking")
+		self.main_box.Add(self.confirm_block, 0, wx.ALL, 10)
+		self.confirm_block.SetValue(get_app().prefs.confirm_block)
+
+		self.confirm_unblock=wx.CheckBox(self, -1, "Unblocking")
+		self.main_box.Add(self.confirm_unblock, 0, wx.ALL, 10)
+		self.confirm_unblock.SetValue(get_app().prefs.confirm_unblock)
+
+		self.confirm_mute=wx.CheckBox(self, -1, "Muting")
+		self.main_box.Add(self.confirm_mute, 0, wx.ALL, 10)
+		self.confirm_mute.SetValue(get_app().prefs.confirm_mute)
+
+		self.confirm_unmute=wx.CheckBox(self, -1, "Unmuting")
+		self.main_box.Add(self.confirm_unmute, 0, wx.ALL, 10)
+		self.confirm_unmute.SetValue(get_app().prefs.confirm_unmute)
 		self.SetSizer(self.main_box)
 
 
@@ -389,6 +405,10 @@ class OptionsGui(wx.Dialog):
 		get_app().prefs.confirm_unfavorite=self.confirmation.confirm_unfavorite.GetValue()
 		get_app().prefs.confirm_follow=self.confirmation.confirm_follow.GetValue()
 		get_app().prefs.confirm_unfollow=self.confirmation.confirm_unfollow.GetValue()
+		get_app().prefs.confirm_block=self.confirmation.confirm_block.GetValue()
+		get_app().prefs.confirm_unblock=self.confirmation.confirm_unblock.GetValue()
+		get_app().prefs.confirm_mute=self.confirmation.confirm_mute.GetValue()
+		get_app().prefs.confirm_unmute=self.confirmation.confirm_unmute.GetValue()
 		# AI settings
 		ai_service_values = ['none', 'openai', 'gemini']
 		get_app().prefs.ai_service = ai_service_values[self.ai_tab.ai_service.GetSelection()]

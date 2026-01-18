@@ -1701,10 +1701,24 @@ class MainGui(wx.Frame):
 				blocking = getattr(user.viewer, 'blocking', False) or getattr(user.viewer, 'blocked_by', False)
 
 			if blocking:
+				# Check if confirmation is required
+				if get_app().prefs.confirm_unblock:
+					dlg = wx.MessageDialog(self, f"Are you sure you want to unblock {user.acct}?", "Confirm Unblock", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+					if dlg.ShowModal() != wx.ID_YES:
+						dlg.Destroy()
+						return
+					dlg.Destroy()
 				account.unblock(user.id)
 				sound.play(account, "unblock")
 				speak.speak(f"Unblocked {user.acct}")
 			else:
+				# Check if confirmation is required
+				if get_app().prefs.confirm_block:
+					dlg = wx.MessageDialog(self, f"Are you sure you want to block {user.acct}?", "Confirm Block", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+					if dlg.ShowModal() != wx.ID_YES:
+						dlg.Destroy()
+						return
+					dlg.Destroy()
 				account.block(user.id)
 				sound.play(account, "block")
 				speak.speak(f"Blocked {user.acct}")
@@ -1896,10 +1910,24 @@ class MainGui(wx.Frame):
 				muting = getattr(user.viewer, 'muted', False)
 
 			if muting:
+				# Check if confirmation is required
+				if get_app().prefs.confirm_unmute:
+					dlg = wx.MessageDialog(self, f"Are you sure you want to unmute {user.acct}?", "Confirm Unmute", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+					if dlg.ShowModal() != wx.ID_YES:
+						dlg.Destroy()
+						return
+					dlg.Destroy()
 				account.unmute(user.id)
 				sound.play(account, "unmute")
 				speak.speak(f"Unmuted {user.acct}")
 			else:
+				# Check if confirmation is required
+				if get_app().prefs.confirm_mute:
+					dlg = wx.MessageDialog(self, f"Are you sure you want to mute {user.acct}?", "Confirm Mute", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+					if dlg.ShowModal() != wx.ID_YES:
+						dlg.Destroy()
+						return
+					dlg.Destroy()
 				# For Mastodon, use mute dialog for options; for Bluesky, mute directly
 				if platform_type == 'mastodon':
 					from . import mute_dialog

@@ -161,6 +161,10 @@ class Application:
 		self.prefs.confirm_unfavorite = self.prefs.get("confirm_unfavorite", False)
 		self.prefs.confirm_follow = self.prefs.get("confirm_follow", False)
 		self.prefs.confirm_unfollow = self.prefs.get("confirm_unfollow", False)
+		self.prefs.confirm_block = self.prefs.get("confirm_block", False)
+		self.prefs.confirm_unblock = self.prefs.get("confirm_unblock", False)
+		self.prefs.confirm_mute = self.prefs.get("confirm_mute", False)
+		self.prefs.confirm_unmute = self.prefs.get("confirm_unmute", False)
 		# AI image description settings
 		self.prefs.ai_service = self.prefs.get("ai_service", "none")  # 'none', 'openai', or 'gemini'
 		self.prefs.openai_api_key = self.prefs.get("openai_api_key", "")
