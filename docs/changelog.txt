@@ -2,8 +2,17 @@ FastSM Changelog
 ================
 
 0.3.1
+Add account creation to the app, both for Bluesky and Mastodon!
+Add media playback with VLC, if found. Use sound_lib as fallback
 The notifications and mentions timelines now save their position on exit and restore it if the post still exists in the timeline the next time you launch the app. This unlike the home timeline sync is local only and doesn't sync with any kind of API.
 More extensive support for server filters. Show warnings for those types of posts, don't let editing filters duplicate keywords.
+Redesigns poll creation dialog to be more in line with Mastodon poll creation.
+Show time remaining in a poll if you view results.
+More consistent behavior in the conversations buffer. Replying will reply to the last message in the conversation. Send new message will open the other new message dialog as before.
+You can now launch more than one conversation buffer at a time.
+Fix accepting/rejecting follower requests.
+Add more confirmations to the confirmations tab
+View dialog improvements. Add view edit history, view boosters, view favoriters, view quotes. Also add quote count to the details edit.
 View image now appears at the top of context menus.
 Image viewer now works for boosted posts.
 Profile editor with fields is fixed.
@@ -12,6 +21,7 @@ Bookmarks/favorites timelines properly restore on restart.
 Improvements to audio playback and URL opening.
 Sound now works on Mac.
 A bunch of keyboard stuff is fixed on Mac.
+Fix spaces being removed after punctuation in notifications and other text. HTML block elements like paragraphs are now properly converted with spaces between them.
 
 0.3.0
 

@@ -42,7 +42,13 @@ def parse_datetime(value):
 
 
 def strip_html(text: str) -> str:
-    """Strip HTML tags and decode entities."""
+    """Strip HTML tags and decode entities, preserving spacing for block elements."""
+    # Add spaces for block elements and line breaks to prevent text concatenation
+    # Note: Don't add spaces for inline elements like <span> - Mastodon uses spans
+    # within URLs (e.g., <span class="invisible">https://</span>) and adding spaces
+    # would break the URL (causing "https:// example.com" instead of "https://example.com")
+    text = re.sub(r'</(p|div)>', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'<br\s*/?>', ' ', text, flags=re.IGNORECASE)
     text = _html_tag_re.sub('', text)
     text = html.unescape(text)
     text = re.sub(r'\s+', ' ', text).strip()
