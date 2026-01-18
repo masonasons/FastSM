@@ -661,30 +661,25 @@ def load_conversation(account, status):
 
 def play_external(status):
 	"""Play audio from a post - checks attachments first, then URLs in text."""
-	# If already playing, stop
+	# If already playing, stop and return (toggle behavior)
 	if sound.player is not None:
+		is_playing = False
 		try:
-			is_playing = False
-			if sound.player_type == 'vlc':
-				# VLC: check state - is_playing() returns 1 if playing
-				# Also check state isn't Ended/Error/Stopped
+			if sound.player_type == 'vlc' and sound.VLC_AVAILABLE:
 				import vlc
 				state = sound.player.get_state()
 				is_playing = state == vlc.State.Playing
-			else:
-				# sound_lib uses is_playing property
+			elif sound.player_type == 'soundlib':
 				is_playing = sound.player.is_playing
-
-			if is_playing:
-				speak.speak("Stopped")
-				sound.stop()
-				return
-			else:
-				# Player exists but not playing - clean it up
-				sound.stop()
 		except:
-			# Error checking state - clean up player
+			pass
+
+		if is_playing:
+			speak.speak("Stopped")
 			sound.stop()
+			return
+		# Not playing - clean up stale player before continuing
+		sound.stop()
 
 	# For boosts, get the actual boosted post
 	if hasattr(status, 'reblog') and status.reblog:

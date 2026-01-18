@@ -228,7 +228,11 @@ def play_url(url, vlc_only=False):
 		try:
 			# Create VLC instance if needed
 			if vlc_instance is None:
-				vlc_instance = vlc.Instance('--no-video')
+				vlc_args = ['--no-video']
+				# If using bundled VLC, set paths
+				if _vlc_path:
+					vlc_args.append(f'--data-path={_vlc_path}')
+				vlc_instance = vlc.Instance(' '.join(vlc_args))
 			# Create media player
 			player = vlc_instance.media_player_new()
 			media = vlc_instance.media_new(url)
@@ -246,10 +250,10 @@ def play_url(url, vlc_only=False):
 				except:
 					pass
 			return
-		except Exception:
+		except Exception as e:
 			# VLC failed, fall through to sound_lib (unless vlc_only)
 			if vlc_only:
-				speak.speak("VLC is required to play this URL but failed to start.")
+				speak.speak(f"VLC failed to play: {e}")
 				return
 
 	# If this URL requires VLC and VLC isn't available, inform user
