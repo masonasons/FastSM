@@ -50,16 +50,17 @@ class MastodonInstanceDialog(wx.Dialog):
 	"""Dialog to enter a Mastodon instance and check registration status."""
 
 	def __init__(self, parent):
-		wx.Dialog.__init__(self, parent, title="Select Mastodon Instance", size=(500, 350))
+		wx.Dialog.__init__(self, parent, title="Select Mastodon Instance", size=(500, 400))
 		self.panel = wx.Panel(self)
 		self.main_box = wx.BoxSizer(wx.VERTICAL)
 
-		info_label = wx.StaticText(self.panel, -1, "Enter a Mastodon instance URL (e.g., mastodon.social):")
+		info_label = wx.StaticText(self.panel, -1, "Enter a Mastodon instance URL or paste an invite link:")
 		self.main_box.Add(info_label, 0, wx.ALL, 10)
 
-		self.instance_label = wx.StaticText(self.panel, -1, "&Instance:")
+		self.instance_label = wx.StaticText(self.panel, -1, "&Instance or Invite Link:")
 		self.main_box.Add(self.instance_label, 0, wx.LEFT | wx.TOP, 10)
-		self.instance = wx.TextCtrl(self.panel, -1, "mastodon.social", name="Instance")
+		self.instance = wx.TextCtrl(self.panel, -1, "", name="Instance or Invite Link")
+		self.instance.SetHint("mastodon.social or https://instance.social/invite/CODE")
 		self.main_box.Add(self.instance, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
 		self.instance.SetFocus()
 
@@ -91,17 +92,31 @@ class MastodonInstanceDialog(wx.Dialog):
 		self.approval_required = False
 		self.reason_required = False
 		self.instance_info = None
+		self.invite_code = None
 
 	def on_check(self, event):
 		"""Check the registration status of the instance."""
 		instance = self.instance.GetValue().strip()
 		if not instance:
-			speak.speak("Please enter an instance URL")
+			speak.speak("Please enter an instance URL or invite link")
 			return
 
-		# Normalize the URL
-		if not instance.startswith('http'):
-			instance = 'https://' + instance
+		# Check if this is an invite link and extract the code
+		self.invite_code = None
+		if '/invite/' in instance:
+			# Parse invite link: https://instance.social/invite/CODE
+			import re
+			match = re.search(r'https?://([^/]+)/invite/([^/\s?]+)', instance)
+			if match:
+				instance = 'https://' + match.group(1)
+				self.invite_code = match.group(2)
+			else:
+				speak.speak("Could not parse invite link")
+				return
+		else:
+			# Normalize the URL
+			if not instance.startswith('http'):
+				instance = 'https://' + instance
 		instance = instance.rstrip('/')
 
 		self.status_text.SetValue("Checking...")
@@ -131,7 +146,11 @@ class MastodonInstanceDialog(wx.Dialog):
 				if description:
 					status_lines.append(f"Description: {description}")
 
-				if self.registrations_open:
+				if self.invite_code:
+					status_lines.append(f"Invite code: {self.invite_code}")
+					status_lines.append("You can register using this invite code.")
+					self.continue_btn.Enable(True)
+				elif self.registrations_open:
 					if self.approval_required:
 						status_lines.append("Registrations: Open (requires approval)")
 						if self.reason_required:
@@ -142,10 +161,16 @@ class MastodonInstanceDialog(wx.Dialog):
 				else:
 					status_lines.append("Registrations: Closed")
 					status_lines.append("This instance is not accepting new registrations.")
+					status_lines.append("You may need an invite link to register.")
 					self.continue_btn.Enable(False)
 
 				self.status_text.SetValue("\n".join(status_lines))
-				speak.speak("Open, requires approval" if self.approval_required else "Registrations open" if self.registrations_open else "Registrations closed")
+				if self.invite_code:
+					speak.speak("Invite code found")
+				elif self.registrations_open:
+					speak.speak("Open, requires approval" if self.approval_required else "Registrations open")
+				else:
+					speak.speak("Registrations closed")
 			else:
 				# Try v1 instance API as fallback
 				response = requests.get(f"{instance}/api/v1/instance", timeout=10)
@@ -183,18 +208,21 @@ class MastodonInstanceDialog(wx.Dialog):
 class MastodonSignupDialog(wx.Dialog):
 	"""Dialog to create a Mastodon account."""
 
-	def __init__(self, parent, instance_url, approval_required=False, reason_required=False, instance_info=None):
+	def __init__(self, parent, instance_url, approval_required=False, reason_required=False, instance_info=None, invite_code=None):
 		wx.Dialog.__init__(self, parent, title="Create Mastodon Account", size=(500, 500))
 		self.instance_url = instance_url
 		self.approval_required = approval_required
 		self.reason_required = reason_required
 		self.instance_info = instance_info
+		self.invite_code = invite_code
 
 		self.panel = wx.Panel(self)
 		self.main_box = wx.BoxSizer(wx.VERTICAL)
 
 		info_text = f"Create an account on {instance_url}"
-		if approval_required:
+		if invite_code:
+			info_text += f"\n(Using invite code: {invite_code})"
+		elif approval_required:
 			info_text += "\n(This instance requires approval for new accounts)"
 		info_label = wx.StaticText(self.panel, -1, info_text)
 		self.main_box.Add(info_label, 0, wx.ALL, 10)
@@ -316,21 +344,67 @@ class MastodonSignupDialog(wx.Dialog):
 				api_base_url=self.instance_url
 			)
 
-			# Create the account
-			result = api.create_account(
-				username=username,
-				password=password,
-				email=email,
-				agreement=True,
-				locale='en',
-				reason=reason,
-				return_detailed_error=True
-			)
+			# If we have an invite code, we need to use direct API call
+			# since Mastodon.py doesn't support invite_code parameter
+			if self.invite_code:
+				# Get app token for registration
+				token_response = requests.post(
+					f"{self.instance_url}/oauth/token",
+					data={
+						'client_id': client_id,
+						'client_secret': client_secret,
+						'grant_type': 'client_credentials',
+						'scope': 'write:accounts'
+					},
+					timeout=30
+				)
+				if token_response.status_code != 200:
+					raise Exception("Could not obtain app token")
+
+				app_token = token_response.json().get('access_token')
+
+				# Create account with invite code
+				data = {
+					'username': username,
+					'email': email,
+					'password': password,
+					'agreement': 'true',
+					'locale': 'en',
+					'invite_code': self.invite_code
+				}
+				if reason:
+					data['reason'] = reason
+
+				response = requests.post(
+					f"{self.instance_url}/api/v1/accounts",
+					data=data,
+					headers={'Authorization': f'Bearer {app_token}'},
+					timeout=30
+				)
+
+				if response.status_code not in (200, 201):
+					error_data = response.json()
+					raise Exception(error_data.get('error', str(response.status_code)))
+
+				result = response.json()
+			else:
+				# Use Mastodon.py for normal registration
+				result = api.create_account(
+					username=username,
+					password=password,
+					email=email,
+					agreement=True,
+					locale='en',
+					reason=reason,
+					return_detailed_error=True
+				)
 
 			# Success - the result is an access token (but email confirmation may be required)
 			self.created_successfully = True
 
-			if self.approval_required:
+			if self.invite_code:
+				msg = f"Account created successfully using invite code!\n\nA confirmation email has been sent to {email}.\n\nPlease click the link in the email to confirm your account, then use 'Add account' to sign in."
+			elif self.approval_required:
 				msg = f"Account creation request submitted!\n\nYour account on {self.instance_url} is pending approval.\n\nYou will receive an email when your account is approved. Once approved, you can add the account using 'Add account'."
 			else:
 				msg = f"Account created successfully!\n\nA confirmation email has been sent to {email}.\n\nPlease click the link in the email to confirm your account, then use 'Add account' to sign in."
@@ -590,14 +664,15 @@ def show_signup_dialog(parent):
 		# Show instance selection
 		instance_dlg = MastodonInstanceDialog(parent)
 		result = instance_dlg.ShowModal()
-		if result == wx.ID_OK and instance_dlg.instance_url:
+		if result == wx.ID_OK and (instance_dlg.instance_url or instance_dlg.invite_code):
 			# Show signup form
 			signup_dlg = MastodonSignupDialog(
 				parent,
 				instance_dlg.instance_url,
 				instance_dlg.approval_required,
 				instance_dlg.reason_required,
-				instance_dlg.instance_info
+				instance_dlg.instance_info,
+				instance_dlg.invite_code
 			)
 			signup_dlg.ShowModal()
 			signup_dlg.Destroy()
