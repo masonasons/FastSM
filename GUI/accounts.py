@@ -25,6 +25,9 @@ class AccountsGui(wx.Dialog):
 		self.new = wx.Button(self.panel, wx.ID_DEFAULT, "&Add account")
 		self.new.Bind(wx.EVT_BUTTON, self.New)
 		self.main_box.Add(self.new, 0, wx.ALL, 10)
+		self.create = wx.Button(self.panel, -1, "C&reate account")
+		self.create.Bind(wx.EVT_BUTTON, self.Create)
+		self.main_box.Add(self.create, 0, wx.ALL, 10)
 		self.remove = wx.Button(self.panel, -1, "&Remove account")
 		self.remove.Bind(wx.EVT_BUTTON, self.Remove)
 		self.main_box.Add(self.remove, 0, wx.ALL, 10)
@@ -64,6 +67,11 @@ class AccountsGui(wx.Dialog):
 		main.window.on_list_change(None)
 		main.window.SetLabel(app.currentAccount.me.acct+" - "+application.name+" "+application.version)
 		self.Destroy()
+
+	def Create(self, event):
+		"""Open the account creation dialog."""
+		from . import signup_dialog
+		signup_dialog.show_signup_dialog(self)
 
 	def Load(self, event):
 		app = get_app()
