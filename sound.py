@@ -64,6 +64,9 @@ def _find_ytdlp_executable():
 	import shutil
 	from application import get_app
 
+	# Determine executable name based on platform
+	exe_name = 'yt-dlp.exe' if sys.platform == 'win32' else 'yt-dlp'
+
 	# Check user-configured path first
 	try:
 		app = get_app()
@@ -73,15 +76,24 @@ def _find_ytdlp_executable():
 	except:
 		pass
 
+	# Check config directory (where download button saves it)
+	try:
+		app = get_app()
+		config_path = os.path.join(app.confpath, exe_name)
+		if os.path.isfile(config_path):
+			return config_path
+	except:
+		pass
+
 	# Check bundled location
 	if getattr(sys, 'frozen', False):
 		# Frozen app - check next to executable
-		bundled = os.path.join(os.path.dirname(sys.executable), 'yt-dlp.exe')
+		bundled = os.path.join(os.path.dirname(sys.executable), exe_name)
 		if os.path.isfile(bundled):
 			return bundled
 	else:
 		# Development - check in project folder
-		bundled = os.path.join(os.path.dirname(__file__), 'yt-dlp.exe')
+		bundled = os.path.join(os.path.dirname(__file__), exe_name)
 		if os.path.isfile(bundled):
 			return bundled
 

@@ -241,24 +241,25 @@ class advanced(wx.Panel, wx.Dialog):
 		import stat
 		import speak
 
-		# Determine asset name based on platform
+		# Determine asset name and local filename based on platform
 		if sys.platform == 'win32':
 			asset_name = 'yt-dlp.exe'
+			local_name = 'yt-dlp.exe'
 		elif sys.platform == 'darwin':
-			asset_name = 'yt-dlp_macos'
+			asset_name = 'yt-dlp_macos'  # GitHub release name
+			local_name = 'yt-dlp'  # Save as just yt-dlp
 		else:
 			asset_name = 'yt-dlp'
+			local_name = 'yt-dlp'
 
 		# Determine target path - use config directory
 		custom_path = self.ytdlp_path.GetValue().strip()
 		if custom_path and os.path.isfile(custom_path):
 			# Update existing custom path
 			ytdlp_path = custom_path
-			set_path_after = False
 		else:
-			# Download to config directory
-			ytdlp_path = os.path.join(get_app().confpath, asset_name)
-			set_path_after = True  # Need to set path since config dir isn't auto-checked
+			# Download to config directory (sound.py checks this location)
+			ytdlp_path = os.path.join(get_app().confpath, local_name)
 
 		def do_download_or_update():
 			try:
@@ -320,9 +321,6 @@ class advanced(wx.Panel, wx.Dialog):
 					os.chmod(dest_path, os.stat(dest_path).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 				speak.speak("yt-dlp downloaded successfully")
-				# Update the path field since we downloaded to config directory
-				if set_path_after:
-					wx.CallAfter(self.ytdlp_path.SetValue, dest_path)
 			except Exception as e:
 				speak.speak(f"Download failed: {e}")
 
