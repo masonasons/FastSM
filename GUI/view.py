@@ -1066,7 +1066,7 @@ class ViewImageGui(wx.Dialog):
 			# Description (read-only text field for accessibility)
 			self.desc_label = wx.StaticText(self.panel, -1, "&Description:")
 			self.main_box.Add(self.desc_label, 0, wx.LEFT | wx.TOP, 10)
-			desc_style = wx.TE_MULTILINE | wx.TE_READONLY if get_app().prefs.word_wrap else wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_DONTWRAP
+			desc_style = wx.TE_MULTILINE | wx.TE_READONLY if getattr(get_app().prefs, 'word_wrap', True) else wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_DONTWRAP
 			self.description = wx.TextCtrl(self.panel, -1, "", style=desc_style, size=(780, 60), name="Image description")
 			self.main_box.Add(self.description, 0, wx.ALL, 5)
 
@@ -1273,7 +1273,7 @@ class EditHistoryDialog(wx.Dialog):
 		self.content_label = wx.StaticText(self.panel, -1, "&Content:")
 		self.main_box.Add(self.content_label, 0, wx.LEFT | wx.TOP, 10)
 
-		content_style = wx.TE_MULTILINE | wx.TE_READONLY if get_app().prefs.word_wrap else wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_DONTWRAP
+		content_style = wx.TE_MULTILINE | wx.TE_READONLY if getattr(get_app().prefs, 'word_wrap', True) else wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_DONTWRAP
 		self.content = wx.TextCtrl(self.panel, -1, "", style=content_style, size=(450, 150), name="Content")
 		self.main_box.Add(self.content, 1, wx.EXPAND | wx.ALL, 10)
 
@@ -1281,7 +1281,7 @@ class EditHistoryDialog(wx.Dialog):
 		self.details_label = wx.StaticText(self.panel, -1, "&Details:")
 		self.main_box.Add(self.details_label, 0, wx.LEFT | wx.TOP, 10)
 
-		details_style = wx.TE_MULTILINE | wx.TE_READONLY if get_app().prefs.word_wrap else wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_DONTWRAP
+		details_style = wx.TE_MULTILINE | wx.TE_READONLY if getattr(get_app().prefs, 'word_wrap', True) else wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_DONTWRAP
 		self.details = wx.TextCtrl(self.panel, -1, "", style=details_style, size=(450, 60), name="Details")
 		self.main_box.Add(self.details, 0, wx.EXPAND | wx.ALL, 10)
 

@@ -535,7 +535,7 @@ class ai(wx.Panel, wx.Dialog):
 		# Custom prompt
 		prompt_label = wx.StaticText(self, -1, "Image description prompt:")
 		self.main_box.Add(prompt_label, 0, wx.LEFT | wx.TOP, 10)
-		ai_prompt_style = wx.TE_MULTILINE if get_app().prefs.word_wrap else wx.TE_MULTILINE | wx.TE_DONTWRAP
+		ai_prompt_style = wx.TE_MULTILINE if getattr(get_app().prefs, 'word_wrap', True) else wx.TE_MULTILINE | wx.TE_DONTWRAP
 		self.ai_image_prompt = wx.TextCtrl(self, -1, "", style=ai_prompt_style, size=(-1, 80), name="Image description prompt")
 		self.ai_image_prompt.SetValue(get_app().prefs.ai_image_prompt)
 		self.main_box.Add(self.ai_image_prompt, 0, wx.EXPAND | wx.ALL, 10)

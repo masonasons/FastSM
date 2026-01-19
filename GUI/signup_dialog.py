@@ -256,7 +256,7 @@ class MastodonSignupDialog(wx.Dialog):
 		if approval_required or reason_required:
 			reason_label = wx.StaticText(self.panel, -1, "&Reason for joining:" + (" (required)" if reason_required else " (optional)"))
 			self.main_box.Add(reason_label, 0, wx.LEFT | wx.TOP, 10)
-			reason_style = wx.TE_MULTILINE if get_app().prefs.word_wrap else wx.TE_MULTILINE | wx.TE_DONTWRAP
+			reason_style = wx.TE_MULTILINE if getattr(get_app().prefs, 'word_wrap', True) else wx.TE_MULTILINE | wx.TE_DONTWRAP
 			self.reason = wx.TextCtrl(self.panel, -1, "", style=reason_style, size=(-1, 60), name="Reason for joining")
 			self.main_box.Add(self.reason, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
 		else:

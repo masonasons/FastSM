@@ -974,25 +974,36 @@ def add(account, name, type, data=None, user=None):
 		main.window.refreshTimelines()
 
 
+def _load_timeline_worker(timeline, account):
+	"""Worker function to load a single timeline (for parallel execution)."""
+	try:
+		if timeline.type == "list":
+			try:
+				members = account.api.list_accounts(id=timeline.data)
+				timeline.members = []
+				for m in members:
+					timeline.members.append(m.id)
+			except:
+				pass
+		if timeline.type != "conversation":
+			timeline.load()
+	except MastodonError as error:
+		sound.play(account, "error")
+		speak.speak(str(error))
+	except Exception:
+		pass  # Silently ignore other errors in background updates
+
 def timelineThread(account):
 	app = account.app
 	while 1:
 		time.sleep(app.prefs.update_time * 60)
-		for i in account.timelines:
-			try:
-				if i.type == "list":
-					try:
-						members = account.api.list_accounts(id=i.data)
-						i.members = []
-						for i2 in members:
-							i.members.append(i2.id)
-					except:
-						pass
-				if i.type != "conversation":
-					i.load()
-			except MastodonError as error:
-				sound.play(account, "error")
-				speak.speak(str(error))
+		# Load all timelines in parallel for better performance
+		from concurrent.futures import ThreadPoolExecutor, as_completed
+		timelines_to_load = list(account.timelines)  # Copy to avoid modification during iteration
+		with ThreadPoolExecutor(max_workers=len(timelines_to_load) or 1) as executor:
+			futures = {executor.submit(_load_timeline_worker, tl, account): tl for tl in timelines_to_load}
+			for future in as_completed(futures):
+				pass  # Just wait for completion, errors handled in worker
 		if app.prefs.streaming and (account.stream is not None and not account.stream_thread.is_alive() or account.stream is None):
 			account.start_stream()
 

@@ -103,7 +103,7 @@ class general(wx.Panel, wx.Dialog):
 		self.main_box.Add(self.soundvolume, 0, wx.ALL, 10)
 		self.footer_label = wx.StaticText(self, -1, "Post Footer (Optional)")
 		self.main_box.Add(self.footer_label, 0, wx.LEFT | wx.TOP, 10)
-		footer_style = wx.TE_MULTILINE if get_app().prefs.word_wrap else wx.TE_MULTILINE | wx.TE_DONTWRAP
+		footer_style = wx.TE_MULTILINE if getattr(get_app().prefs, 'word_wrap', True) else wx.TE_MULTILINE | wx.TE_DONTWRAP
 		self.footer = wx.TextCtrl(self, -1, "", style=footer_style, name="Post Footer (Optional)")
 		self.main_box.Add(self.footer, 0, wx.ALL, 10)
 		self.footer.AppendText(account.prefs.footer)
