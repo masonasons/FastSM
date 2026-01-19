@@ -1132,7 +1132,14 @@ class Application:
 
 	def cfu(self, silent=True):
 		try:
-			latest = json.loads(requests.get("https://api.github.com/repos/masonasons/FastSM/releases/latest", {"accept": "application/vnd.github.v3+json"}).content.decode())
+			# Use /releases endpoint since /releases/latest doesn't include prereleases
+			releases = json.loads(requests.get("https://api.github.com/repos/masonasons/FastSM/releases", headers={"accept": "application/vnd.github.v3+json"}).content.decode())
+			if not releases:
+				if not silent:
+					self.alert("No releases found.", "Update Check")
+				return
+			# Get the first release (most recent)
+			latest = releases[0]
 			# Parse version from release body (format: **Version:** X.Y.Z)
 			import re
 			body = latest.get('body', '')
