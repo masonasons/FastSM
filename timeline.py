@@ -738,8 +738,8 @@ class timeline(object):
 						self.index = 0
 					else:
 						self.index = len(self.statuses) - 1
-				if not self.mute and not self.hide:
-					self.play(tl)
+				if not self.mute and not self.hide and len(objs2) > 0:
+					self.play(objs2)
 				self.app.prefs.statuses_received += newitems
 				if speech:
 					# Count how many passed the filter
