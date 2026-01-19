@@ -1130,7 +1130,47 @@ class Application:
 		dlg.ShowModal()
 		dlg.Destroy()
 
+	def _get_local_build_commit(self):
+		"""Get the commit SHA from the build_info.txt file."""
+		# Check various locations for build_info.txt
+		possible_paths = []
+
+		# Frozen app (PyInstaller) - check _MEIPASS first (internal folder)
+		if getattr(sys, 'frozen', False):
+			# PyInstaller bundles data files in sys._MEIPASS
+			meipass = getattr(sys, '_MEIPASS', None)
+			if meipass:
+				possible_paths.append(os.path.join(meipass, 'build_info.txt'))
+
+			# Fallback: same folder as exe (Windows)
+			app_dir = os.path.dirname(sys.executable)
+			possible_paths.append(os.path.join(app_dir, 'build_info.txt'))
+
+			# Fallback: macOS Resources folder
+			if platform.system() == 'Darwin':
+				resources_dir = os.path.join(os.path.dirname(app_dir), 'Resources')
+				possible_paths.append(os.path.join(resources_dir, 'build_info.txt'))
+		else:
+			# Running from source - check script directory
+			script_dir = os.path.dirname(os.path.abspath(__file__))
+			possible_paths.append(os.path.join(script_dir, 'build_info.txt'))
+
+		for path in possible_paths:
+			if os.path.isfile(path):
+				try:
+					with open(path, 'r') as f:
+						return f.read().strip()
+				except:
+					pass
+		return None
+
 	def cfu(self, silent=True):
+		# Don't run auto-updater when running from source
+		if not getattr(sys, 'frozen', False):
+			if not silent:
+				self.alert("Auto-updater is only available in compiled builds.\n\nWhen running from source, use git pull to update.", "Update Check")
+			return
+
 		try:
 			# Use /releases endpoint since /releases/latest doesn't include prereleases
 			releases = json.loads(requests.get("https://api.github.com/repos/masonasons/FastSM/releases", headers={"accept": "application/vnd.github.v3+json"}).content.decode())
@@ -1140,31 +1180,48 @@ class Application:
 				return
 			# Get the first release (most recent)
 			latest = releases[0]
-			# Parse version from release body (format: **Version:** X.Y.Z)
-			import re
 			body = latest.get('body', '')
+
+			# Parse commit SHA from release body (format: "Automated build from commit XXXX")
+			commit_match = re.search(r'Automated build from commit\s+([a-f0-9]+)', body)
+			release_commit = commit_match.group(1) if commit_match else None
+
+			# Parse version from release body (format: **Version:** X.Y.Z)
 			version_match = re.search(r'\*\*Version:\*\*\s*(\d+\.\d+\.\d+)', body)
-			if version_match:
-				latest_version = version_match.group(1)
+			latest_version = version_match.group(1) if version_match else version
+
+			# Get local build commit
+			local_commit = self._get_local_build_commit()
+
+			# Determine if update is available
+			update_available = False
+
+			if release_commit and local_commit:
+				# Compare by commit SHA (most reliable)
+				update_available = release_commit != local_commit
 			else:
-				# Fallback to tag name if it looks like a version
-				tag = latest.get('tag_name', '')
-				if re.match(r'^\d+\.\d+\.\d+$', tag) or re.match(r'^v\d+\.\d+\.\d+$', tag):
-					latest_version = tag.lstrip('v')
-				else:
-					if not silent:
-						self.alert("Could not determine latest version from release.", "Update Check")
-					return
+				# Fallback to version comparison if no commit info
+				def parse_version(v):
+					return tuple(int(x) for x in v.split('.'))
+				try:
+					current_ver = parse_version(version)
+					latest_ver = parse_version(latest_version)
+					update_available = latest_ver > current_ver
+				except:
+					pass
 
-			# Compare versions properly
-			def parse_version(v):
-				return tuple(int(x) for x in v.split('.'))
+			if update_available:
+				# Build message showing commit info if available
+				message = "There is an update available.\n\n"
+				message += f"Your version: {version}"
+				if local_commit:
+					message += f" (commit {local_commit[:8]})"
+				message += f"\nLatest version: {latest_version}"
+				if release_commit:
+					message += f" (commit {release_commit[:8]})"
+				message += "\n\nDo you want to download and install the update?"
 
-			current_ver = parse_version(version)
-			latest_ver = parse_version(latest_version)
-
-			if latest_ver > current_ver:
-				ud = self.question("Update available: " + latest_version, "There is an update available.\n\nYour version: " + version + "\nLatest version: " + latest_version + "\n\nDo you want to download and install the update?")
+				ud = self.question("Update available: " + latest_version, message)
 				if ud == 1:
 					for asset in latest['assets']:
 						asset_name = asset['name'].lower()
@@ -1177,7 +1234,10 @@ class Application:
 					self.alert("A download for this version could not be found for your platform. Check back soon.", "Error")
 			else:
 				if not silent:
-					self.alert("No updates available!\n\nYou are running the latest version: " + version, "No Update Available")
+					message = f"You are running the latest version: {version}"
+					if local_commit:
+						message += f" (commit {local_commit[:8]})"
+					self.alert("No updates available!\n\n" + message, "No Update Available")
 		except Exception as e:
 			if not silent:
 				self.alert(f"Error checking for updates: {e}", "Update Check Error")

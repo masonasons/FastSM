@@ -22,6 +22,40 @@ def get_platform():
         return "linux"
 
 
+def get_git_commit_sha():
+    """Get the current git commit SHA."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def create_build_info_file(script_dir: Path):
+    """Create build_info.txt with commit SHA in script directory for PyInstaller to bundle."""
+    commit_sha = get_git_commit_sha()
+    if commit_sha:
+        build_info_path = script_dir / "build_info.txt"
+        with open(build_info_path, 'w') as f:
+            f.write(commit_sha)
+        print(f"Created build_info.txt: commit {commit_sha[:8]}")
+        return build_info_path
+    return None
+
+
+def cleanup_build_info_file(script_dir: Path):
+    """Remove build_info.txt after build to keep source directory clean."""
+    build_info_path = script_dir / "build_info.txt"
+    if build_info_path.exists():
+        build_info_path.unlink()
+        print("Cleaned up build_info.txt")
+
+
 def get_hidden_imports():
     """Get list of hidden imports that PyInstaller might miss."""
     return [
@@ -101,8 +135,10 @@ def get_data_files(script_dir: Path):
     of the distribution folder after the build.
     """
     datas = []
-    # Most data files are copied manually after build to keep them
-    # at the root level, not inside _internal
+    # Include build_info.txt if it exists (created before build)
+    build_info = script_dir / "build_info.txt"
+    if build_info.exists():
+        datas.append((str(build_info), "."))
     return datas
 
 
@@ -335,7 +371,14 @@ def build_windows(script_dir: Path, output_dir: Path) -> tuple:
     print(f"Output: {output_dir}")
     print()
 
-    result = subprocess.run(cmd, cwd=script_dir)
+    # Create build_info.txt before build so PyInstaller can include it
+    create_build_info_file(script_dir)
+
+    try:
+        result = subprocess.run(cmd, cwd=script_dir)
+    finally:
+        # Clean up build_info.txt from source directory
+        cleanup_build_info_file(script_dir)
 
     if result.returncode != 0:
         return False, None
@@ -442,7 +485,14 @@ def build_macos(script_dir: Path, output_dir: Path) -> tuple:
     print(f"Output: {output_dir}")
     print()
 
-    result = subprocess.run(cmd, cwd=script_dir)
+    # Create build_info.txt before build so PyInstaller can include it
+    create_build_info_file(script_dir)
+
+    try:
+        result = subprocess.run(cmd, cwd=script_dir)
+    finally:
+        # Clean up build_info.txt from source directory
+        cleanup_build_info_file(script_dir)
 
     if result.returncode != 0:
         return False, None

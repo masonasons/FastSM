@@ -8,6 +8,28 @@ import re
 
 def _setup_vlc_path():
 	"""Set up VLC library path for bundled or system VLC."""
+	def _configure_vlc_env(vlc_path):
+		"""Configure environment for a VLC installation path. Returns True if valid."""
+		if sys.platform == 'win32':
+			lib_path = os.path.join(vlc_path, 'libvlc.dll')
+		elif sys.platform == 'darwin':
+			lib_path = os.path.join(vlc_path, 'lib', 'libvlc.dylib')
+		else:
+			lib_path = os.path.join(vlc_path, 'libvlc.so')
+
+		# Only set env vars if the library file actually exists
+		if not os.path.isfile(lib_path):
+			return False
+
+		os.environ['PYTHON_VLC_MODULE_PATH'] = vlc_path
+		os.environ['PYTHON_VLC_LIB_PATH'] = lib_path
+		# Set VLC_PLUGIN_PATH so VLC can find its plugins
+		os.environ['VLC_PLUGIN_PATH'] = os.path.join(vlc_path, 'plugins')
+		# Also add to PATH for DLL loading on Windows
+		if sys.platform == 'win32':
+			os.environ['PATH'] = vlc_path + os.pathsep + os.environ.get('PATH', '')
+		return True
+
 	# Check for bundled VLC libraries first
 	if getattr(sys, 'frozen', False):
 		# Running as frozen app (PyInstaller)
@@ -19,31 +41,24 @@ def _setup_vlc_path():
 			base = os.path.dirname(sys.executable)
 
 		vlc_path = os.path.join(base, 'vlc')
-		if os.path.exists(vlc_path):
-			# Set environment variables for python-vlc to find bundled libraries
-			os.environ['PYTHON_VLC_MODULE_PATH'] = vlc_path
-			os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll') if sys.platform == 'win32' else vlc_path
-			# Set VLC_PLUGIN_PATH so VLC can find its plugins
-			os.environ['VLC_PLUGIN_PATH'] = os.path.join(vlc_path, 'plugins')
-			# Also add to PATH for DLL loading on Windows
-			if sys.platform == 'win32':
-				os.environ['PATH'] = vlc_path + os.pathsep + os.environ.get('PATH', '')
+		if os.path.exists(vlc_path) and _configure_vlc_env(vlc_path):
 			return vlc_path
 	else:
 		# Development mode - check for vlc folder in project
 		vlc_path = os.path.join(os.path.dirname(__file__), 'vlc')
-		if os.path.exists(vlc_path):
-			os.environ['PYTHON_VLC_MODULE_PATH'] = vlc_path
-			os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll') if sys.platform == 'win32' else vlc_path
-			# Set VLC_PLUGIN_PATH so VLC can find its plugins
-			os.environ['VLC_PLUGIN_PATH'] = os.path.join(vlc_path, 'plugins')
-			if sys.platform == 'win32':
-				os.environ['PATH'] = vlc_path + os.pathsep + os.environ.get('PATH', '')
+		if os.path.exists(vlc_path) and _configure_vlc_env(vlc_path):
 			return vlc_path
 	return None
 
 # Set up VLC path before importing
 _vlc_path = _setup_vlc_path()
+
+# Clear any stale PYTHON_VLC_LIB_PATH if we didn't set it ourselves
+# This prevents errors when users have invalid paths in their environment
+if _vlc_path is None and 'PYTHON_VLC_LIB_PATH' in os.environ:
+	del os.environ['PYTHON_VLC_LIB_PATH']
+if _vlc_path is None and 'PYTHON_VLC_MODULE_PATH' in os.environ:
+	del os.environ['PYTHON_VLC_MODULE_PATH']
 
 try:
 	import vlc
@@ -55,7 +70,8 @@ try:
 		VLC_AVAILABLE = True
 	else:
 		VLC_AVAILABLE = False
-except (ImportError, OSError, FileNotFoundError, AttributeError):
+except (ImportError, OSError, FileNotFoundError, AttributeError, Exception) as e:
+	# Catch all exceptions - VLC import can fail in various ways
 	VLC_AVAILABLE = False
 	vlc = None
 
