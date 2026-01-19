@@ -68,6 +68,8 @@ class mastodon(object):
 		self.prefs.custom_timelines = self.prefs.get("custom_timelines", [])
 		self.prefs.instance_timelines = self.prefs.get("instance_timelines", [])
 		self.prefs.remote_user_timelines = self.prefs.get("remote_user_timelines", [])
+		# Built-in timeline order (list of timeline types in desired order)
+		self.prefs.timeline_order = self.prefs.get("timeline_order", [])
 
 		# Remote API instances for instance timelines (unauthenticated)
 		self.remote_apis = {}
@@ -221,12 +223,8 @@ class mastodon(object):
 
 		self._finish_init(index)
 
-		# Create default timelines for Mastodon
-		timeline.add(self, "Home", "home")
-		timeline.add(self, "Notifications", "notifications")
-		timeline.add(self, "Mentions", "mentions")
-		timeline.add(self, "Conversations", "conversations")
-		timeline.add(self, "Sent", "user", self.me.acct, self.me)
+		# Create built-in timelines in user's preferred order
+		self._create_builtin_timelines()
 
 		# Restore saved timelines (avoid API calls during startup for speed)
 		for ut_entry in list(self.prefs.user_timelines):
@@ -385,12 +383,8 @@ class mastodon(object):
 
 		self._finish_init(index)
 
-		# Create default timelines for Bluesky (no conversations, lists)
-		timeline.add(self, "Home", "home")
-		timeline.add(self, "Notifications", "notifications")
-		timeline.add(self, "Mentions", "mentions")
-		# No conversations - Bluesky doesn't support DMs
-		timeline.add(self, "Sent", "user", self.me.acct, self.me)
+		# Create built-in timelines in user's preferred order
+		self._create_builtin_timelines()
 
 		# Restore saved user timelines and searches (no lists for Bluesky)
 		# Avoid API calls during startup for speed
@@ -469,6 +463,62 @@ class mastodon(object):
 			if self._pending_initial_loads <= 0 and self.app.prefs.streaming:
 				# All timelines loaded, start streaming
 				self.start_stream()
+
+	def get_timeline_by_type(self, timeline_type):
+		"""Find a timeline by its type (e.g., 'home', 'notifications', 'mentions').
+
+		Returns the first matching timeline, or None if not found.
+		"""
+		for tl in self.timelines:
+			if tl.type == timeline_type:
+				return tl
+		return None
+
+	def get_first_timeline(self):
+		"""Get the first timeline (fallback when current timeline is removed).
+
+		Returns the first timeline in the list, or None if no timelines exist.
+		"""
+		return self.timelines[0] if self.timelines else None
+
+	def _create_builtin_timelines(self):
+		"""Create built-in timelines in the user's preferred order.
+
+		Respects the timeline_order preference if set, otherwise uses default order.
+		"""
+		# Define available built-in timelines for each platform
+		if self.prefs.platform_type == "bluesky":
+			available = {
+				"home": ("Home", "home", None, None),
+				"notifications": ("Notifications", "notifications", None, None),
+				"mentions": ("Mentions", "mentions", None, None),
+				"sent": ("Sent", "user", self.me.acct, self.me),
+			}
+			default_order = ["home", "notifications", "mentions", "sent"]
+		else:
+			# Mastodon
+			available = {
+				"home": ("Home", "home", None, None),
+				"notifications": ("Notifications", "notifications", None, None),
+				"mentions": ("Mentions", "mentions", None, None),
+				"conversations": ("Conversations", "conversations", None, None),
+				"sent": ("Sent", "user", self.me.acct, self.me),
+			}
+			default_order = ["home", "notifications", "mentions", "conversations", "sent"]
+
+		# Use saved order if available, otherwise use default
+		order = self.prefs.timeline_order if self.prefs.timeline_order else default_order
+
+		# Ensure all available timelines are included (in case new ones were added)
+		for tl_key in default_order:
+			if tl_key not in order:
+				order.append(tl_key)
+
+		# Create timelines in the specified order
+		for tl_key in order:
+			if tl_key in available:
+				name, tl_type, data, user = available[tl_key]
+				timeline.add(self, name, tl_type, data, user)
 
 	def start_stream(self):
 		# Bluesky doesn't support streaming

@@ -443,7 +443,7 @@ class timeline(object):
 		self.app.get_timeline_settings(self.account.me.id, self.name).hide = self.hide
 		self.app.save_timeline_settings()
 		if self.account.currentTimeline == self:
-			self.account.currentTimeline = self.account.timelines[0]
+			self.account.currentTimeline = self.account.get_first_timeline()
 			main.window.refreshTimelines()
 
 	def unhide_tl(self):

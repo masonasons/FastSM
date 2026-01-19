@@ -1360,7 +1360,8 @@ echo Extracting update...
 powershell -Command "Expand-Archive -Path '{zip_path}' -DestinationPath '{extract_dir}' -Force"
 
 echo Installing update...
-xcopy /s /y /q "{extract_dir}\\*" "{app_dir}\\"
+rem The zip contains a FastSM folder inside, so copy from there
+xcopy /s /y /q "{extract_dir}\\FastSM\\*" "{app_dir}\\"
 
 echo Cleaning up...
 rmdir /s /q "{extract_dir}"

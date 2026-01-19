@@ -146,6 +146,8 @@ class OptionsGui(wx.Dialog):
 		self.notebook = wx.Notebook(self.panel)
 		self.general=general(self.account, self.notebook)
 		self.notebook.AddPage(self.general, "General")
+		self.timelines_panel = TimelinesPanel(self.account, self.notebook)
+		self.notebook.AddPage(self.timelines_panel, "Timelines")
 		self.main_box.Add(self.notebook, 0, wx.ALL, 10)
 		self.ok = wx.Button(self.panel, wx.ID_OK, "&OK")
 		self.ok.SetDefault()
@@ -163,6 +165,9 @@ class OptionsGui(wx.Dialog):
 		self.account.prefs.soundpan=self.general.soundpan.GetValue()/50
 		self.account.prefs.soundpack_volume=self.general.soundvolume.GetValue()/100
 		self.account.prefs.footer=self.general.footer.GetValue()
+
+		# Save timeline order
+		self.account.prefs.timeline_order = self.timelines_panel.get_order()
 
 		# Handle mentions_in_notifications setting change
 		if self.general.mentions_in_notifications is not None:
@@ -195,3 +200,109 @@ class OptionsGui(wx.Dialog):
 		if self.general.snd:
 			self.general.snd.free()
 		self.Destroy()
+
+
+class TimelinesPanel(wx.Panel):
+	"""Panel for reordering built-in timelines."""
+
+	def __init__(self, account, parent):
+		super().__init__(parent)
+		self.account = account
+		self.main_box = wx.BoxSizer(wx.VERTICAL)
+
+		# Define built-in timelines based on platform
+		platform_type = getattr(account.prefs, 'platform_type', 'mastodon')
+		if platform_type == "bluesky":
+			self.available_timelines = {
+				"home": "Home",
+				"notifications": "Notifications",
+				"mentions": "Mentions",
+				"sent": "Sent",
+			}
+			self.default_order = ["home", "notifications", "mentions", "sent"]
+		else:
+			self.available_timelines = {
+				"home": "Home",
+				"notifications": "Notifications",
+				"mentions": "Mentions",
+				"conversations": "Conversations",
+				"sent": "Sent",
+			}
+			self.default_order = ["home", "notifications", "mentions", "conversations", "sent"]
+
+		# Get current order or use default
+		self.current_order = list(account.prefs.timeline_order) if account.prefs.timeline_order else list(self.default_order)
+		# Ensure all available timelines are in the order
+		for tl_key in self.default_order:
+			if tl_key not in self.current_order:
+				self.current_order.append(tl_key)
+		# Remove any timelines that are no longer available
+		self.current_order = [tl for tl in self.current_order if tl in self.available_timelines]
+
+		# Label
+		label = wx.StaticText(self, -1, "Built-in timeline order (changes apply on restart):")
+		self.main_box.Add(label, 0, wx.LEFT | wx.TOP, 10)
+
+		# Horizontal box for list and buttons
+		h_box = wx.BoxSizer(wx.HORIZONTAL)
+
+		# Timeline list
+		self.timeline_list = wx.ListBox(self, -1, size=(200, 150), name="Timeline order")
+		self._populate_list()
+		h_box.Add(self.timeline_list, 1, wx.ALL | wx.EXPAND, 10)
+
+		# Buttons box
+		btn_box = wx.BoxSizer(wx.VERTICAL)
+
+		self.move_up_btn = wx.Button(self, -1, "Move &Up")
+		self.move_up_btn.Bind(wx.EVT_BUTTON, self.on_move_up)
+		btn_box.Add(self.move_up_btn, 0, wx.ALL, 5)
+
+		self.move_down_btn = wx.Button(self, -1, "Move &Down")
+		self.move_down_btn.Bind(wx.EVT_BUTTON, self.on_move_down)
+		btn_box.Add(self.move_down_btn, 0, wx.ALL, 5)
+
+		self.reset_btn = wx.Button(self, -1, "&Reset to Default")
+		self.reset_btn.Bind(wx.EVT_BUTTON, self.on_reset)
+		btn_box.Add(self.reset_btn, 0, wx.ALL, 5)
+
+		h_box.Add(btn_box, 0, wx.ALIGN_CENTER_VERTICAL)
+
+		self.main_box.Add(h_box, 1, wx.EXPAND)
+		self.SetSizer(self.main_box)
+
+	def _populate_list(self):
+		"""Populate the list with current timeline order."""
+		self.timeline_list.Clear()
+		for tl_key in self.current_order:
+			if tl_key in self.available_timelines:
+				self.timeline_list.Append(self.available_timelines[tl_key])
+		if self.timeline_list.GetCount() > 0:
+			self.timeline_list.SetSelection(0)
+
+	def on_move_up(self, event):
+		"""Move selected timeline up in the order."""
+		idx = self.timeline_list.GetSelection()
+		if idx > 0:
+			# Swap in order
+			self.current_order[idx], self.current_order[idx - 1] = self.current_order[idx - 1], self.current_order[idx]
+			self._populate_list()
+			self.timeline_list.SetSelection(idx - 1)
+
+	def on_move_down(self, event):
+		"""Move selected timeline down in the order."""
+		idx = self.timeline_list.GetSelection()
+		if idx < len(self.current_order) - 1 and idx >= 0:
+			# Swap in order
+			self.current_order[idx], self.current_order[idx + 1] = self.current_order[idx + 1], self.current_order[idx]
+			self._populate_list()
+			self.timeline_list.SetSelection(idx + 1)
+
+	def on_reset(self, event):
+		"""Reset to default order."""
+		self.current_order = list(self.default_order)
+		self._populate_list()
+
+	def get_order(self):
+		"""Return the current timeline order."""
+		return self.current_order

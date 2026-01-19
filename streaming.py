@@ -23,8 +23,9 @@ class MastodonStreamListener(StreamListener):
 				return
 
 			# Add to home timeline
-			if len(self.account.timelines) > 0:
-				self.account.timelines[0].load(items=[status])
+			home_tl = self.account.get_timeline_by_type("home")
+			if home_tl:
+				home_tl.load(items=[status])
 
 			# Note: Mentions are handled by on_notification to avoid duplicates
 
