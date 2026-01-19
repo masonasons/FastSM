@@ -282,7 +282,7 @@ class timeline(object):
 
 		# Check if we should show this status based on filter
 		if hasattr(self, '_filter_settings') and self._filter_settings:
-			if not should_show_status(status, self._filter_settings, self.app):
+			if not should_show_status(status, self._filter_settings, self.app, account=self.account):
 				return False
 
 		# Add to visible statuses

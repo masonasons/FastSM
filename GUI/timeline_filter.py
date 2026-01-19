@@ -4,7 +4,7 @@ import wx
 from application import get_app
 
 
-def should_show_status(status, settings, app=None, _parent_cache=None):
+def should_show_status(status, settings, app=None, _parent_cache=None, account=None):
     """Check if a status should be shown based on filter settings.
 
     This is a standalone function so it can be used by both the dialog
@@ -12,9 +12,10 @@ def should_show_status(status, settings, app=None, _parent_cache=None):
 
     Args:
         status: The status to check
-        settings: Dict with filter settings (original, replies, threads, boosts, quotes, media, no_media)
+        settings: Dict with filter settings (original, replies, threads, boosts, quotes, media, no_media, replies_to_me)
         app: Application instance for looking up parent posts (optional)
         _parent_cache: Dict cache for parent lookups (optional, for batch filtering)
+        account: Account instance for checking replies to self (optional)
 
     Returns:
         True if the status should be shown, False otherwise
@@ -74,6 +75,26 @@ def should_show_status(status, settings, app=None, _parent_cache=None):
             return False
         return not is_thread(s)
 
+    def is_reply_to_me(s):
+        """Check if status is a reply to the current user."""
+        post = get_post_for_check(s)
+        if not hasattr(post, 'in_reply_to_id') or post.in_reply_to_id is None:
+            return False
+
+        if not account:
+            return False
+
+        # Get current user ID
+        me_id = str(getattr(account.me, 'id', '')) if hasattr(account, 'me') else ''
+        if not me_id:
+            return False
+
+        # Use in_reply_to_account_id if available
+        if hasattr(post, 'in_reply_to_account_id') and post.in_reply_to_account_id is not None:
+            return str(post.in_reply_to_account_id) == me_id
+
+        return False
+
     def is_original(s):
         """Check if status is an original post (not reply, not boost)."""
         if is_boost(s):
@@ -85,6 +106,7 @@ def should_show_status(status, settings, app=None, _parent_cache=None):
     _is_quote = is_quote(status)
     _is_thread = is_thread(status)
     _is_reply = is_reply(status)
+    _is_reply_to_me = is_reply_to_me(status)
     _is_original = is_original(status)
     _has_media = has_media(status)
 
@@ -102,6 +124,10 @@ def should_show_status(status, settings, app=None, _parent_cache=None):
 
     # Check reply filter (replies to others)
     if _is_reply and not settings.get('replies', True):
+        return False
+
+    # Check replies to me filter
+    if _is_reply_to_me and not settings.get('replies_to_me', True):
         return False
 
     # Check original post filter
@@ -142,7 +168,7 @@ class TimelineFilterDialog(wx.Dialog):
     """Dialog for filtering the current timeline by post type."""
 
     def __init__(self, parent, timeline):
-        wx.Dialog.__init__(self, parent, title="Filter Timeline", size=(400, 350))
+        wx.Dialog.__init__(self, parent, title="Filter Timeline", size=(400, 380))
         self.timeline = timeline
         self.app = get_app()
 
@@ -165,6 +191,10 @@ class TimelineFilterDialog(wx.Dialog):
         self.show_replies = wx.CheckBox(panel, -1, "Replies to others")
         self.show_replies.SetValue(True)
         main_box.Add(self.show_replies, 0, wx.ALL, 5)
+
+        self.show_replies_to_me = wx.CheckBox(panel, -1, "Replies to me")
+        self.show_replies_to_me.SetValue(True)
+        main_box.Add(self.show_replies_to_me, 0, wx.ALL, 5)
 
         self.show_threads = wx.CheckBox(panel, -1, "Threads (self-replies)")
         self.show_threads.SetValue(True)
@@ -199,6 +229,7 @@ class TimelineFilterDialog(wx.Dialog):
             settings = timeline._filter_settings
             self.show_original.SetValue(settings.get('original', True))
             self.show_replies.SetValue(settings.get('replies', True))
+            self.show_replies_to_me.SetValue(settings.get('replies_to_me', True))
             self.show_threads.SetValue(settings.get('threads', True))
             self.show_boosts.SetValue(settings.get('boosts', True))
             self.show_quotes.SetValue(settings.get('quotes', True))
@@ -288,6 +319,7 @@ class TimelineFilterDialog(wx.Dialog):
             self.timeline._filter_settings = {
                 'original': self.show_original.GetValue(),
                 'replies': self.show_replies.GetValue(),
+                'replies_to_me': self.show_replies_to_me.GetValue(),
                 'threads': self.show_threads.GetValue(),
                 'boosts': self.show_boosts.GetValue(),
                 'quotes': self.show_quotes.GetValue(),
@@ -302,7 +334,7 @@ class TimelineFilterDialog(wx.Dialog):
             # Filter statuses from the unfiltered list
             filtered = []
             for status in self.timeline._unfiltered_statuses:
-                if should_show_status(status, self.timeline._filter_settings, self.app):
+                if should_show_status(status, self.timeline._filter_settings, self.app, account=self.timeline.account):
                     filtered.append(status)
 
             self.timeline.statuses = filtered
@@ -424,7 +456,7 @@ def apply_saved_filter(timeline):
     # Filter statuses
     filtered = []
     for status in timeline._unfiltered_statuses:
-        if should_show_status(status, timeline._filter_settings, timeline.app):
+        if should_show_status(status, timeline._filter_settings, timeline.app, account=timeline.account):
             filtered.append(status)
 
     timeline.statuses = filtered
