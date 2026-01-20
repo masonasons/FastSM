@@ -45,6 +45,9 @@ class general(wx.Panel, wx.Dialog):
 		self.stop_audio_on_close=wx.CheckBox(self, -1, "Stop audio playback when audio player closes")
 		self.main_box.Add(self.stop_audio_on_close, 0, wx.ALL, 10)
 		self.stop_audio_on_close.SetValue(get_app().prefs.stop_audio_on_close)
+		self.ctrl_enter_to_send=wx.CheckBox(self, -1, "Use Ctrl+Enter to send posts (instead of Enter)")
+		self.main_box.Add(self.ctrl_enter_to_send, 0, wx.ALL, 10)
+		self.ctrl_enter_to_send.SetValue(get_app().prefs.ctrl_enter_to_send)
 
 		# Content warning handling - use accessible name instead of separate label
 		cw_label = wx.StaticText(self, -1, "Content warnings:")
@@ -682,6 +685,7 @@ class OptionsGui(wx.Dialog):
 		get_app().prefs.autoOpenSingleURL=self.general.autoOpenSingleURL.GetValue()
 		get_app().prefs.auto_open_audio_player=self.general.auto_open_audio_player.GetValue()
 		get_app().prefs.stop_audio_on_close=self.general.stop_audio_on_close.GetValue()
+		get_app().prefs.ctrl_enter_to_send=self.general.ctrl_enter_to_send.GetValue()
 		# Content warning mode
 		get_app().prefs.cw_mode = new_cw_mode
 		self.Destroy()

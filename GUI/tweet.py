@@ -194,7 +194,7 @@ class TweetGui(wx.Dialog):
 		self.close.Bind(wx.EVT_BUTTON, self.OnClose)
 		self.main_box.Add(self.close, 0, wx.ALL, 10)
 		self.Chars(None)
-		self.text.Bind(wx.EVT_CHAR, self.onKeyPress)
+		self.text.Bind(wx.EVT_KEY_DOWN, self.onKeyPress)
 		self.panel.SetSizer(self.main_box)
 		self.panel.Layout()
 
@@ -406,11 +406,20 @@ class TweetGui(wx.Dialog):
 			self.poll.Enable(False)
 
 	def onKeyPress(self, event):
-		mods = event.HasAnyModifiers()
 		keycode = event.GetKeyCode()
 		if keycode == wx.WXK_RETURN:
-			if not mods:
-				self.Tweet(None)
+			# Use Cmd on Mac, Ctrl on Windows/Linux
+			ctrl_down = event.ControlDown()
+			if self.account.app.prefs.ctrl_enter_to_send:
+				# Ctrl+Enter (Cmd+Enter on Mac) to send mode
+				if ctrl_down:
+					self.Tweet(None)
+					return
+			else:
+				# Enter to send mode (default)
+				if not event.HasAnyModifiers():
+					self.Tweet(None)
+					return
 		event.Skip()
 
 	def Autocomplete(self, event):
