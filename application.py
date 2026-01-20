@@ -1191,12 +1191,16 @@ class Application:
 
 	def alert_from_thread(self, message, caption=""):
 		"""Show an alert dialog from a background thread."""
-		event = threading.Event()
-		def show_dialog():
-			self.alert(message, caption)
-			event.set()
-		wx.CallAfter(show_dialog)
-		event.wait()
+		if platform.system() == "Darwin":
+			# On Mac, don't block - just schedule the dialog
+			wx.CallAfter(self.alert, message, caption)
+		else:
+			event = threading.Event()
+			def show_dialog():
+				self.alert(message, caption)
+				event.set()
+			wx.CallAfter(show_dialog)
+			event.wait()
 
 	def _get_local_build_commit(self):
 		"""Get the commit SHA from the build_info.txt file."""
@@ -1383,7 +1387,9 @@ class Application:
 		if platform.system() != "Darwin":
 			webbrowser.open(url)
 		else:
-			os.system(f"open {url}")
+			# Use subprocess with list args to avoid shell escaping issues
+			import subprocess
+			subprocess.run(['open', url])
 
 	def download_file(self, url):
 		local_filename = url.split('/')[-1]
