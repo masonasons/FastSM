@@ -2,13 +2,29 @@ FastSM Changelog
 ================
 
 0.3.3
+Remove VLC, use sound_lib exclusively for all audio playback (with yt-dlp for YouTube/Twitter extraction)
+Add audio output device selection in Global Options > Audio tab
+Add "your posts" and "your replies" client-side filters
+Add option to include/exclude image descriptions in post text (Templates tab)
+Add Hide Window menu item (Ctrl+Shift+W)
+Add option to use Ctrl+Enter to send posts instead of Enter
+Add link in Bluesky login dialog explaining how to create an app password
+Add Windows 11 keymap prompt when enabling invisible interface on Windows 11
+Show user relationship status (follows you, blocked, muted) in profile view
+Allow opening multiple user timelines for the same user
+Fix Bluesky media not showing on boosted/quoted posts
+Fix Bluesky URL handling for media and links
+Fix emoji removal to also handle Mastodon-style :shortcode: custom emojis
+Fix speak.py to use speak and braille separately for better screen reader compatibility
+Don't play new items sound when all new items are filtered out
 Fix mute conversation in mentions timeline
-For sure fix auto updater.
-Fix word wrap in other edit fields where it didn't apply.
+Fix auto updater download
+Fix word wrap in other edit fields where it didn't apply
 Change open post URL option to view post on the web
-Use wx instance checking to prevent multiple instances of the app running.
-Add delete post, as well as bookmark and unbookmark, to the confirmations tab
-More resiliency when mastodon servers go offline.
+Use wx instance checking to prevent multiple instances of the app running
+Add delete post, bookmark, and unbookmark to the confirmations tab
+Add soundpack debugging/logging for troubleshooting missing soundpacks
+More resiliency when Mastodon servers go offline
 
 0.3.2
 Add timeline reordering for built-in timelines

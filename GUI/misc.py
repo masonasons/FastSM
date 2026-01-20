@@ -650,12 +650,7 @@ def play_external(status):
 	if sound.player is not None:
 		is_playing = False
 		try:
-			if sound.player_type == 'vlc' and sound.VLC_AVAILABLE:
-				import vlc
-				state = sound.player.get_state()
-				is_playing = state == vlc.State.Playing
-			elif sound.player_type == 'soundlib':
-				is_playing = sound.player.is_playing
+			is_playing = sound.player.is_playing
 		except:
 			pass
 
@@ -683,17 +678,15 @@ def play_external(status):
 
 	# If no audio attachment, check all URLs in status for media (including audio)
 	# Use get_media_urls to match the same URLs that earcon detection uses
-	vlc_only = False
 	if not audio_url:
 		urls = get_app().find_urls_in_status(status)
 		media_urls = sound.get_media_urls(urls)
 		if media_urls:
 			audio_url = media_urls[0]['url']
-			vlc_only = media_urls[0].get('vlc_only', False)
 
 	if audio_url:
 		speak.speak("Playing audio...")
-		sound.play_url(audio_url, vlc_only=vlc_only)
+		sound.play_url(audio_url)
 	else:
 		speak.speak("No audio.")
 

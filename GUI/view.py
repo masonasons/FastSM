@@ -694,10 +694,17 @@ class UserViewGui(wx.Dialog):
 				if name and value:
 					extra += "\r\n" + name + ": " + self.account.app.strip_html(value)
 
-		# Last status date
+		# Last status date (Mastodon API only provides date, not time)
 		last_status = getattr(user, 'last_status_at', None)
 		if last_status:
-			extra += "\r\nLast posted: " + str(last_status)
+			try:
+				# Format as date only since API doesn't provide time
+				if hasattr(last_status, 'strftime'):
+					extra += "\r\nLast posted: " + last_status.strftime("%m/%d/%Y")
+				else:
+					extra += "\r\nLast posted: " + str(last_status)
+			except:
+				extra += "\r\nLast posted: " + str(last_status)
 
 		info = "Name: " + display_name + "\r\nUsername: @" + user.acct
 		if relationship_status:

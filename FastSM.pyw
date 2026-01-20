@@ -96,11 +96,12 @@ if os.path.exists(os.path.expandvars(r"%temp%\gen_py")):
 import wx
 wx_app = wx.App(redirect=False)
 
-# Prevent multiple instances of the app
-instance_checker = wx.SingleInstanceChecker("FastSM-" + wx.GetUserId())
-if instance_checker.IsAnotherRunning():
-	wx.MessageBox("Another instance of FastSM is already running.", "FastSM", wx.OK | wx.ICON_WARNING)
-	sys.exit(1)
+# Prevent multiple instances of the app (not needed on Mac - macOS handles this)
+if platform.system() != "Darwin":
+	instance_checker = wx.SingleInstanceChecker("FastSM-" + wx.GetUserId())
+	if instance_checker.IsAnotherRunning():
+		wx.MessageBox("Another instance of FastSM is already running.", "FastSM", wx.OK | wx.ICON_WARNING)
+		sys.exit(1)
 
 import speak
 from GUI import main, theme

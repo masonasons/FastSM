@@ -6,75 +6,6 @@ from sound_lib import output as o
 import speak
 import re
 
-def _setup_vlc_path():
-	"""Set up VLC library path for bundled or system VLC."""
-	def _configure_vlc_env(vlc_path):
-		"""Configure environment for a VLC installation path. Returns True if valid."""
-		if sys.platform == 'win32':
-			lib_path = os.path.join(vlc_path, 'libvlc.dll')
-		elif sys.platform == 'darwin':
-			lib_path = os.path.join(vlc_path, 'lib', 'libvlc.dylib')
-		else:
-			lib_path = os.path.join(vlc_path, 'libvlc.so')
-
-		# Only set env vars if the library file actually exists
-		if not os.path.isfile(lib_path):
-			return False
-
-		os.environ['PYTHON_VLC_MODULE_PATH'] = vlc_path
-		os.environ['PYTHON_VLC_LIB_PATH'] = lib_path
-		# Set VLC_PLUGIN_PATH so VLC can find its plugins
-		os.environ['VLC_PLUGIN_PATH'] = os.path.join(vlc_path, 'plugins')
-		# Also add to PATH for DLL loading on Windows
-		if sys.platform == 'win32':
-			os.environ['PATH'] = vlc_path + os.pathsep + os.environ.get('PATH', '')
-		return True
-
-	# Check for bundled VLC libraries first
-	if getattr(sys, 'frozen', False):
-		# Running as frozen app (PyInstaller)
-		if sys.platform == 'darwin':
-			# macOS: check in Resources/vlc
-			base = os.path.join(os.path.dirname(sys.executable), '..', 'Resources')
-		else:
-			# Windows: check in vlc subfolder next to executable
-			base = os.path.dirname(sys.executable)
-
-		vlc_path = os.path.join(base, 'vlc')
-		if os.path.exists(vlc_path) and _configure_vlc_env(vlc_path):
-			return vlc_path
-	else:
-		# Development mode - check for vlc folder in project
-		vlc_path = os.path.join(os.path.dirname(__file__), 'vlc')
-		if os.path.exists(vlc_path) and _configure_vlc_env(vlc_path):
-			return vlc_path
-	return None
-
-# Set up VLC path before importing
-_vlc_path = _setup_vlc_path()
-
-# Clear any stale PYTHON_VLC_LIB_PATH if we didn't set it ourselves
-# This prevents errors when users have invalid paths in their environment
-if _vlc_path is None and 'PYTHON_VLC_LIB_PATH' in os.environ:
-	del os.environ['PYTHON_VLC_LIB_PATH']
-if _vlc_path is None and 'PYTHON_VLC_MODULE_PATH' in os.environ:
-	del os.environ['PYTHON_VLC_MODULE_PATH']
-
-try:
-	import vlc
-	# Test that VLC libraries are actually available
-	_test_instance = vlc.Instance('--quiet')
-	if _test_instance:
-		_test_instance.log_unset()
-		_test_instance.release()
-		VLC_AVAILABLE = True
-	else:
-		VLC_AVAILABLE = False
-except (ImportError, OSError, FileNotFoundError, AttributeError, Exception) as e:
-	# Catch all exceptions - VLC import can fail in various ways
-	VLC_AVAILABLE = False
-	vlc = None
-
 def _find_ytdlp_executable():
 	"""Find yt-dlp executable path."""
 	import shutil
@@ -124,9 +55,7 @@ YTDLP_PATH = _find_ytdlp_executable()
 
 out = None  # Will be initialized with selected device
 handles = []  # List of active sound handles for concurrent playback
-player = None  # Media player for URL streams (VLC or sound_lib)
-player_type = None  # 'vlc' or 'soundlib' to track which player is active
-vlc_instance = None  # VLC instance (reused for efficiency)
+player = None  # Media player for URL streams
 
 def get_output_devices():
 	"""Get list of available audio output devices.
@@ -137,7 +66,7 @@ def get_output_devices():
 	devices = []
 	try:
 		from sound_lib.main import bass_module
-		from ctypes import pointer, c_char_p, Structure, c_ulong
+		from ctypes import pointer, c_char_p, Structure, c_ulong, byref, POINTER
 
 		class BASS_DEVICEINFO(Structure):
 			_fields_ = [
@@ -146,28 +75,44 @@ def get_output_devices():
 				('flags', c_ulong),
 			]
 
-		# Get the BASS_GetDeviceInfo function
+		# Set up function signature for BASS_GetDeviceInfo
 		BASS_GetDeviceInfo = bass_module.BASS_GetDeviceInfo
+		BASS_GetDeviceInfo.restype = c_ulong  # BOOL
+		BASS_GetDeviceInfo.argtypes = [c_ulong, POINTER(BASS_DEVICEINFO)]
+
+		# BASS device flags
+		BASS_DEVICE_ENABLED = 1
+		BASS_DEVICE_DEFAULT = 2
 
 		# Enumerate devices - device 0 is "no sound", real devices start at 1
 		i = 1
 		while True:
 			info = BASS_DEVICEINFO()
-			if not BASS_GetDeviceInfo(i, pointer(info)):
+			if not BASS_GetDeviceInfo(i, byref(info)):
 				break
-			if info.name:
-				name = info.name.decode('utf-8', errors='replace')
-				devices.append((i, name))
+			# Only include enabled devices with valid names
+			if info.name and (info.flags & BASS_DEVICE_ENABLED):
+				try:
+					name = info.name.decode('utf-8', errors='replace')
+					if name.strip():  # Only add non-empty names
+						devices.append((i, name))
+				except:
+					pass
 			i += 1
 	except Exception as e:
 		# Log the error for debugging
 		import logging
 		logging.warning(f"Could not enumerate audio devices: {e}")
+
+	# If no devices found, add a default entry so the UI isn't empty
+	if not devices:
+		devices.append((1, "Default audio device"))
+
 	return devices
 
 def init_audio_output(device_index=1):
 	"""Initialize audio output with the specified device. Call from application after prefs load."""
-	global out, vlc_instance
+	global out
 
 	# Free existing output first
 	if out is not None:
@@ -186,21 +131,12 @@ def init_audio_output(device_index=1):
 		except:
 			pass
 
-	# Reset VLC instance so it gets recreated with new settings on next playback
-	if vlc_instance is not None:
-		try:
-			vlc_instance.release()
-		except:
-			pass
-		vlc_instance = None
-
 # Initialize with default device (1) for now - will be reinited from application.py with selected device
 init_audio_output(1)
 
 def _extract_stream_url(url):
 	"""Use yt-dlp executable to extract direct stream URL from YouTube and similar services."""
 	import subprocess
-	import json
 
 	# Re-check for yt-dlp in case user configured it after startup
 	global YTDLP_PATH
@@ -251,28 +187,17 @@ media_matchlist = [
 	{"match": r"https?://vm.tiktok.com/.+", "func":return_url},
 	{"match": r"https?://soundcloud.com/.+", "func":return_url},
 	{"match": r"https?://t.co/.+", "func":return_url},
-]
-
-# URLs that require VLC (not supported by sound_lib)
-vlc_only_matchlist = [
+	# YouTube URLs (yt-dlp will extract direct stream URL)
 	{"match": r"https?://(www\.)?(youtube\.com|youtu\.be)/.+", "func":return_url},
 ]
 
 def get_media_urls(urls):
 	result = []
 	for u in urls:
-		# Check standard media URLs (work with both VLC and sound_lib)
 		for service in media_matchlist:
 			if re.match(service['match'], u.lower()) != None:
 				result.append({"url":u, "func":service['func']})
 				break
-		else:
-			# Check VLC-only URLs if VLC is available
-			if VLC_AVAILABLE:
-				for service in vlc_only_matchlist:
-					if re.match(service['match'], u.lower()) != None:
-						result.append({"url":u, "func":service['func'], "vlc_only": True})
-						break
 	return result
 
 def has_audio_attachment(status):
@@ -393,66 +318,21 @@ def play(account, filename, pack="", wait=False):
 	except sound_lib.main.BassError:
 		pass
 
-def play_url(url, vlc_only=False):
-	global player, player_type, vlc_instance
+def play_url(url):
+	global player
 	from application import get_app
 
 	# Stop any existing playback
 	stop()
 
-	# Try VLC first if available
-	if VLC_AVAILABLE:
-		try:
-			# Create VLC instance if needed
-			if vlc_instance is None:
-				# Use --quiet like TWBlue does, add network caching for streams
-				# --no-video disables video output (prevents DirectX window from appearing)
-				# --vout=dummy is a fallback to ensure no video window
-				vlc_args = ['--quiet', '--network-caching=1000', '--no-video', '--vout=dummy']
-				# If using bundled VLC, set paths
-				if _vlc_path:
-					vlc_args.append(f'--data-path={_vlc_path}')
-				vlc_instance = vlc.Instance(' '.join(vlc_args))
-				vlc_instance.log_unset()
+	# Extract actual stream URL for YouTube and similar services
+	stream_url = _extract_stream_url(url)
 
-			# Extract actual stream URL for YouTube and similar services
-			stream_url = _extract_stream_url(url)
-
-			# Create media player
-			player = vlc_instance.media_player_new()
-			media = vlc_instance.media_new(stream_url)
-			player.set_media(media)
-			# Apply media volume from preferences (VLC uses 0-100)
-			volume = int(getattr(get_app().prefs, 'media_volume', 1.0) * 100)
-			player.audio_set_volume(volume)
-			player.play()
-			player_type = 'vlc'
-			# Auto-open audio player if setting enabled
-			if getattr(get_app().prefs, 'auto_open_audio_player', False):
-				try:
-					from GUI import audio_player
-					audio_player.auto_show_audio_player()
-				except:
-					pass
-			return
-		except Exception as e:
-			# VLC failed, fall through to sound_lib (unless vlc_only)
-			if vlc_only:
-				speak.speak(f"VLC failed to play: {e}")
-				return
-
-	# If this URL requires VLC and VLC isn't available, inform user
-	if vlc_only and not VLC_AVAILABLE:
-		speak.speak("This URL requires VLC media player which is not available.")
-		return
-
-	# Fall back to sound_lib
 	try:
-		player = stream.URLStream(url=url)
+		player = stream.URLStream(url=stream_url)
 		# Apply media volume from preferences
 		player.volume = getattr(get_app().prefs, 'media_volume', 1.0)
 		player.play()
-		player_type = 'soundlib'
 		# Auto-open audio player if setting enabled
 		if getattr(get_app().prefs, 'auto_open_audio_player', False):
 			try:
@@ -465,19 +345,14 @@ def play_url(url, vlc_only=False):
 
 def stop():
 	"""Stop media player (URL streams)."""
-	global player, player_type
+	global player
 	if player is not None:
 		try:
 			player.stop()
-			# VLC uses release(), sound_lib uses free()
-			if player_type == 'vlc':
-				player.release()
-			else:
-				player.free()
+			player.free()
 		except:
 			pass
 		player = None
-		player_type = None
 		# Close audio player dialog if open
 		try:
 			from GUI import audio_player
