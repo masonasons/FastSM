@@ -453,21 +453,6 @@ def user_timeline_user(account, username, focus=True, filter=None):
 		filter: Optional filter for Bluesky - 'posts_with_replies' (default),
 		        'posts_no_replies', 'posts_with_media', 'posts_and_author_threads'
 	"""
-	# Check for existing timeline with same user and filter
-	timeline_key = username if not filter else f"{username}:{filter}"
-	existing_keys = []
-	for ut in account.prefs.user_timelines:
-		if isinstance(ut, dict):
-			key = ut.get('username', '')
-			if ut.get('filter'):
-				key = f"{key}:{ut.get('filter')}"
-			existing_keys.append(key)
-		else:
-			existing_keys.append(ut)
-
-	if timeline_key in existing_keys and focus:
-		account.app.alert("You already have a timeline for this user open.", "Error")
-		return False
 	if len(account.prefs.user_timelines) >= 8:
 		account.app.alert("You cannot have this many user timelines open! Please consider using a list instead.", "Error")
 		return False

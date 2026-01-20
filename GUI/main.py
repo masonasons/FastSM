@@ -132,7 +132,10 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.onRefresh, m_refresh)
 		m_prev = menu3.Append(-1, "Load older posts\tAlt+PgUp", "prev")
 		self.Bind(wx.EVT_MENU, self.onPrev, m_prev)
-		m_hide = menu3.Append(-1, "Hide Timeline\tCtrl+H", "hide")
+		if platform.system() != "Darwin":
+			m_hide = menu3.Append(-1, "Hide Timeline\tCtrl+H", "hide")
+		else:
+			m_hide = menu3.Append(-1, "Hide Timeline\tRawCtrl+H", "hide")
 		self.Bind(wx.EVT_MENU, self.OnHide, m_hide)
 		m_manage_hide = menu3.Append(-1, "Manage hidden Timelines\tCtrl+Shift+H", "manage_hide")
 		self.Bind(wx.EVT_MENU, self.OnManageHide, m_manage_hide)
