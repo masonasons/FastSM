@@ -292,6 +292,15 @@ class youtube_tab(wx.Panel, wx.Dialog):
 		deno_sizer.Add(self.deno_browse, 0)
 		self.main_box.Add(deno_sizer, 0, wx.EXPAND | wx.ALL, 10)
 
+		# VLC download button
+		vlc_sizer = wx.BoxSizer(wx.HORIZONTAL)
+		vlc_label = wx.StaticText(self, -1, "VLC media player (for YouTube playback):")
+		vlc_sizer.Add(vlc_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+		self.vlc_download = wx.Button(self, -1, "Download VLC")
+		self.vlc_download.Bind(wx.EVT_BUTTON, self.on_vlc_download)
+		vlc_sizer.Add(self.vlc_download, 0)
+		self.main_box.Add(vlc_sizer, 0, wx.ALL, 10)
+
 		self.SetSizer(self.main_box)
 
 	def on_ytdlp_browse(self, event):
@@ -411,6 +420,88 @@ class youtube_tab(wx.Panel, wx.Dialog):
 
 		# Run in background thread
 		threading.Thread(target=do_download_or_update, daemon=True).start()
+
+	def on_vlc_download(self, event):
+		"""Download VLC libraries if not found."""
+		import threading
+		import requests
+		import zipfile
+		import io
+		import speak
+
+		def find_existing_vlc():
+			"""Check all locations where VLC could be installed."""
+			# Check bundled location (app folder)
+			if getattr(sys, 'frozen', False):
+				if sys.platform == 'darwin':
+					bundled = os.path.join(os.path.dirname(sys.executable), '..', 'Resources', 'vlc')
+				else:
+					bundled = os.path.join(os.path.dirname(sys.executable), 'vlc')
+			else:
+				bundled = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'vlc')
+
+			if sys.platform == 'win32':
+				if os.path.exists(bundled) and os.path.isfile(os.path.join(bundled, 'libvlc.dll')):
+					return bundled
+			elif os.path.exists(bundled):
+				return bundled
+
+			# Check system VLC installation paths
+			if sys.platform == 'win32':
+				system_paths = [
+					os.path.join(os.environ.get('PROGRAMFILES', ''), 'VideoLAN', 'VLC'),
+					os.path.join(os.environ.get('PROGRAMFILES(X86)', ''), 'VideoLAN', 'VLC'),
+					'C:\\Program Files\\VideoLAN\\VLC',
+					'C:\\Program Files (x86)\\VideoLAN\\VLC',
+				]
+				for path in system_paths:
+					if path and os.path.exists(path) and os.path.isfile(os.path.join(path, 'libvlc.dll')):
+						return path
+			elif sys.platform == 'darwin':
+				system_paths = [
+					'/Applications/VLC.app/Contents/MacOS',
+					os.path.expanduser('~/Applications/VLC.app/Contents/MacOS'),
+				]
+				for path in system_paths:
+					if os.path.exists(path):
+						return path
+
+			return None
+
+		# Determine VLC target path for download
+		if getattr(sys, 'frozen', False):
+			vlc_path = os.path.join(os.path.dirname(sys.executable), 'vlc')
+		else:
+			vlc_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'vlc')
+
+		def do_download():
+			try:
+				# Check if VLC already exists anywhere
+				existing = find_existing_vlc()
+				if existing:
+					speak.speak(f"VLC is already available at {existing}")
+					return
+
+				speak.speak("Downloading VLC libraries...")
+
+				# Download the zip file
+				vlc_url = "https://masonasons.me/vlc.zip"
+				response = requests.get(vlc_url, timeout=120, stream=True)
+				response.raise_for_status()
+
+				# Extract to app folder
+				speak.speak("Extracting VLC libraries...")
+				zip_data = io.BytesIO(response.content)
+				with zipfile.ZipFile(zip_data, 'r') as zip_ref:
+					zip_ref.extractall(os.path.dirname(vlc_path))
+
+				speak.speak("VLC libraries downloaded and installed successfully. Please restart the app.")
+
+			except Exception as e:
+				speak.speak(f"VLC download failed: {e}")
+				wx.CallAfter(wx.MessageBox, f"Error downloading VLC: {e}", "VLC Download", wx.OK | wx.ICON_ERROR)
+
+		threading.Thread(target=do_download, daemon=True).start()
 
 
 class templates(wx.Panel, wx.Dialog):
