@@ -232,7 +232,11 @@ def get_media_type_for_earcon(status):
 	has_image = False
 	has_other_media = False
 	for attachment in media_attachments:
-		media_type = getattr(attachment, 'type', '') or ''
+		# Handle both objects (from API) and dicts (from cache)
+		if isinstance(attachment, dict):
+			media_type = attachment.get('type', '') or ''
+		else:
+			media_type = getattr(attachment, 'type', '') or ''
 		media_type = media_type.lower()
 		if media_type == 'image':
 			has_image = True
