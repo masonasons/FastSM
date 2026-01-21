@@ -189,11 +189,12 @@ class timelines_tab(wx.Panel, wx.Dialog):
 					tl._status_ids = set()
 					tl._gaps = []
 					tl._gap_newest_cached_id = None
+					tl._last_load_time = None
 					tl.initial = True
 					tl.index = 0
-					# Clear filtered statuses if present
+					# Clear filtered statuses if present (reset to empty list, not None)
 					if hasattr(tl, '_unfiltered_statuses'):
-						tl._unfiltered_statuses = None
+						tl._unfiltered_statuses = []
 					# Trigger a fresh load in background
 					threading.Thread(target=tl.load, daemon=True).start()
 

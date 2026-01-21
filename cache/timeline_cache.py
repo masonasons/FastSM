@@ -170,6 +170,12 @@ class TimelineCache:
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add gaps_json column if it doesn't exist (migration for existing DBs)
+        try:
+            cursor.execute('ALTER TABLE timeline_metadata ADD COLUMN gaps_json TEXT')
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Create indexes for faster lookups
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_timeline_items_lookup ON timeline_items(timeline_type, timeline_name, timeline_data)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_timeline_items_position ON timeline_items(timeline_type, timeline_name, timeline_data, position)')

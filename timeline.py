@@ -437,11 +437,13 @@ class timeline(object):
 			if self._should_detect_gaps() and metadata.get('gaps'):
 				self._gaps = metadata['gaps']
 				if self._gaps:
+					print(f"[GAP DEBUG] {self.name}: RESTORED {len(self._gaps)} gap(s) from cache: {self._gaps}")
 					speak.speak(f"{len(self._gaps)} gap{'s' if len(self._gaps) > 1 else ''} to fill")
 
 			# Set last load time to now (cache load counts as a load for gap detection purposes)
 			import time
 			self._last_load_time = time.time()
+			print(f"[GAP DEBUG] {self.name}: _last_load_time set from CACHE LOAD to {self._last_load_time}")
 
 			# Store position ID for restore after API refresh
 			# ID-based restore is more robust than index when new items arrive
@@ -449,8 +451,11 @@ class timeline(object):
 
 			# Set initial position (will be corrected after API refresh using ID)
 			saved_index = metadata.get('last_index', 0)
-			if saved_index >= 0 and saved_index < len(self.statuses):
+			if self.statuses and saved_index >= 0 and saved_index < len(self.statuses):
 				self.index = saved_index
+			elif not self.statuses:
+				# All items filtered out or empty cache - keep index at 0
+				self.index = 0
 			elif not self.app.prefs.reversed:
 				self.index = 0
 			else:
@@ -467,7 +472,7 @@ class timeline(object):
 				self.account._on_timeline_initial_load_complete()
 
 			# Play ready sound if this is the last timeline
-			if self == self.account.timelines[len(self.account.timelines) - 1] and not self.account.ready:
+			if self.account.timelines and self == self.account.timelines[-1] and not self.account.ready:
 				self.account.ready = True
 				sound.play(self.account, "ready")
 
@@ -478,7 +483,9 @@ class timeline(object):
 			return True
 
 		except Exception as e:
+			import traceback
 			print(f"Cache load error for {self.name}: {e}")
+			traceback.print_exc()
 			return False
 
 	def _refresh_after_cache(self):
@@ -1007,9 +1014,12 @@ class timeline(object):
 						current_time = time.time()
 						time_since_last_load = current_time - self._last_load_time if self._last_load_time else 0
 
+						print(f"[GAP DEBUG] {self.name}: time_since_last={time_since_last_load:.1f}s, threshold={self._gap_idle_threshold}s, len(tl)={len(tl)}, last_load_time={self._last_load_time}")
+
 						# Only check for gaps if enough time has passed (indicates potential idle period)
 						if time_since_last_load >= self._gap_idle_threshold:
 							fetch_limit = self.update_kwargs.get('limit', 40)
+							print(f"[GAP DEBUG] {self.name}: IDLE THRESHOLD MET, checking full page (len={len(tl)}, limit={fetch_limit})")
 							if len(tl) >= fetch_limit:
 								# Got a full page after being idle - likely a gap
 								if not self.app.prefs.reversed:
@@ -1017,12 +1027,14 @@ class timeline(object):
 								else:
 									oldest_new_id = str(tl[0].id)
 								# Add gap at the oldest new item
+								print(f"[GAP DEBUG] {self.name}: ADDING GAP at {oldest_new_id}")
 								self._gaps.insert(0, {'max_id': oldest_new_id})
 								speak.speak(f"Gap detected in {self.name}, {len(self._gaps)} gap{'s' if len(self._gaps) > 1 else ''} to fill")
 
 					# Update last load time
 					import time
 					self._last_load_time = time.time()
+					print(f"[GAP DEBUG] {self.name}: _last_load_time set from API LOAD to {self._last_load_time}")
 
 				if not back and not self.initial:
 					if not self.app.prefs.reversed:
@@ -1067,6 +1079,7 @@ class timeline(object):
 				# Set last load time for gap detection
 				import time
 				self._last_load_time = time.time()
+				print(f"[GAP DEBUG] {self.name}: _last_load_time set from INITIAL LOAD to {self._last_load_time}")
 
 				# Sync position from server after initial load (if enabled)
 				# Only sync if user hasn't already moved (position_moved is False on initial load)
@@ -1111,7 +1124,7 @@ class timeline(object):
 							else:
 								self._gaps[0]['max_id'] = str(tl[0].id)
 					threading.Thread(target=self._cache_timeline, daemon=True).start()
-		if self == self.account.timelines[len(self.account.timelines) - 1] and not self.account.ready:
+		if self.account.timelines and self == self.account.timelines[-1] and not self.account.ready:
 			self.account.ready = True
 			sound.play(self.account, "ready")
 

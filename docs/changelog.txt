@@ -1,6 +1,11 @@
 FastSM Changelog
 ================
 
+0.4.1
+Fix boosting/favoriting boost posts.
+Show view poll results on poll ended notifications.
+Properly clean up db when disabling caching and clearing cache.
+
 0.4.0
 
 Timeline Caching
