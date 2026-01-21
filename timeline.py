@@ -878,6 +878,7 @@ class timeline(object):
 			result = self._do_load_here(speech)
 			# Clear the anchor after single load (load_all_here manages its own cleanup)
 			if not self._loading_all_active:
+				self._move_to_oldest_loaded()
 				self._clear_load_here_anchor()
 			return result
 		finally:
@@ -888,6 +889,18 @@ class timeline(object):
 		self._load_here_anchor_id = None
 		self._load_here_anchor_index = None
 		self._load_here_items_inserted = 0
+		self._load_here_oldest_index = None
+
+	def _move_to_oldest_loaded(self):
+		"""Move timeline position to the oldest post loaded by load_here."""
+		if hasattr(self, '_load_here_oldest_index') and self._load_here_oldest_index is not None:
+			if 0 <= self._load_here_oldest_index < len(self.statuses):
+				self.index = self._load_here_oldest_index
+				speak.speak("Nothing more to load")
+				# Update UI if this timeline is active
+				if self.app.currentAccount == self.account and self.account.currentTimeline == self:
+					wx.CallAfter(main.window.refreshList)
+					wx.CallAfter(main.window.list.SetSelection, self.index)
 
 	def _do_load_here(self, speech=True):
 		"""Internal implementation of load_here."""
@@ -1032,6 +1045,9 @@ class timeline(object):
 				shown = self._add_status_at_position(item, insert_pos + i)
 				if shown:
 					items_added += 1
+			# In normal mode, oldest loaded is at the last inserted position
+			if items_added > 0:
+				self._load_here_oldest_index = insert_pos + items_added - 1
 		else:
 			# Reversed mode: insert at anchor position repeatedly
 			# Each insert pushes anchor and subsequent items down
@@ -1040,6 +1056,9 @@ class timeline(object):
 				shown = self._add_status_at_position(item, insert_pos)
 				if shown:
 					items_added += 1
+			# In reversed mode, oldest loaded is at the insert position (first one inserted ends up there)
+			if items_added > 0:
+				self._load_here_oldest_index = insert_pos
 
 		# Track total items inserted for subsequent calls
 		self._load_here_items_inserted += items_added
@@ -1117,7 +1136,8 @@ class timeline(object):
 		if self._stop_loading_all:
 			speak.speak(f"Loading stopped. {total_loaded} posts loaded.")
 
-		# Clear the anchor point now that we're done
+		# Move to the oldest loaded post and clear the anchor
+		self._move_to_oldest_loaded()
 		self._clear_load_here_anchor()
 		self._loading_all_active = False
 

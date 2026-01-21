@@ -2,9 +2,22 @@ FastSM Changelog
 ================
 
 0.4.1
+Unfortunately, I had to remove the timeline gaps feature. It was very broken. May revisit at some point.
 Fix boosting/favoriting boost posts.
 Show view poll results on poll ended notifications.
 Properly clean up db when disabling caching and clearing cache.
+Fixes to reverse timelines.
+Update sent timeline on send of post.
+Add bookmark toggle to actions menu.
+Change shortcut key of block to control shift B, and add control B for bookmarking.
+Fix poll earcon not playing - Polls weren't being serialized to cache correctly (nested PollOption objects)
+Fix boosted images not playing earcon - Media attachments from cache (dicts) weren't being detected properly
+Fix streaming connecting multiple times - Was causing duplicate posts; added stream lock to prevent race condition
+Fix "handle_stream" repeated errors - Added to transient errors list
+Fix list corruption when posts are deleted - Index wasn't being adjusted when posts were removed via streaming or manual delete
+Fix Bluesky posts showing blank - Posts with only external link embeds (no text) now show the link title/description
+Fix URL ordering in Open URL dialog - Text/link URLs now appear before media attachment URLs
+Fix copy not including media descriptions - When copying directly (not through process_status)
 
 0.4.0
 
