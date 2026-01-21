@@ -27,6 +27,7 @@ alt+win+return=Url
 alt+win+;=SpeakUser
 alt+win+shift+;=SpeakReply
 alt+win+pageup=Prev
+alt+win+pagedown=LoadHere
 alt+win+u=UserTimeline
 alt+win+shift+u=UserProfile
 control+win+shift+u=UpdateProfile

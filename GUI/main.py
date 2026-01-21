@@ -136,6 +136,8 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.onRefresh, m_refresh)
 		m_prev = menu3.Append(-1, "Load older posts\tAlt+PgUp", "prev")
 		self.Bind(wx.EVT_MENU, self.onPrev, m_prev)
+		m_load_here = menu3.Append(-1, "Load posts here\tAlt+PgDn", "loadhere")
+		self.Bind(wx.EVT_MENU, self.onLoadHere, m_load_here)
 		if platform.system() != "Darwin":
 			m_hide = menu3.Append(-1, "Hide Timeline\tCtrl+H", "hide")
 		else:
@@ -1481,6 +1483,16 @@ class MainGui(wx.Frame):
 			threading.Thread(target=tl.load_all_previous, daemon=True).start()
 		else:
 			threading.Thread(target=tl.load, args=(True,), daemon=True).start()
+
+	def onLoadHere(self, event=None):
+		"""Load posts starting from the current position to fill gaps."""
+		tl = get_app().currentAccount.currentTimeline
+		if tl._loading_all_active:
+			tl.stop_loading_all()
+		elif get_app().prefs.load_all_previous:
+			threading.Thread(target=tl.load_all_here, daemon=True).start()
+		else:
+			threading.Thread(target=tl.load_here, daemon=True).start()
 
 	def OnVolup(self, event=None):
 		# Use per-account soundpack volume

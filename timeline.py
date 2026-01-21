@@ -860,6 +860,222 @@ class timeline(object):
 		"""Stop the load_all_previous operation."""
 		self._stop_loading_all = True
 
+	def load_here(self, speech=True):
+		"""Load posts starting from the current position, filling in gaps.
+
+		This loads posts using the current post's ID as max_id, inserting
+		new posts below the current position. Stops when it finds posts
+		that already exist in the timeline.
+
+		Returns: (new_count, found_existing) tuple
+		"""
+		if self.hide:
+			return (0, False)
+		if self._loading:
+			return (0, False)
+		self._loading = True
+		try:
+			return self._do_load_here(speech)
+		finally:
+			self._loading = False
+
+	def _do_load_here(self, speech=True):
+		"""Internal implementation of load_here."""
+		# Get the current status
+		if not self.statuses or self.index >= len(self.statuses):
+			if speech:
+				speak.speak("No current post")
+			return (0, False)
+
+		current_status = self.statuses[self.index]
+		current_id = current_status.id
+
+		# Build the set of existing IDs for quick lookup
+		existing_ids = set(self._status_ids)
+
+		# Determine the ID of the next post (if any) - posts after current position
+		# For normal order: items at higher indices are older (lower IDs)
+		# For reversed order: items at higher indices are newer (higher IDs)
+		next_existing_id = None
+		if not self.app.prefs.reversed:
+			# Normal order: check if there's a post after current (older post)
+			if self.index + 1 < len(self.statuses):
+				next_existing_id = self.statuses[self.index + 1].id
+		else:
+			# Reversed order: check if there's a post before current (older post)
+			if self.index > 0:
+				next_existing_id = self.statuses[self.index - 1].id
+
+		# Fetch posts using current post's ID as max_id
+		load_kwargs = dict(self.prev_kwargs)
+		load_kwargs['max_id'] = current_id
+
+		try:
+			# Determine how many pages to fetch
+			fetch_pages = getattr(self.app.prefs, 'fetch_pages', 1)
+			if fetch_pages < 1:
+				fetch_pages = 1
+
+			if fetch_pages > 1:
+				tl = self._fetch_multiple_pages(load_kwargs, fetch_pages)
+			else:
+				tl = self.func(**load_kwargs)
+		except Exception as error:
+			self.app.handle_error(error, self.account.me.acct + "'s " + self.name)
+			return (0, False)
+
+		if tl is None or len(tl) == 0:
+			if speech:
+				speak.speak("No more posts")
+			return (0, True)
+
+		# Process the fetched items
+		new_items = []
+		found_existing = False
+
+		for item in tl:
+			# Skip the current item itself (API returns max_id inclusive)
+			if item.id == current_id:
+				continue
+
+			# Check if this item already exists
+			if item.id in existing_ids:
+				found_existing = True
+				break
+
+			# Check if we've reached the next existing post
+			# This handles the case where IDs might not be contiguous
+			if next_existing_id is not None:
+				# For Mastodon-style numeric IDs or Bluesky string IDs
+				# We can compare if the fetched item is "between" current and next
+				try:
+					# Try numeric comparison first (Mastodon uses numeric-string IDs)
+					item_num = int(item.id) if isinstance(item.id, str) else item.id
+					next_num = int(next_existing_id) if isinstance(next_existing_id, str) else next_existing_id
+					current_num = int(current_id) if isinstance(current_id, str) else current_id
+
+					if not self.app.prefs.reversed:
+						# Normal order: older posts have lower IDs
+						# If item ID is <= next existing, we've reached existing territory
+						if item_num <= next_num:
+							found_existing = True
+							break
+					else:
+						# Reversed order: we're going towards older (lower IDs)
+						if item_num <= next_num:
+							found_existing = True
+							break
+				except (ValueError, TypeError):
+					# Non-numeric IDs (Bluesky), just rely on the set lookup
+					pass
+
+			# Add to user cache
+			if self.type == "notifications":
+				self.account.user_cache.add_users_from_notification(item)
+			elif self.type == "mentions":
+				self.account.user_cache.add_users_from_status(item)
+			elif self.type != "conversations":
+				self.account.user_cache.add_users_from_status(item)
+
+			# Try to add (checks for duplicates)
+			if self.try_add_status_id(item.id):
+				new_items.append(item)
+
+		if len(new_items) == 0:
+			if speech:
+				if found_existing:
+					speak.speak("Gap filled, no new posts")
+				else:
+					speak.speak("No new posts")
+			return (0, found_existing)
+
+		# Insert the new items at the correct position
+		# New items are in newest-to-oldest order from the API
+		insert_pos = self.index + 1 if not self.app.prefs.reversed else self.index
+
+		# For normal order: insert after current position (these are older posts)
+		# For reversed order: insert before current position (these are older posts)
+		for i, item in enumerate(new_items):
+			shown = self._add_status_at_position(item, insert_pos + i if not self.app.prefs.reversed else insert_pos)
+			if self.app.prefs.reversed and shown:
+				# In reversed mode, inserting before shifts our index
+				self.index += 1
+
+		# Refresh the UI
+		if self.app.currentAccount == self.account and self.account.currentTimeline == self:
+			wx.CallAfter(main.window.refreshList)
+
+		# Play sounds for new items
+		if not self.mute and not self.hide and len(new_items) > 0:
+			self.play(new_items)
+
+		if speech:
+			if found_existing:
+				speak.speak(f"Gap filled, {len(new_items)} posts loaded")
+			else:
+				speak.speak(f"{len(new_items)} posts loaded")
+
+		return (len(new_items), found_existing)
+
+	def _add_status_at_position(self, status, position):
+		"""Add a status at a specific position in the statuses list.
+
+		Returns True if the status was shown (passed filter), False otherwise.
+		"""
+		# Apply filter if one is set
+		if hasattr(self, '_filter_settings') and self._filter_settings:
+			if not self._status_passes_filter(status):
+				# Still track in unfiltered list
+				if hasattr(self, '_unfiltered_statuses'):
+					self._unfiltered_statuses.insert(position, status)
+				return False
+
+		# Insert at the specified position
+		if position >= len(self.statuses):
+			self.statuses.append(status)
+		else:
+			self.statuses.insert(position, status)
+
+		# Also update unfiltered list if we have one
+		if hasattr(self, '_unfiltered_statuses') and self._unfiltered_statuses is not None:
+			if position >= len(self._unfiltered_statuses):
+				self._unfiltered_statuses.append(status)
+			else:
+				self._unfiltered_statuses.insert(position, status)
+
+		return True
+
+	def load_all_here(self):
+		"""Load all posts from the current position until gap is filled or an error occurs."""
+		self._stop_loading_all = False
+		self._loading_all_active = True
+		total_loaded = 0
+
+		speak.speak("Loading posts from here...")
+
+		while not self._stop_loading_all:
+			try:
+				new_count, found_existing = self.load_here(speech=False)
+			except Exception as e:
+				speak.speak(f"Stopped loading: {e}")
+				break
+
+			total_loaded += new_count
+
+			if found_existing or new_count == 0:
+				# Gap is filled or no more posts
+				speak.speak(f"Gap filled. {total_loaded} posts loaded in total.")
+				break
+
+			# Small delay to avoid hammering the API
+			import time
+			time.sleep(0.5)
+
+		if self._stop_loading_all:
+			speak.speak(f"Loading stopped. {total_loaded} posts loaded.")
+
+		self._loading_all_active = False
+
 	def _do_load(self, back=False, speech=False, items=[]):
 		if items == []:
 			if back:
