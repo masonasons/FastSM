@@ -952,9 +952,10 @@ class timeline(object):
 				# Check for duplicates using O(1) set lookup
 				if not self.has_status(i.id):
 					newitems += 1
-					# Use filter-aware method to add status
-					to_front = self.app.prefs.reversed if (self.initial or back) else not self.app.prefs.reversed
+					# For initial/back load: add directly to statuses
+					# For refresh: collect first, add after processing all items
 					if self.initial or back:
+						# Insert at front for reversed (oldest at top), append for normal (newest at top)
 						shown = self._add_status_with_filter(i, to_front=self.app.prefs.reversed)
 						if shown:
 							if not self.app.prefs.reversed:
@@ -992,7 +993,7 @@ class timeline(object):
 						if not self.app.prefs.reversed:
 							wx.CallAfter(main.window.add_to_list, self.prepare(objs2))
 						else:
-							objs2.reverse()
+							# objs2 is already in correct order (oldest_new first) for appending
 							wx.CallAfter(main.window.append_to_list, self.prepare(objs2))
 					else:
 						if not self.app.prefs.reversed:
