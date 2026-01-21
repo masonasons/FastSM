@@ -1171,6 +1171,11 @@ class timeline(object):
 		self._display_list_cache = None
 
 	def prepare(self, items):
+		"""Convert status objects to display strings, preserving order.
+
+		The items should already be in the correct order for display.
+		This function only converts them to strings, it does not reorder.
+		"""
 		items2 = []
 		for i in items:
 			if self.type == "notifications":
@@ -1185,11 +1190,7 @@ class timeline(object):
 				i._display_cache = processed
 			except (AttributeError, TypeError):
 				pass
-
-			if not self.app.prefs.reversed:
-				items2.append(processed)
-			else:
-				items2.insert(0, processed)
+			items2.append(processed)
 		return items2
 
 	# ============ Position Sync Methods ============
