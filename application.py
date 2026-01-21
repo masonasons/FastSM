@@ -795,14 +795,36 @@ class Application:
 			# First check if we have a pre-processed text attribute (from StatusWrapper)
 			# This includes media descriptions and other processed content from process_status()
 			text_content = getattr(s, 'text', '')
+			needs_media_descriptions = False
 			if not text_content:
 				# Fall back to stripping HTML from content
+				# Media descriptions need to be added since we're not using pre-processed text
 				if hasattr(s, 'reblog') and s.reblog:
 					text_content = self.strip_html(getattr(s.reblog, 'content', ''))
 				else:
 					text_content = self.strip_html(getattr(s, 'content', ''))
+				needs_media_descriptions = True
 			if self.prefs.demojify_post:
 				text_content = self.demojify(text_content)
+
+			# Add media descriptions only if we used the fallback path (not pre-processed text)
+			if needs_media_descriptions and self.prefs.include_media_descriptions:
+				# Get media from reblog if this is a boost, otherwise from status
+				status_for_media = s.reblog if hasattr(s, 'reblog') and s.reblog else s
+				media_attachments = getattr(status_for_media, 'media_attachments', []) or []
+				for media in media_attachments:
+					# Handle both objects (from API) and dicts (from cache)
+					if isinstance(media, dict):
+						media_type = media.get('type', 'media') or 'media'
+						description = media.get('description') or media.get('alt')
+					else:
+						media_type = getattr(media, 'type', 'media') or 'media'
+						description = getattr(media, 'description', None) or getattr(media, 'alt', None)
+					type_display = media_type.upper() if media_type == 'gifv' else media_type.capitalize()
+					if description:
+						text_content += f" ({type_display}) description: {description}"
+					else:
+						text_content += f" ({type_display}) with no description"
 
 		temp = template.split(" ")
 		for i in range(len(temp)):
