@@ -454,7 +454,10 @@ class MainGui(wx.Frame):
 
 	def get_current_status(self):
 		"""Get the current status, handling conversation and notification objects properly"""
-		item = get_app().currentAccount.currentTimeline.statuses[get_app().currentAccount.currentTimeline.index]
+		tl = get_app().currentAccount.currentTimeline
+		if not tl.statuses or tl.index >= len(tl.statuses):
+			return None
+		item = tl.statuses[tl.index]
 		if get_app().currentAccount.currentTimeline.type == "conversations":
 			# Conversations have last_status instead of being a status directly
 			if hasattr(item, 'last_status') and item.last_status:
@@ -925,14 +928,15 @@ class MainGui(wx.Frame):
 		self.list2.Freeze()
 		# Use Set() for batch update - much faster than Clear() + individual Append()
 		self.list2.Set(stuffage)
-		try:
-			self.list2.SetSelection(get_app().currentAccount.currentTimeline.index)
-		except:
-			try:
-				self.list2.SetSelection(get_app().currentAccount.currentTimeline.index-1)
-			except:
-				if self.list2.GetCount() > 0:
-					self.list2.SetSelection(0)
+		tl = get_app().currentAccount.currentTimeline
+		count = self.list2.GetCount()
+		if count == 0:
+			# Empty list - ensure index is 0
+			tl.index = 0
+		else:
+			# Clamp index to valid range and set selection
+			tl.index = max(0, min(tl.index, count - 1))
+			self.list2.SetSelection(tl.index)
 		self.list2.Thaw()
 
 	def OnViewUserDb(self, event=None):
