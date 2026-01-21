@@ -712,6 +712,13 @@ class MainGui(wx.Frame):
 	def OnDelete(self,event=None):
 		status = self.get_current_status()
 		if status:
+			# Check if confirmation is required
+			if get_app().prefs.confirm_delete:
+				dlg = wx.MessageDialog(self, "Are you sure you want to delete this post?", "Confirm Delete", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+				if dlg.ShowModal() != wx.ID_YES:
+					dlg.Destroy()
+					return
+				dlg.Destroy()
 			misc.delete(get_app().currentAccount, status)
 
 	def OnHide(self,event=None):
