@@ -97,6 +97,12 @@ class MastodonStreamListener(StreamListener):
 			for tl in self.account.timelines:
 				for i, status in enumerate(tl.statuses):
 					if hasattr(status, 'id') and str(status.id) == status_id_str:
+						# Adjust index if deleted item was at or before current position
+						if i < tl.index:
+							tl.index = max(0, tl.index - 1)
+						elif i == tl.index and tl.index >= len(tl.statuses) - 1:
+							# Deleted item was at current position and at end of list
+							tl.index = max(0, len(tl.statuses) - 2)
 						tl.statuses.pop(i)
 						tl._status_ids.discard(status_id_str)
 						tl.invalidate_display_cache()

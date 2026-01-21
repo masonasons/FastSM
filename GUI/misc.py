@@ -628,7 +628,17 @@ def delete(account, status):
 		for tl in account.timelines:
 			for i, s in enumerate(tl.statuses):
 				if hasattr(s, 'id') and str(s.id) == status_id_str:
+					# Adjust index if deleted item was at or before current position
+					if i < tl.index:
+						tl.index = max(0, tl.index - 1)
+					elif i == tl.index and tl.index >= len(tl.statuses) - 1:
+						# Deleted item was at current position and at end of list
+						tl.index = max(0, len(tl.statuses) - 2)
 					tl.statuses.pop(i)
+					# Update _status_ids set and invalidate display cache
+					if hasattr(tl, '_status_ids'):
+						tl._status_ids.discard(status_id_str)
+					tl.invalidate_display_cache()
 					break
 		# Update GUI for current timeline
 		main.window.refreshList()
