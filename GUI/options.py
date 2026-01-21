@@ -835,7 +835,7 @@ class OptionsGui(wx.Dialog):
 		get_app().prefs.cw_mode = new_cw_mode
 		self.Destroy()
 		if reverse:
-			timeline.reverse()
+			timeline.reverse(get_app())
 		if refresh:
 			# Clear display caches on all statuses when templates/display settings change
 			for account in get_app().accounts:

@@ -1384,8 +1384,19 @@ def timelineThread(account):
 
 
 def reverse(app):
-	for i in app.accounts:
-		for i2 in i.timelines:
-			i2.statuses.reverse()
-			i2.index = (len(i2.statuses) - 1) - i2.index
+	"""Reverse all timelines when the reversed setting is toggled."""
+	for account in app.accounts:
+		for tl in account.timelines:
+			# Reverse visible statuses
+			tl.statuses.reverse()
+			# Also reverse unfiltered statuses if filter is active
+			if hasattr(tl, '_unfiltered_statuses') and tl._unfiltered_statuses:
+				tl._unfiltered_statuses.reverse()
+			# Invert the index to maintain relative position
+			if tl.statuses:
+				tl.index = (len(tl.statuses) - 1) - tl.index
+				# Clamp index to valid range
+				tl.index = max(0, min(tl.index, len(tl.statuses) - 1))
+			# Invalidate display cache
+			tl.invalidate_display_cache()
 	main.window.on_list_change(None)
