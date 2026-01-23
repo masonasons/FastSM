@@ -110,15 +110,16 @@ class invisible_interface(object):
 		self.speak_item()
 
 	def speak_item(self):
-		tl_type = get_app().currentAccount.currentTimeline.type
-		item = get_app().currentAccount.currentTimeline.statuses[get_app().currentAccount.currentTimeline.index]
+		account = get_app().currentAccount
+		tl_type = account.currentTimeline.type
+		item = account.currentTimeline.statuses[account.currentTimeline.index]
 		if tl_type == "notifications":
-			speak.speak(get_app().process_notification(item), True)
+			speak.speak(get_app().process_notification(item, account=account), True)
 		elif tl_type in ("messages", "conversations"):
-			speak.speak(get_app().process_conversation(item), True)
+			speak.speak(get_app().process_conversation(item, account=account), True)
 		else:
 			# mentions now treated same as home/user/etc.
-			speak.speak(get_app().process_status(item), True)
+			speak.speak(get_app().process_status(item, account=account), True)
 
 	def prev_tl(self,sync=False):
 		get_app().currentAccount.currentIndex-=1

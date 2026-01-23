@@ -30,6 +30,7 @@ class ChooseGui(wx.Dialog):
 	# Types that work with user objects directly (no lookup needed)
 	TYPE_PROFILE_DIRECT="profile_direct"
 	TYPE_USER_TIMELINE_DIRECT="userTimeline_direct"
+	TYPE_ALIAS="alias"
 
 	def __init__(self,account,title="Choose",text="Choose a thing",list=[],type="",user_objects=None):
 		self.account=account
@@ -148,6 +149,52 @@ class ChooseGui(wx.Dialog):
 			elif self.returnvalue:
 				# User typed a username manually - fall back to lookup
 				self._show_filter_dialog(self.returnvalue)
+		elif self.type==self.TYPE_ALIAS:
+			# Add alias for a user
+			import speak
+			idx = self.chooser.GetSelection()
+			user = None
+			if idx >= 0 and idx < len(self.user_objects):
+				user = self.user_objects[idx]
+			elif self.returnvalue:
+				# User typed a username manually - look up
+				user = self.account.app.lookup_user_name(self.account, self.returnvalue)
+				if user == -1:
+					user = None
+			if user:
+				user_id = str(getattr(user, 'id', ''))
+				acct = getattr(user, 'acct', self.returnvalue)
+				current_display = getattr(user, 'display_name', '') or acct
+				# Check for existing alias
+				current_alias = self.account.prefs.aliases.get(user_id, current_display)
+				dlg = wx.TextEntryDialog(None, f"Enter alias for @{acct}:", "Add Alias", current_alias)
+				if dlg.ShowModal() == wx.ID_OK:
+					new_alias = dlg.GetValue().strip()
+					if new_alias:
+						self.account.prefs.aliases[user_id] = new_alias
+						self.account.prefs.save()
+						speak.speak(f"Alias set for {acct}")
+						# Clear display caches to refresh with new alias
+						for tl in self.account.timelines:
+							tl.invalidate_display_cache()
+							for status in getattr(tl, 'statuses', []):
+								if hasattr(status, '_display_cache'):
+									delattr(status, '_display_cache')
+					else:
+						# Remove alias if empty
+						if user_id in self.account.prefs.aliases:
+							del self.account.prefs.aliases[user_id]
+							self.account.prefs.save()
+							speak.speak(f"Alias removed for {acct}")
+							# Clear display caches
+							for tl in self.account.timelines:
+								tl.invalidate_display_cache()
+								for status in getattr(tl, 'statuses', []):
+									if hasattr(status, '_display_cache'):
+										delattr(status, '_display_cache')
+				dlg.Destroy()
+			else:
+				speak.speak("Could not find user")
 		elif self.type==self.TYPE_FOLLOW_TOGGLE:
 			# Toggle follow state - check relationship first
 			try:

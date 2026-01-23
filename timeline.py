@@ -1420,11 +1420,11 @@ class timeline(object):
 				items.append(cached)
 			else:
 				if self.type == "notifications":
-					display = self.app.process_notification(i)
+					display = self.app.process_notification(i, account=self.account)
 				elif self.type == "conversations":
-					display = self.app.process_conversation(i)
+					display = self.app.process_conversation(i, account=self.account)
 				else:
-					display = self.app.process_status(i)
+					display = self.app.process_status(i, account=self.account)
 				# Try to cache, but don't fail if object doesn't support it
 				try:
 					setattr(i, cache_attr, display)
@@ -1449,12 +1449,12 @@ class timeline(object):
 		items2 = []
 		for i in items:
 			if self.type == "notifications":
-				processed = self.app.process_notification(i)
+				processed = self.app.process_notification(i, account=self.account)
 			elif self.type == "conversations":
-				processed = self.app.process_conversation(i)
+				processed = self.app.process_conversation(i, account=self.account)
 			else:
 				# mentions now treated same as home/user/etc.
-				processed = self.app.process_status(i)
+				processed = self.app.process_status(i, account=self.account)
 			# Cache the display string on the item (if supported)
 			try:
 				i._display_cache = processed

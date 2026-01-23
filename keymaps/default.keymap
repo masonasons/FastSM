@@ -30,6 +30,7 @@ alt+win+pageup=Prev
 alt+win+pagedown=LoadHere
 alt+win+u=UserTimeline
 alt+win+shift+u=UserProfile
+control+win+alt+n=AddAlias
 control+win+shift+u=UpdateProfile
 alt+win+'=CloseTimeline
 alt+control+win+u=refresh

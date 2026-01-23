@@ -110,6 +110,8 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnView, m_view)
 		m_user_profile=menu2.Append(-1, "User Profile\tCtrl+Shift+U", "profile")
 		self.Bind(wx.EVT_MENU, self.OnUserProfile, m_user_profile)
+		m_add_alias=menu2.Append(-1, "Add Alias\tCtrl+Shift+N", "alias")
+		self.Bind(wx.EVT_MENU, self.OnAddAlias, m_add_alias)
 		if platform.system() == "Darwin":
 			m_speak_user=menu2.Append(-1, "Speak user (Ctrl+;)", "speak")
 			m_speak_reply=menu2.Append(-1, "Speak reference post of this reply (Ctrl+Shift+;)", "speak2")
@@ -1630,6 +1632,19 @@ class MainGui(wx.Frame):
 		# Use direct type to pass user objects, avoiding lookup issues
 		# If no users found, user can still type a username manually
 		chooser.chooser(account, "User Profile", "Enter or choose a username", u2, "profile_direct", user_objects=u or [])
+
+	def OnAddAlias(self, event=None):
+		"""Add an alias for a user."""
+		account = get_app().currentAccount
+		# Get users from current item (handles both statuses and notifications)
+		u = self._get_users_from_current_item(account)
+		u2 = [i.acct for i in u] if u else []
+		# Use alias type to pass user objects
+		chooser.chooser(account, "Add Alias", "Enter or choose a username to alias", u2, "alias", user_objects=u or [])
+
+	def AddAlias(self, event=None):
+		"""Alias for OnAddAlias (for keymap compatibility)."""
+		self.OnAddAlias(event)
 
 	def OnUrl(self, event=None):
 		status = self.get_current_status()

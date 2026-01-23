@@ -482,7 +482,7 @@ class Application:
 
 		return text
 
-	def process_status(self, s, return_only_text=False, template="", ignore_cw=False):
+	def process_status(self, s, return_only_text=False, template="", ignore_cw=False, account=None):
 		"""Process a Mastodon status for display"""
 		if hasattr(s, 'content'):
 			text = self.strip_html(s.content)
@@ -491,7 +491,7 @@ class Application:
 
 		if hasattr(s, 'reblog') and s.reblog:
 			# For reblogs, get text from reblogged status (which includes its media descriptions)
-			text = self.process_status(s.reblog, True, ignore_cw=ignore_cw)
+			text = self.process_status(s.reblog, True, ignore_cw=ignore_cw, account=account)
 			if template == "":
 				template = self.prefs.boostTemplate
 		else:
@@ -649,9 +649,9 @@ class Application:
 		# Handle quotes: format as "Person: their comment. Quoting person2: quoted text. time"
 		quote_formatted = ""
 		if hasattr(s, 'quote') and s.quote:
-			quote_text = self.process_status(s.quote, True)
+			quote_text = self.process_status(s.quote, True, account=account)
 			quote_wrapped = StatusWrapper(s.quote, quote_text)
-			quote_formatted = self.template_to_string(quote_wrapped, self.prefs.quoteTemplate)
+			quote_formatted = self.template_to_string(quote_wrapped, self.prefs.quoteTemplate, account=account)
 
 		wrapped = StatusWrapper(s, text)
 
@@ -660,18 +660,18 @@ class Application:
 			main_template = template if template else self.prefs.postTemplate
 			# Remove $created_at$ from main template for quote posts
 			temp_template = main_template.replace(" $created_at$", "").replace("$created_at$ ", "").replace("$created_at$", "")
-			result = self.template_to_string(wrapped, temp_template)
+			result = self.template_to_string(wrapped, temp_template, account=account)
 			result += " " + quote_formatted
 			# Add timestamp at the very end
 			created_at = getattr(s, 'created_at', None)
 			if created_at:
 				result += " " + self.parse_date(created_at)
 		else:
-			result = self.template_to_string(wrapped, template)
+			result = self.template_to_string(wrapped, template, account=account)
 
 		return result
 
-	def process_notification(self, n):
+	def process_notification(self, n, account=None):
 		"""Process a Mastodon notification for display"""
 		import speak
 		type_labels = {
@@ -689,14 +689,19 @@ class Application:
 		}
 
 		notif_type = getattr(n, 'type', 'unknown')
-		account = getattr(n, 'account', None)
+		notif_account = getattr(n, 'account', None)
 		status = getattr(n, 'status', None)
 
 		label = type_labels.get(notif_type, notif_type)
 
-		if account:
-			display_name = getattr(account, 'display_name', '') or getattr(account, 'acct', '')
-			acct = getattr(account, 'acct', '')
+		if notif_account:
+			# Check for alias (only applies in list display)
+			user_id = str(getattr(notif_account, 'id', ''))
+			if account and user_id and user_id in account.prefs.aliases:
+				display_name = account.prefs.aliases[user_id]
+			else:
+				display_name = getattr(notif_account, 'display_name', '') or getattr(notif_account, 'acct', '')
+			acct = getattr(notif_account, 'acct', '')
 		else:
 			display_name = "Unknown"
 			acct = ""
@@ -711,7 +716,12 @@ class Application:
 				quote_text = getattr(quote, 'text', '') or self.strip_html(getattr(quote, 'content', ''))
 				quote_account = getattr(quote, 'account', None)
 				if quote_account:
-					quote_name = getattr(quote_account, 'display_name', '') or getattr(quote_account, 'acct', '')
+					# Check for alias
+					quote_user_id = str(getattr(quote_account, 'id', ''))
+					if account and quote_user_id and quote_user_id in account.prefs.aliases:
+						quote_name = account.prefs.aliases[quote_user_id]
+					else:
+						quote_name = getattr(quote_account, 'display_name', '') or getattr(quote_account, 'acct', '')
 					quote_acct = getattr(quote_account, 'acct', '')
 					status_text += f" Quoting {quote_name} (@{quote_acct}): {quote_text}"
 				else:
@@ -750,15 +760,23 @@ class Application:
 
 		return result
 
-	def process_conversation(self, c):
+	def process_conversation(self, c, account=None):
 		"""Process a Mastodon conversation for display"""
-		accounts = getattr(c, 'accounts', [])
+		conv_accounts = getattr(c, 'accounts', [])
 		last_status = getattr(c, 'last_status', None)
 
-		if accounts:
-			participants = ", ".join([a.display_name or a.acct for a in accounts[:3]])
-			if len(accounts) > 3:
-				participants += f" and {len(accounts) - 3} others"
+		if conv_accounts:
+			# Get display names with alias support
+			names = []
+			for a in conv_accounts[:3]:
+				user_id = str(getattr(a, 'id', ''))
+				if account and user_id and user_id in account.prefs.aliases:
+					names.append(account.prefs.aliases[user_id])
+				else:
+					names.append(a.display_name or a.acct)
+			participants = ", ".join(names)
+			if len(conv_accounts) > 3:
+				participants += f" and {len(conv_accounts) - 3} others"
 		else:
 			participants = "Unknown"
 
@@ -841,7 +859,7 @@ class Application:
 
 		return urls
 
-	def template_to_string(self, s, template=""):
+	def template_to_string(self, s, template="", account=None):
 		"""Format a status using a template"""
 		if template == "":
 			template = self.prefs.postTemplate
@@ -896,14 +914,27 @@ class Application:
 					# Support multi-level attribute access (e.g., reblog.account.display_name)
 					try:
 						obj = s
+						parent_obj = None
 						for attr in q:
 							if obj is None:
 								break
+							parent_obj = obj
 							obj = getattr(obj, attr, None)
 						if obj is not None:
 							# Check if we need to demojify
 							last_attr = q[-1]
-							if (last_attr in ('name', 'display_name')) and self.prefs.demojify:
+							# Check for alias if this is display_name and we have an account
+							if last_attr in ('name', 'display_name') and account and parent_obj:
+								user_id = str(getattr(parent_obj, 'id', ''))
+								if user_id and user_id in account.prefs.aliases:
+									obj = account.prefs.aliases[user_id]
+								elif self.prefs.demojify:
+									demojied = self.demojify(str(obj))
+									if demojied == "":
+										obj = getattr(parent_obj, "acct", obj)
+									else:
+										obj = demojied
+							elif (last_attr in ('name', 'display_name')) and self.prefs.demojify:
 								demojied = self.demojify(str(obj))
 								if demojied == "":
 									# Try to get acct as fallback
@@ -928,6 +959,12 @@ class Application:
 				else:
 					if hasattr(s, t[1]):
 						try:
+							# Check for alias if this is display_name and we have an account
+							if t[1] in ('name', 'display_name') and account:
+								user_id = str(getattr(s, 'id', ''))
+								if user_id and user_id in account.prefs.aliases:
+									template = template.replace("$" + t[1] + "$", account.prefs.aliases[user_id])
+									continue
 							if t[1] == "name" or t[1] == "display_name" and self.prefs.demojify or t[1] == "text" and self.prefs.demojify_post:
 								deEmojify = True
 							else:

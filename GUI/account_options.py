@@ -174,6 +174,8 @@ class OptionsGui(wx.Dialog):
 		self.notebook.AddPage(self.general, "General")
 		self.timelines_panel = TimelinesPanel(self.account, self.notebook)
 		self.notebook.AddPage(self.timelines_panel, "Timelines")
+		self.alias_panel = AliasPanel(self.account, self.notebook)
+		self.notebook.AddPage(self.alias_panel, "Aliases")
 		self.main_box.Add(self.notebook, 0, wx.ALL, 10)
 		self.ok = wx.Button(self.panel, wx.ID_OK, "&OK")
 		self.ok.SetDefault()
@@ -332,3 +334,132 @@ class TimelinesPanel(wx.Panel):
 	def get_order(self):
 		"""Return the current timeline order."""
 		return self.current_order
+
+
+class AliasPanel(wx.Panel):
+	"""Panel for managing user aliases."""
+
+	def __init__(self, account, parent):
+		super().__init__(parent)
+		self.account = account
+		self.main_box = wx.BoxSizer(wx.VERTICAL)
+
+		# Instructions
+		info = wx.StaticText(self, -1, "Set custom display names for users. These will replace their actual display names throughout the app.")
+		self.main_box.Add(info, 0, wx.ALL, 10)
+
+		# List of current aliases
+		self.list_label = wx.StaticText(self, -1, "&Aliases")
+		self.main_box.Add(self.list_label, 0, wx.LEFT | wx.TOP, 10)
+		self.alias_list = wx.ListBox(self, -1, size=(300, 150), name="Aliases")
+		self.main_box.Add(self.alias_list, 0, wx.EXPAND | wx.ALL, 10)
+		self.alias_list.Bind(wx.EVT_LISTBOX, self.on_selection_change)
+
+		# Store user info for each alias
+		self._alias_data = {}  # Maps list index to (user_id, acct, alias)
+
+		# Buttons
+		btn_box = wx.BoxSizer(wx.HORIZONTAL)
+		self.edit_btn = wx.Button(self, -1, "&Edit")
+		self.edit_btn.Bind(wx.EVT_BUTTON, self.on_edit)
+		self.edit_btn.Enable(False)
+		btn_box.Add(self.edit_btn, 0, wx.ALL, 5)
+
+		self.remove_btn = wx.Button(self, -1, "&Remove")
+		self.remove_btn.Bind(wx.EVT_BUTTON, self.on_remove)
+		self.remove_btn.Enable(False)
+		btn_box.Add(self.remove_btn, 0, wx.ALL, 5)
+
+		self.main_box.Add(btn_box, 0, wx.ALL, 5)
+		self.SetSizer(self.main_box)
+
+		# Populate after buttons exist
+		self._populate_list()
+
+	def _populate_list(self):
+		"""Populate the list with current aliases."""
+		self.alias_list.Clear()
+		self._alias_data = {}
+		try:
+			aliases = getattr(self.account.prefs, 'aliases', None)
+			if aliases:
+				# Convert to dict if it's a Config object
+				if hasattr(aliases, 'items'):
+					alias_items = list(aliases.items())
+				elif hasattr(aliases, 'keys'):
+					alias_items = [(k, aliases[k]) for k in aliases.keys()]
+				else:
+					alias_items = []
+				idx = 0
+				for user_id, alias in alias_items:
+					# Try to get user info from cache if available
+					acct = self._get_user_acct(user_id) or f"ID: {user_id}"
+					display_text = f"{alias} ({acct})"
+					self.alias_list.Append(display_text)
+					self._alias_data[idx] = (user_id, acct, alias)
+					idx += 1
+		except Exception:
+			pass
+		self._update_buttons()
+
+	def _get_user_acct(self, user_id):
+		"""Try to get user acct from cache."""
+		# Check timeline statuses for this user
+		try:
+			for tl in getattr(self.account, 'timelines', []):
+				for status in getattr(tl, 'statuses', []):
+					status_account = getattr(status, 'account', None)
+					if status_account and str(getattr(status_account, 'id', '')) == str(user_id):
+						return getattr(status_account, 'acct', None)
+		except:
+			pass
+		return None
+
+	def _update_buttons(self):
+		"""Enable/disable buttons based on selection."""
+		has_selection = self.alias_list.GetSelection() != wx.NOT_FOUND
+		self.edit_btn.Enable(has_selection)
+		self.remove_btn.Enable(has_selection)
+
+	def on_selection_change(self, event):
+		self._update_buttons()
+
+	def _invalidate_display_caches(self):
+		"""Clear display caches so aliases are refreshed."""
+		for tl in getattr(self.account, 'timelines', []):
+			tl.invalidate_display_cache()
+			for status in getattr(tl, 'statuses', []):
+				if hasattr(status, '_display_cache'):
+					delattr(status, '_display_cache')
+
+	def on_edit(self, event):
+		"""Edit the selected alias."""
+		idx = self.alias_list.GetSelection()
+		if idx == wx.NOT_FOUND or idx not in self._alias_data:
+			return
+		user_id, acct, current_alias = self._alias_data[idx]
+		dlg = wx.TextEntryDialog(self, f"Enter alias for {acct}:", "Edit Alias", current_alias)
+		if dlg.ShowModal() == wx.ID_OK:
+			new_alias = dlg.GetValue().strip()
+			if new_alias:
+				self.account.prefs.aliases[user_id] = new_alias
+				self._invalidate_display_caches()
+				self._populate_list()
+				self.alias_list.SetSelection(idx)
+		dlg.Destroy()
+
+	def on_remove(self, event):
+		"""Remove the selected alias."""
+		idx = self.alias_list.GetSelection()
+		if idx == wx.NOT_FOUND or idx not in self._alias_data:
+			return
+		user_id, acct, alias = self._alias_data[idx]
+		if user_id in self.account.prefs.aliases:
+			del self.account.prefs.aliases[user_id]
+			self._invalidate_display_caches()
+			self._populate_list()
+			# Select nearest item
+			if self.alias_list.GetCount() > 0:
+				new_idx = min(idx, self.alias_list.GetCount() - 1)
+				self.alias_list.SetSelection(new_idx)
+		self._update_buttons()

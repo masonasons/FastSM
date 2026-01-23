@@ -82,6 +82,8 @@ class mastodon(object):
 		# Local position sync for notifications/mentions timelines
 		self.prefs.last_notifications_id = self.prefs.get("last_notifications_id", None)
 		self.prefs.last_mentions_id = self.prefs.get("last_mentions_id", None)
+		# User aliases - maps user ID to custom display name
+		self.prefs.aliases = self.prefs.get("aliases", {})
 
 		# Determine platform type if not set
 		if self.prefs.platform_type == "":
