@@ -617,7 +617,9 @@ def delete(account, status):
 	try:
 		# Check if this is a scheduled post
 		if account.currentTimeline.type == "scheduled":
-			account.api.scheduled_status_delete(id=status.id)
+			# Use _scheduled_id if available (set by platform backend)
+			scheduled_id = getattr(status, '_scheduled_id', None) or status.id
+			account.api.scheduled_status_delete(id=scheduled_id)
 		else:
 			account.api.status_delete(id=status.id)
 		# Remove from all timelines by ID (not object identity)

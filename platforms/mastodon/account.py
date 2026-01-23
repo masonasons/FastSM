@@ -201,6 +201,10 @@ class MastodonAccount(PlatformAccount):
                     status._scheduled = True
                     status._scheduled_id = s.id
                     status._scheduled_at = s.scheduled_at
+                    # Preserve the text from params (params has 'text', not 'content')
+                    params_text = getattr(s.params, 'text', None) or s.params.get('text', '') if hasattr(s.params, 'get') else ''
+                    if params_text and not status.content:
+                        status.content = params_text
                     result.append(status)
             return result
         except MastodonError:

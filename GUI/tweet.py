@@ -743,13 +743,21 @@ class TweetGui(wx.Dialog):
 				snd = "send_tweet"
 		if status:
 			sound.play(self.account, snd)
-			# Add the posted status to the Sent timeline immediately
-			# (streaming only works on Mastodon, so Bluesky needs this)
-			for tl in self.account.timelines:
-				if tl.type == "user" and tl.name == "Sent":
-					# Use load() to properly add and deduplicate
-					tl.load(items=[status])
-					break
+			# Check if this was a scheduled post (only for non-message types)
+			if self.type != "message" and scheduled_at:
+				# Add to scheduled timeline if it exists
+				for tl in self.account.timelines:
+					if tl.type == "scheduled":
+						tl.load(items=[status])
+						break
+			else:
+				# Add the posted status to the Sent timeline immediately
+				# (streaming only works on Mastodon, so Bluesky needs this)
+				for tl in self.account.timelines:
+					if tl.type == "user" and tl.name == "Sent":
+						# Use load() to properly add and deduplicate
+						tl.load(items=[status])
+						break
 			if hasattr(self, "thread") and not self.thread.GetValue() or not hasattr(self, "thread"):
 				self.Destroy()
 			else:

@@ -1012,7 +1012,9 @@ class timeline(object):
 				self.account.user_cache.add_users_from_status(item)
 
 			# Try to add (checks for duplicates)
-			if self.try_add_status_id(item.id):
+			# For scheduled posts, use _scheduled_id if available
+			status_id = getattr(item, '_scheduled_id', None) or item.id
+			if self.try_add_status_id(status_id):
 				new_items.append(item)
 
 		if len(new_items) == 0:
@@ -1246,7 +1248,9 @@ class timeline(object):
 
 				# Check for duplicates using atomic check-and-add to prevent race conditions
 				# between streaming and REST API refresh threads
-				if self.try_add_status_id(i.id):
+				# For scheduled posts, use _scheduled_id if available for consistent deduplication
+				status_id = getattr(i, '_scheduled_id', None) or i.id
+				if self.try_add_status_id(status_id):
 					newitems += 1
 					# For initial/back load: add directly to statuses
 					# For refresh: collect first, add after processing all items
@@ -1290,10 +1294,13 @@ class timeline(object):
 					wx.CallAfter(main.window.refreshList)
 
 				if items == []:
-					if not self.app.prefs.reversed:
-						self.update_kwargs['since_id'] = tl[0].id
-					else:
-						self.update_kwargs['since_id'] = tl[len(tl)-1].id
+					# Don't set since_id for timelines that use internal pagination IDs
+					# (favourites, bookmarks, scheduled use internal IDs, not status IDs)
+					if self.type not in ('favourites', 'bookmarks', 'scheduled'):
+						if not self.app.prefs.reversed:
+							self.update_kwargs['since_id'] = tl[0].id
+						else:
+							self.update_kwargs['since_id'] = tl[len(tl)-1].id
 
 					# Update last load time
 					import time

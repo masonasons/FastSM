@@ -622,6 +622,13 @@ class MainGui(wx.Frame):
 			pyperclip.copy(text)
 			speak.speak("Copied")
 			return
+		# Handle scheduled posts - use the processed scheduled status text
+		if tl_type == "scheduled":
+			item = get_app().currentAccount.currentTimeline.statuses[get_app().currentAccount.currentTimeline.index]
+			text = get_app()._process_scheduled_status(item)
+			pyperclip.copy(text)
+			speak.speak("Copied")
+			return
 		status = self.get_current_status()
 		if status:
 			# Use appropriate template based on status type
@@ -1336,6 +1343,16 @@ class MainGui(wx.Frame):
 					is_muted_conv = getattr(notif_status, 'muted', False)
 					m_mute_conv = menu.Append(-1, "Unmute conversation" if is_muted_conv else "Mute conversation")
 					self.Bind(wx.EVT_MENU, self.OnMuteConversationToggle, m_mute_conv)
+
+		elif tl_type == "scheduled":
+			# Scheduled posts menu - limited options since these aren't posted yet
+			m_delete = menu.Append(-1, "Delete scheduled post")
+			self.Bind(wx.EVT_MENU, self.OnDelete, m_delete)
+
+			menu.AppendSeparator()
+
+			m_copy = menu.Append(-1, "Copy to clipboard")
+			self.Bind(wx.EVT_MENU, self.onCopy, m_copy)
 
 		else:
 			# Standard post menu for all other timelines

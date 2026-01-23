@@ -484,6 +484,15 @@ class Application:
 
 	def process_status(self, s, return_only_text=False, template="", ignore_cw=False, account=None):
 		"""Process a Mastodon status for display"""
+		# Handle scheduled statuses - check for _scheduled flag (set by platform backend)
+		# or raw ScheduledStatus (has params and scheduled_at)
+		is_scheduled = getattr(s, '_scheduled', False)
+		if not is_scheduled and hasattr(s, 'params') and hasattr(s, 'scheduled_at'):
+			is_scheduled = True
+
+		if is_scheduled:
+			return self._process_scheduled_status(s)
+
 		if hasattr(s, 'content'):
 			text = self.strip_html(s.content)
 		else:
@@ -668,6 +677,55 @@ class Application:
 				result += " " + self.parse_date(created_at)
 		else:
 			result = self.template_to_string(wrapped, template, account=account)
+
+		return result
+
+	def _process_scheduled_status(self, s):
+		"""Process a scheduled status for display."""
+		# Check both _scheduled_at (UniversalStatus) and scheduled_at (raw ScheduledStatus)
+		scheduled_at = getattr(s, '_scheduled_at', None) or getattr(s, 'scheduled_at', None)
+
+		# Handle both raw ScheduledStatus (has params dict) and UniversalStatus (content from params)
+		params = getattr(s, 'params', None)
+		if params:
+			# Raw ScheduledStatus - get from params
+			if isinstance(params, dict):
+				text = params.get('text', '')
+				visibility = params.get('visibility', 'public')
+				spoiler = params.get('spoiler_text', '')
+			else:
+				text = getattr(params, 'text', '')
+				visibility = getattr(params, 'visibility', 'public')
+				spoiler = getattr(params, 'spoiler_text', '')
+		else:
+			# UniversalStatus - content may be empty since params.text doesn't map to content
+			# Check content first, then fall back to text attribute
+			content = getattr(s, 'content', '')
+			if content:
+				text = self.strip_html(content)
+			else:
+				text = getattr(s, 'text', '')
+			visibility = getattr(s, 'visibility', 'public')
+			spoiler = getattr(s, 'spoiler_text', '')
+
+		# Format scheduled time
+		if scheduled_at:
+			time_str = self.parse_date(scheduled_at)
+		else:
+			time_str = "unknown time"
+
+		# Build the display string
+		result = f"Scheduled for {time_str}"
+		if visibility and visibility != 'public':
+			result += f" ({visibility})"
+		if spoiler:
+			result += f" CW: {spoiler}."
+		result += f": {text}"
+
+		# Add media attachment count if any
+		media = getattr(s, 'media_attachments', None)
+		if media:
+			result += f" ({len(media)} attachment{'s' if len(media) > 1 else ''})"
 
 		return result
 
