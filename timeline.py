@@ -1240,11 +1240,14 @@ class timeline(object):
 						]
 					self.account.timelines.remove(self)
 					if self.account == self.app.currentAccount:
-						main.window.refreshTimelines()
-						if self.account.currentTimeline == self:
-							main.window.list.SetSelection(0)
-							self.account.currentIndex = 0
-							main.window.on_list_change(None)
+						# Use wx.CallAfter for thread safety (this runs in background thread)
+						def update_ui_after_remove():
+							main.window.refreshTimelines()
+							if self.account.currentTimeline == self:
+								main.window.list.SetSelection(0)
+								self.account.currentIndex = 0
+								main.window.on_list_change(None)
+						wx.CallAfter(update_ui_after_remove)
 				return
 		else:
 			tl = items
