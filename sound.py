@@ -71,30 +71,36 @@ def _setup_vlc_path():
 
 	return None
 
-# Set up VLC path before importing
-_vlc_path = _setup_vlc_path()
-
-# Clear any stale PYTHON_VLC_LIB_PATH if we didn't set it ourselves
-# This prevents errors when users have invalid paths in their environment
-if _vlc_path is None and 'PYTHON_VLC_LIB_PATH' in os.environ:
-	del os.environ['PYTHON_VLC_LIB_PATH']
-if _vlc_path is None and 'PYTHON_VLC_MODULE_PATH' in os.environ:
-	del os.environ['PYTHON_VLC_MODULE_PATH']
-
-try:
-	import vlc
-	# Test that VLC libraries are actually available
-	_test_instance = vlc.Instance('--quiet')
-	if _test_instance:
-		_test_instance.log_unset()
-		_test_instance.release()
-		VLC_AVAILABLE = True
-	else:
-		VLC_AVAILABLE = False
-except (ImportError, OSError, FileNotFoundError, AttributeError, Exception) as e:
-	# Catch all exceptions - VLC import can fail in various ways
+# Disable VLC entirely on macOS - causes crashes
+if sys.platform == 'darwin':
 	VLC_AVAILABLE = False
 	vlc = None
+	_vlc_path = None
+else:
+	# Set up VLC path before importing
+	_vlc_path = _setup_vlc_path()
+
+	# Clear any stale PYTHON_VLC_LIB_PATH if we didn't set it ourselves
+	# This prevents errors when users have invalid paths in their environment
+	if _vlc_path is None and 'PYTHON_VLC_LIB_PATH' in os.environ:
+		del os.environ['PYTHON_VLC_LIB_PATH']
+	if _vlc_path is None and 'PYTHON_VLC_MODULE_PATH' in os.environ:
+		del os.environ['PYTHON_VLC_MODULE_PATH']
+
+	try:
+		import vlc
+		# Test that VLC libraries are actually available
+		_test_instance = vlc.Instance('--quiet')
+		if _test_instance:
+			_test_instance.log_unset()
+			_test_instance.release()
+			VLC_AVAILABLE = True
+		else:
+			VLC_AVAILABLE = False
+	except (ImportError, OSError, FileNotFoundError, AttributeError, Exception) as e:
+		# Catch all exceptions - VLC import can fail in various ways
+		VLC_AVAILABLE = False
+		vlc = None
 
 def _find_ytdlp_executable():
 	"""Find yt-dlp executable path."""

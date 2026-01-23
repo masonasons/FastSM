@@ -2,6 +2,7 @@ FastSM Changelog
 ================
 
 0.4.2
+Disable VLC entirely on macOS - was causing crashes
 Fix Bluesky reply not recognizing mentioned users when post fetch delayed
 Fix Bluesky mentions appearing in notifications - now respects mentions_in_notifications setting
 Fix mentions appearing in notifications from cache - now filtered when loading
