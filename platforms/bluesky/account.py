@@ -1,7 +1,7 @@
 """Bluesky platform account implementation."""
 
 from typing import List, Optional, Any, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from atproto import Client
 from atproto.exceptions import AtProtocolError, InvokeTimeoutError
 
@@ -560,7 +560,7 @@ class BlueskyAccount(PlatformAccount):
                     id=response.uri,
                     content=text,
                     text=text,
-                    created_at=datetime.now(),
+                    created_at=datetime.now(timezone.utc),
                     account=UniversalUser(
                         id=str(self.me.did),
                         username=self.me.handle,

@@ -6,6 +6,7 @@ Fix Bluesky reply not recognizing mentioned users when post fetch delayed
 Fix Bluesky mentions appearing in notifications - now respects mentions_in_notifications setting
 Fix mentions appearing in notifications from cache - now filtered when loading
 Fix polls from cache having no options - now refreshes status from API before voting
+Fix Bluesky posts showing wrong time in Sent timeline - use UTC instead of local time
 
 0.4.1
 Reimplement VLC less intrusively this time.
