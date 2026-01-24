@@ -552,6 +552,9 @@ class templates(wx.Panel, wx.Dialog):
 		self.include_media_descriptions = wx.CheckBox(self, -1, "Include image/media descriptions in post text")
 		self.main_box.Add(self.include_media_descriptions, 0, wx.ALL, 10)
 		self.include_media_descriptions.SetValue(get_app().prefs.include_media_descriptions)
+		self.include_link_preview = wx.CheckBox(self, -1, "Include link preview card text in post text")
+		self.main_box.Add(self.include_link_preview, 0, wx.ALL, 10)
+		self.include_link_preview.SetValue(get_app().prefs.include_link_preview)
 		self.max_usernames_label = wx.StaticText(self, -1, "Collapse usernames when more than (0 = disabled)")
 		self.main_box.Add(self.max_usernames_label, 0, wx.LEFT | wx.TOP, 10)
 		self.max_usernames_display = wx.SpinCtrl(self, -1, min=0, max=20, initial=get_app().prefs.max_usernames_display, name="Collapse usernames threshold")
@@ -908,6 +911,7 @@ class OptionsGui(wx.Dialog):
 			get_app().prefs.messageTemplate != self.templates.messageTemplate.GetValue() or
 			get_app().prefs.notificationTemplate != self.templates.notificationTemplate.GetValue() or
 			get_app().prefs.include_media_descriptions != self.templates.include_media_descriptions.GetValue() or
+			get_app().prefs.include_link_preview != self.templates.include_link_preview.GetValue() or
 			get_app().prefs.max_usernames_display != self.templates.max_usernames_display.GetValue() or
 			get_app().prefs.use24HourTime != self.templates.use24HourTime.GetValue() or
 			get_app().prefs.cw_mode != new_cw_mode):
@@ -923,6 +927,7 @@ class OptionsGui(wx.Dialog):
 		get_app().prefs.userTemplate=self.templates.userTemplate.GetValue()
 		get_app().prefs.notificationTemplate=self.templates.notificationTemplate.GetValue()
 		get_app().prefs.include_media_descriptions=self.templates.include_media_descriptions.GetValue()
+		get_app().prefs.include_link_preview=self.templates.include_link_preview.GetValue()
 		get_app().prefs.max_usernames_display=self.templates.max_usernames_display.GetValue()
 		get_app().prefs.autoOpenSingleURL=self.general.autoOpenSingleURL.GetValue()
 		get_app().prefs.auto_open_audio_player=self.audio_tab.auto_open_audio_player.GetValue()

@@ -132,6 +132,7 @@ class Application:
 		self.prefs.demojify = self.prefs.get("demojify", False)
 		self.prefs.demojify_post = self.prefs.get("demojify_post", False)
 		self.prefs.include_media_descriptions = self.prefs.get("include_media_descriptions", True)
+		self.prefs.include_link_preview = self.prefs.get("include_link_preview", True)
 		self.prefs.max_usernames_display = self.prefs.get("max_usernames_display", 0)  # 0 = show all
 		self.prefs.position = self.prefs.get("position", True)
 		self.prefs.chars_sent = self.prefs.get("chars_sent", 0)
@@ -555,27 +556,28 @@ class Application:
 
 			# Add card (external link embed) information - especially useful for Bluesky
 			# posts that only contain a link with no text
-			card = getattr(s, 'card', None)
-			if card:
-				card_title = getattr(card, 'title', None) if not isinstance(card, dict) else card.get('title')
-				card_description = getattr(card, 'description', None) if not isinstance(card, dict) else card.get('description')
-				card_url = getattr(card, 'url', None) if not isinstance(card, dict) else card.get('url')
-				# Show card if we have title, description, or at least the URL
-				if card_title or card_description or card_url:
-					card_parts = []
-					if card_title:
-						card_parts.append(card_title)
-					if card_description:
-						card_parts.append(card_description)
-					# If no title/description but we have URL, show the URL
-					if not card_parts and card_url:
-						card_parts.append(card_url)
-					card_text = " - ".join(card_parts)
-					# If text is empty, use card as main text; otherwise append
-					if not text.strip():
-						text = f"(Link) {card_text}"
-					else:
-						text += f" (Link) {card_text}"
+			if self.prefs.include_link_preview:
+				card = getattr(s, 'card', None)
+				if card:
+					card_title = getattr(card, 'title', None) if not isinstance(card, dict) else card.get('title')
+					card_description = getattr(card, 'description', None) if not isinstance(card, dict) else card.get('description')
+					card_url = getattr(card, 'url', None) if not isinstance(card, dict) else card.get('url')
+					# Show card if we have title, description, or at least the URL
+					if card_title or card_description or card_url:
+						card_parts = []
+						if card_title:
+							card_parts.append(card_title)
+						if card_description:
+							card_parts.append(card_description)
+						# If no title/description but we have URL, show the URL
+						if not card_parts and card_url:
+							card_parts.append(card_url)
+						card_text = " - ".join(card_parts)
+						# If text is empty, use card as main text; otherwise append
+						if not text.strip():
+							text = f"(Link) {card_text}"
+						else:
+							text += f" (Link) {card_text}"
 
 			# Add poll information
 			if hasattr(s, 'poll') and s.poll:

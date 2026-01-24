@@ -2,10 +2,12 @@ FastSM Changelog
 ================
 
 0.4.2
+Add option to include/exclude link preview card text in posts (Templates settings, on by default)
 Add ability to report users and posts (user viewer, post view, context menus, Actions menu)
 - Rule violations show server rules as checklist to select specific violations
 - Thread posts can be multi-selected to include in report (Mastodon)
 Disable VLC entirely on macOS - was causing crashes
+Fix crash when using "Load posts here" with filtered timeline
 Fix Mac crash when timeline fails to load - GUI updates now thread-safe
 Fix Mac crash from speech in background threads - now routes to main thread
 Fix Bluesky reply not recognizing mentioned users when post fetch delayed
