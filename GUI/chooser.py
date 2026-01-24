@@ -21,6 +21,7 @@ class ChooseGui(wx.Dialog):
 	TYPE_MUTE="mute"
 	TYPE_MUTE_TOGGLE="mute_toggle"
 	TYPE_PROFILE = "profile"
+	TYPE_REPORT_USER="report_user"
 	TYPE_UNBLOCK="unblock"
 	TYPE_UNFOLLOW="unfollow"
 	TYPE_UNFOLLOW_HASHTAG="unfollowHashtag"
@@ -195,6 +196,25 @@ class ChooseGui(wx.Dialog):
 				dlg.Destroy()
 			else:
 				speak.speak("Could not find user")
+		elif self.type==self.TYPE_REPORT_USER:
+			# Report a user - look up user object and open report dialog
+			try:
+				idx = self.chooser.GetSelection()
+				user = None
+				if idx >= 0 and idx < len(self.user_objects):
+					user = self.user_objects[idx]
+				elif self.returnvalue:
+					# User typed a username manually - look up
+					user = self.account.app.lookup_user_name(self.account, self.returnvalue)
+					if user == -1:
+						user = None
+				if user:
+					misc.report_user(self.account, user)
+				else:
+					import speak
+					speak.speak("Could not find user")
+			except Exception as e:
+				self.account.app.handle_error(e, "Report user")
 		elif self.type==self.TYPE_FOLLOW_TOGGLE:
 			# Toggle follow state - check relationship first
 			try:

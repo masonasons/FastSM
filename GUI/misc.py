@@ -146,6 +146,18 @@ def unblock_user(account, user_id):
 		account.app.handle_error(error, "Unblock user")
 
 
+def report_user(account, user, parent=None):
+	"""Show report dialog for a user."""
+	from . import report_dialog
+	report_dialog.report_user(account, user, parent)
+
+
+def report_status(account, status, parent=None):
+	"""Show report dialog for a status/post."""
+	from . import report_dialog
+	report_dialog.report_status(account, status, parent)
+
+
 def block(account, status):
 	u = account.app.get_user_objects_in_status(account, status)
 	u2 = []

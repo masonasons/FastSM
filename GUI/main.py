@@ -106,6 +106,10 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnBlockToggle, m_block)
 		m_mute_user=menu2.Append(-1, "Mute/Unmute user", "mute")
 		self.Bind(wx.EVT_MENU, self.OnMuteToggle, m_mute_user)
+		m_report_post=menu2.Append(-1, "Report post", "report_post")
+		self.Bind(wx.EVT_MENU, self.OnReportPost, m_report_post)
+		m_report_user=menu2.Append(-1, "Report user", "report_user")
+		self.Bind(wx.EVT_MENU, self.OnReportUser, m_report_user)
 		m_view=menu2.Append(-1, "View post" if platform.system() == "Darwin" else "View post\tReturn", "view")
 		self.Bind(wx.EVT_MENU, self.OnView, m_view)
 		m_user_profile=menu2.Append(-1, "User Profile\tCtrl+Shift+U", "profile")
@@ -735,6 +739,28 @@ class MainGui(wx.Frame):
 				dlg.Destroy()
 			misc.delete(get_app().currentAccount, status)
 
+	def OnReportPost(self, event=None):
+		"""Report the current post."""
+		status = self.get_current_status()
+		if status:
+			misc.report_status(get_app().currentAccount, status, self)
+
+	def OnReportUser(self, event=None):
+		"""Report the user of the current post."""
+		account = get_app().currentAccount
+		# Get users from current item (handles both statuses and notifications)
+		u = self._get_users_from_current_item(account)
+		if not u:
+			speak.speak("No user found")
+			return
+		if len(u) > 1:
+			# Multiple users - use chooser with user objects
+			u2 = [i.acct for i in u]
+			chooser.chooser(account, "Report User", "Select user to report", u2, "report_user", user_objects=u)
+		else:
+			# Single user - report directly
+			misc.report_user(account, u[0], self)
+
 	def OnHide(self,event=None):
 		get_app().currentAccount.currentTimeline.hide_tl()
 
@@ -1325,6 +1351,9 @@ class MainGui(wx.Frame):
 				m_block = menu.Append(-1, "Unblock user" if is_blocking else "Block user")
 				self.Bind(wx.EVT_MENU, self.OnBlockToggle, m_block)
 
+				m_report_user = menu.Append(-1, "Report user")
+				self.Bind(wx.EVT_MENU, self.OnReportUser, m_report_user)
+
 				# Check for hashtags in notification status - only for Mastodon
 				if platform_type == 'mastodon' and notif_status:
 					hashtags = misc.get_hashtags_from_status(notif_status)
@@ -1469,6 +1498,9 @@ class MainGui(wx.Frame):
 			m_block = menu.Append(-1, "Unblock user" if is_blocking else "Block user")
 			self.Bind(wx.EVT_MENU, self.OnBlockToggle, m_block)
 
+			m_report_user = menu.Append(-1, "Report user")
+			self.Bind(wx.EVT_MENU, self.OnReportUser, m_report_user)
+
 			# Check for hashtags in post - only show hashtag options if post has hashtags
 			# Only for Mastodon - Bluesky doesn't support hashtag following
 			if platform_type == 'mastodon':
@@ -1493,6 +1525,9 @@ class MainGui(wx.Frame):
 
 			m_delete = menu.Append(-1, "Delete")
 			self.Bind(wx.EVT_MENU, self.OnDelete, m_delete)
+
+			m_report = menu.Append(-1, "Report post")
+			self.Bind(wx.EVT_MENU, self.OnReportPost, m_report)
 
 		self.PopupMenu(menu)
 		menu.Destroy()

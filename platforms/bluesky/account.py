@@ -966,6 +966,65 @@ class BlueskyAccount(PlatformAccount):
             self.app.handle_error(e, "unmute")
             return False
 
+    def report(self, user_id: str, status_id: str = None, category: str = "other", comment: str = "") -> bool:
+        """Report a user or post to moderation.
+
+        Args:
+            user_id: The DID of the user being reported
+            status_id: Optional post URI to report (if reporting a specific post)
+            category: Report category (spam, violation, other)
+            comment: Additional context for the report
+        """
+        try:
+            from atproto import models
+
+            # Map category to Bluesky reason type
+            reason_map = {
+                'spam': 'com.atproto.moderation.defs#reasonSpam',
+                'violation': 'com.atproto.moderation.defs#reasonViolation',
+                'other': 'com.atproto.moderation.defs#reasonOther',
+            }
+            reason_type = reason_map.get(category, 'com.atproto.moderation.defs#reasonOther')
+
+            # Build the subject - either a repo (user) or a record (post)
+            if status_id:
+                # Reporting a specific post
+                # Parse the AT URI to get repo, collection, rkey
+                # Format: at://did:plc:xxx/app.bsky.feed.post/rkey
+                parts = status_id.replace('at://', '').split('/')
+                if len(parts) >= 3:
+                    repo = parts[0]
+                    collection = parts[1]
+                    rkey = parts[2]
+                    subject = models.ComAtprotoAdminDefs.RepoRef(did=repo)
+                    # Use strong ref for record
+                    subject = {
+                        '$type': 'com.atproto.repo.strongRef',
+                        'uri': status_id,
+                        'cid': ''  # CID not required for reports
+                    }
+                else:
+                    # Fallback to user report
+                    subject = {'$type': 'com.atproto.admin.defs#repoRef', 'did': user_id}
+            else:
+                # Reporting a user account
+                subject = {'$type': 'com.atproto.admin.defs#repoRef', 'did': user_id}
+
+            # Create the report
+            data = {
+                'reasonType': reason_type,
+                'subject': subject,
+            }
+            if comment:
+                data['reason'] = comment
+
+            self.client.com.atproto.moderation.create_report(data)
+            return True
+
+        except (AtProtocolError, InvokeTimeoutError) as e:
+            self.app.handle_error(e, "report")
+            return False
+
     def get_followers(self, user_id: str, limit: int = 80, max_pages: int = 1) -> List[UniversalUser]:
         """Get followers of a user.
 

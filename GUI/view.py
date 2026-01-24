@@ -214,6 +214,10 @@ class ViewGui(wx.Dialog):
 		self.profile.Bind(wx.EVT_BUTTON, self.OnProfile)
 		self.main_box.Add(self.profile, 0, wx.ALL, 10)
 
+		self.report_btn = wx.Button(self.panel, -1, "Re&port Post")
+		self.report_btn.Bind(wx.EVT_BUTTON, self.OnReport)
+		self.main_box.Add(self.report_btn, 0, wx.ALL, 10)
+
 		self.close = wx.Button(self.panel, wx.ID_CANCEL, "&Close")
 		self.close.Bind(wx.EVT_BUTTON, self.OnClose)
 		self.main_box.Add(self.close, 0, wx.ALL, 10)
@@ -365,6 +369,10 @@ class ViewGui(wx.Dialog):
 	def OnMessage(self, event):
 		misc.message(self.account, self.status)
 
+	def OnReport(self, event):
+		"""Report the post."""
+		misc.report_status(self.account, self.status, self)
+
 	def OnClose(self, event):
 		self.Destroy()
 
@@ -486,6 +494,10 @@ class UserViewGui(wx.Dialog):
 		self.following_btn = wx.Button(self.panel, -1, "View F&ollowing")
 		self.following_btn.Bind(wx.EVT_BUTTON, self.OnFollowing)
 		self.main_box.Add(self.following_btn, 0, wx.ALL, 10)
+
+		self.report_btn = wx.Button(self.panel, -1, "&Report User")
+		self.report_btn.Bind(wx.EVT_BUTTON, self.OnReport)
+		self.main_box.Add(self.report_btn, 0, wx.ALL, 10)
 
 		self.follow.Enable(False)
 		self.unfollow.Enable(False)
@@ -858,6 +870,11 @@ class UserViewGui(wx.Dialog):
 		user = self.users[self.index]
 		v = ViewImageGui(user)
 		v.Show()
+
+	def OnReport(self, event):
+		"""Report the current user."""
+		user = self.users[self.index]
+		misc.report_user(self.account, user, self)
 
 	def OnClose(self, event):
 		"""App close event handler"""
