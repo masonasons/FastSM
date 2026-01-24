@@ -250,7 +250,8 @@ def _extract_stream_url(url):
 		speak.speak("Extracting audio...")
 
 		# Build command with optional cookies and environment
-		cmd = [YTDLP_PATH, '-f', 'bestaudio/best', '-g', '--no-playlist']
+		# Use --no-warnings and -q to suppress non-URL output that pollutes stdout
+		cmd = [YTDLP_PATH, '-f', 'bestaudio/best', '-g', '--no-playlist', '--no-warnings', '-q']
 
 		# Add cookies file if configured
 		cookies_path = getattr(get_app().prefs, 'ytdlp_cookies', '')
@@ -323,8 +324,8 @@ media_matchlist = [
 	{"match": r"https?://t.co/.+", "func":return_url},
 ]
 
-# URLs that work best with VLC (yt-dlp extracts stream URL, VLC plays it)
-vlc_only_matchlist = [
+# URLs that need yt-dlp extraction (YouTube, etc.) - work with VLC or sound_lib
+ytdlp_matchlist = [
 	{"match": r"https?://(www\.)?(youtube\.com|youtu\.be)/.+", "func":return_url},
 ]
 
@@ -337,12 +338,13 @@ def get_media_urls(urls):
 				result.append({"url":u, "func":service['func']})
 				break
 		else:
-			# Check VLC-only URLs if VLC is available
-			if VLC_AVAILABLE:
-				for service in vlc_only_matchlist:
-					if re.match(service['match'], u.lower()) != None:
-						result.append({"url":u, "func":service['func'], "vlc_only": True})
-						break
+			# Check yt-dlp supported URLs (YouTube, etc.)
+			# These work with both VLC and sound_lib via yt-dlp stream extraction
+			for service in ytdlp_matchlist:
+				if re.match(service['match'], u.lower()) != None:
+					# Prefer VLC if available, but sound_lib works too
+					result.append({"url":u, "func":service['func'], "vlc_only": VLC_AVAILABLE})
+					break
 	return result
 
 def has_audio_attachment(status):

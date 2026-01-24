@@ -778,7 +778,13 @@ class TweetGui(wx.Dialog):
 		# On Mac, explicitly reactivate main window to fix menu state
 		if platform.system() == "Darwin":
 			from . import main
-			wx.CallAfter(main.window.Raise)
+			def safe_raise():
+				try:
+					if main.window:
+						main.window.Raise()
+				except (RuntimeError, Exception):
+					pass  # Window may have been destroyed
+			wx.CallAfter(safe_raise)
 		self.Destroy()
 
 

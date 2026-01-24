@@ -602,6 +602,10 @@ class timeline(object):
 
 		# Get the actual status ID (for mentions, id is notification_id, real id is in _original_status_id)
 		status_id = getattr(actual_status, '_original_status_id', None) or actual_status.id
+		source_status_id = str(status_id)  # Track source post to focus on it
+
+		# Track position of source status in the stored list
+		source_position = 0
 
 		# Try to use get_status_context for full thread (works better for Bluesky)
 		if hasattr(self.account, '_platform') and self.account._platform:
@@ -615,6 +619,8 @@ class timeline(object):
 					self.statuses.append(ancestor)
 					if hasattr(ancestor, 'id'):
 						self._status_ids.add(str(ancestor.id))
+				# Source position is after all ancestors
+				source_position = len(ancestors)
 				self.statuses.append(actual_status)
 				if hasattr(actual_status, 'id'):
 					self._status_ids.add(str(actual_status.id))
@@ -627,13 +633,29 @@ class timeline(object):
 				# Fall back to recursive method
 				self.process_status(actual_status)
 				self.invalidate_display_cache()
+				# Find source position after recursive loading
+				for i, s in enumerate(self.statuses):
+					if str(getattr(s, 'id', '')) == source_status_id:
+						source_position = i
+						break
 		else:
 			# Fall back to recursive method for Mastodon API
 			self.process_status(actual_status)
 			self.invalidate_display_cache()
+			# Find source position after recursive loading
+			for i, s in enumerate(self.statuses):
+				if str(getattr(s, 'id', '')) == source_status_id:
+					source_position = i
+					break
 
-		# Conversation threads should always be in chronological order (oldest first)
+		# Conversation threads are always displayed in chronological order (oldest first)
 		# regardless of the global reversed setting, since they represent a chat-like thread
+		# Index directly matches the source position in the stored list
+		self.index = source_position
+
+		# Ensure index is valid
+		if len(self.statuses) > 0:
+			self.index = max(0, min(self.index, len(self.statuses) - 1))
 		if self.account.currentTimeline == self:
 			wx.CallAfter(main.window.refreshList)
 		sound.play(self.account, "search")
@@ -701,9 +723,7 @@ class timeline(object):
 				sound.play(self.account, self.name)
 
 	def process_status(self, status):
-		self.statuses.append(status)
-		if hasattr(status, 'id'):
-			self._status_ids.add(str(status.id))
+		# Process parents FIRST to maintain chronological order (oldest first)
 		try:
 			if hasattr(status, "in_reply_to_id") and status.in_reply_to_id is not None:
 				# Check if this is a remote status
@@ -713,12 +733,13 @@ class timeline(object):
 					parent = self.app.lookup_status(self.account, status.in_reply_to_id)
 				if parent:
 					self.process_status(parent)
-			if hasattr(status, "reblog") and status.reblog:
-				self.process_status(status.reblog)
-			if hasattr(status, "quote") and status.quote:
-				self.process_status(status.quote)
 		except:
 			pass
+
+		# Then append current status
+		self.statuses.append(status)
+		if hasattr(status, 'id'):
+			self._status_ids.add(str(status.id))
 
 	def _lookup_remote_status(self, instance_url, status_id):
 		"""Look up a status from a remote instance."""
@@ -1451,7 +1472,10 @@ class timeline(object):
 
 		# Build display list (cache individual items for future use)
 		items = []
-		for i in self.statuses:
+		# Conversation threads are always displayed in chronological order (oldest first)
+		# regardless of global reversed setting, since they represent a chat-like thread
+		statuses_to_display = self.statuses
+		for i in statuses_to_display:
 			# Use cached display string if available
 			cache_attr = '_display_cache'
 			cached = getattr(i, cache_attr, None)

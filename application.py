@@ -252,8 +252,13 @@ class Application:
 		self._initialized = True
 
 		# Check for updates on startup if enabled
+		# Delay slightly to ensure main window is fully initialized on macOS
 		if self.prefs.check_for_updates:
-			threading.Thread(target=self.cfu, daemon=True).start()
+			def delayed_cfu():
+				import time
+				time.sleep(2)  # Wait for window to be fully ready
+				self.cfu()
+			threading.Thread(target=delayed_cfu, daemon=True).start()
 
 	def add_session(self, index=None):
 		"""Add a new account session."""
@@ -830,14 +835,22 @@ class Application:
 		last_status = getattr(c, 'last_status', None)
 
 		if conv_accounts:
-			# Get display names with alias support
+			# Get display names with alias and demojify support
 			names = []
 			for a in conv_accounts[:3]:
 				user_id = str(getattr(a, 'id', ''))
 				if account and user_id and user_id in account.prefs.aliases:
 					names.append(account.prefs.aliases[user_id])
 				else:
-					names.append(a.display_name or a.acct)
+					display_name = a.display_name or a.acct
+					# Apply demojify setting
+					if self.prefs.demojify:
+						demojied = self.demojify(display_name)
+						if demojied == "":
+							display_name = a.acct
+						else:
+							display_name = demojied
+					names.append(display_name)
 			participants = ", ".join(names)
 			if len(conv_accounts) > 3:
 				participants += f" and {len(conv_accounts) - 3} others"
@@ -1364,8 +1377,11 @@ class Application:
 
 	def question(self, title, text, parent=None):
 		dlg = wx.MessageDialog(parent, text, title, wx.YES_NO | wx.ICON_QUESTION)
-		dlg.Raise()
-		dlg.RequestUserAttention()
+		try:
+			dlg.Raise()
+			dlg.RequestUserAttention()
+		except (RuntimeError, Exception):
+			pass  # Window may not be ready on macOS
 		result = dlg.ShowModal()
 		dlg.Destroy()
 		if result == wx.ID_YES:
@@ -1386,15 +1402,21 @@ class Application:
 
 	def warn(self, message, caption='Warning!', parent=None):
 		dlg = wx.MessageDialog(parent, message, caption, wx.OK | wx.ICON_WARNING)
-		dlg.Raise()
-		dlg.RequestUserAttention()
+		try:
+			dlg.Raise()
+			dlg.RequestUserAttention()
+		except (RuntimeError, Exception):
+			pass  # Window may not be ready on macOS
 		dlg.ShowModal()
 		dlg.Destroy()
 
 	def alert(self, message, caption="", parent=None):
 		dlg = wx.MessageDialog(parent, message, caption, wx.OK)
-		dlg.Raise()
-		dlg.RequestUserAttention()
+		try:
+			dlg.Raise()
+			dlg.RequestUserAttention()
+		except (RuntimeError, Exception):
+			pass  # Window may not be ready on macOS
 		dlg.ShowModal()
 		dlg.Destroy()
 

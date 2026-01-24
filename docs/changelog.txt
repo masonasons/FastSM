@@ -15,6 +15,9 @@ Fix Bluesky mentions appearing in notifications - now respects mentions_in_notif
 Fix mentions appearing in notifications from cache - now filtered when loading
 Fix polls from cache having no options - now refreshes status from API before voting
 Fix Bluesky posts showing wrong time in Sent timeline - use UTC instead of local time
+Fix YouTube playback on macOS - yt-dlp now detected without requiring VLC
+Fix Mac crash at startup - safe window Raise() calls and delayed update check
+Fix conversation timeline not focusing on source post when opened
 
 0.4.1
 Reimplement VLC less intrusively this time.
