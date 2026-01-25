@@ -127,6 +127,51 @@ class InstanceViewerDialog(wx.Dialog):
             if 'domain_count' in stats:
                 lines.append(f"  Known Instances: {stats['domain_count']:,}")
 
+        # Configuration/Limits
+        config = info.get('configuration', {})
+        if config:
+            lines.append("")
+            lines.append("Limits:")
+            if config.get('max_characters'):
+                lines.append(f"  Max Characters: {config['max_characters']:,}")
+            if config.get('max_media_attachments'):
+                lines.append(f"  Max Media per Post: {config['max_media_attachments']}")
+            if config.get('characters_reserved_per_url'):
+                lines.append(f"  Characters per URL: {config['characters_reserved_per_url']}")
+            if config.get('max_pinned_statuses'):
+                lines.append(f"  Max Pinned Posts: {config['max_pinned_statuses']}")
+
+            # Media limits
+            if config.get('image_size_limit') or config.get('video_size_limit'):
+                lines.append("")
+                lines.append("Media Limits:")
+                if config.get('image_size_limit'):
+                    size_mb = config['image_size_limit'] / (1024 * 1024)
+                    lines.append(f"  Max Image Size: {size_mb:.1f} MB")
+                if config.get('video_size_limit'):
+                    size_mb = config['video_size_limit'] / (1024 * 1024)
+                    lines.append(f"  Max Video Size: {size_mb:.1f} MB")
+                if config.get('video_frame_rate_limit'):
+                    lines.append(f"  Max Video Frame Rate: {config['video_frame_rate_limit']} fps")
+
+            # Poll limits
+            if config.get('poll_max_options'):
+                lines.append("")
+                lines.append("Poll Limits:")
+                lines.append(f"  Max Options: {config['poll_max_options']}")
+                if config.get('poll_max_characters_per_option'):
+                    lines.append(f"  Max Characters per Option: {config['poll_max_characters_per_option']}")
+                if config.get('poll_min_expiration') and config.get('poll_max_expiration'):
+                    min_hours = config['poll_min_expiration'] / 3600
+                    max_days = config['poll_max_expiration'] / 86400
+                    lines.append(f"  Duration: {min_hours:.0f} hours to {max_days:.0f} days")
+
+            # Features
+            if config.get('translation_enabled'):
+                lines.append("")
+                lines.append("Features:")
+                lines.append("  Translation: Enabled")
+
         # Registration info
         registrations = info.get('registrations', {})
         if registrations:

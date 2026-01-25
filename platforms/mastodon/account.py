@@ -1067,6 +1067,7 @@ class MastodonAccount(PlatformAccount):
                 'contact_account': None,
                 'stats': {},
                 'registrations': {},
+                'configuration': {},
             }
 
             # Handle rules
@@ -1104,6 +1105,45 @@ class MastodonAccount(PlatformAccount):
             if registrations:
                 result['registrations']['enabled'] = getattr(registrations, 'enabled', False)
                 result['registrations']['approval_required'] = getattr(registrations, 'approval_required', False)
+
+            # Handle configuration (v2)
+            configuration = getattr(info, 'configuration', None)
+            if configuration:
+                # Status/post limits
+                statuses = getattr(configuration, 'statuses', None)
+                if statuses:
+                    result['configuration']['max_characters'] = getattr(statuses, 'max_characters', 0)
+                    result['configuration']['max_media_attachments'] = getattr(statuses, 'max_media_attachments', 0)
+                    result['configuration']['characters_reserved_per_url'] = getattr(statuses, 'characters_reserved_per_url', 0)
+
+                # Media attachment limits
+                media = getattr(configuration, 'media_attachments', None)
+                if media:
+                    result['configuration']['supported_mime_types'] = getattr(media, 'supported_mime_types', [])
+                    result['configuration']['image_size_limit'] = getattr(media, 'image_size_limit', 0)
+                    result['configuration']['video_size_limit'] = getattr(media, 'video_size_limit', 0)
+                    result['configuration']['image_matrix_limit'] = getattr(media, 'image_matrix_limit', 0)
+                    result['configuration']['video_matrix_limit'] = getattr(media, 'video_matrix_limit', 0)
+                    result['configuration']['video_frame_rate_limit'] = getattr(media, 'video_frame_rate_limit', 0)
+
+                # Poll limits
+                polls = getattr(configuration, 'polls', None)
+                if polls:
+                    result['configuration']['poll_max_options'] = getattr(polls, 'max_options', 0)
+                    result['configuration']['poll_max_characters_per_option'] = getattr(polls, 'max_characters_per_option', 0)
+                    result['configuration']['poll_min_expiration'] = getattr(polls, 'min_expiration', 0)
+                    result['configuration']['poll_max_expiration'] = getattr(polls, 'max_expiration', 0)
+
+                # Account limits
+                accounts = getattr(configuration, 'accounts', None)
+                if accounts:
+                    result['configuration']['max_pinned_statuses'] = getattr(accounts, 'max_pinned_statuses', 0)
+                    result['configuration']['max_featured_tags'] = getattr(accounts, 'max_featured_tags', 0)
+
+                # Translation support
+                translation = getattr(configuration, 'translation', None)
+                if translation:
+                    result['configuration']['translation_enabled'] = getattr(translation, 'enabled', False)
 
             return result
         except MastodonError as e:

@@ -26,6 +26,7 @@ Fix server-side filters with "hide" action showing posts as CW instead of hiding
 Improve user autocomplete - now works with word at cursor, no @ required
 Add View Instance option (Alt+I in window, Ctrl+Win+Alt+I invisible interface)
 - Shows instance name, description, version, stats, rules, contact info
+- Shows server limits: max characters, media limits, poll settings
 - Automatically detects remote instance when viewing instance/remote user timelines
 
 0.4.1
