@@ -1631,7 +1631,7 @@ class MainGui(wx.Frame):
 		elif tl.type == 'remote_user':
 			# Remote user timeline - extract instance from data
 			if isinstance(tl.data, dict):
-				instance_url = tl.data.get('instance_url')
+				instance_url = tl.data.get('url')
 
 		from . import instance_viewer
 		instance_viewer.view_instance(account, instance_url)
