@@ -147,7 +147,8 @@ class mastodon(object):
 					"FastSM",
 					scopes=['read', 'write', 'follow', 'push'],
 					redirect_uris='urn:ietf:wg:oauth:2.0:oob',
-					api_base_url=self.prefs.instance_url
+					api_base_url=self.prefs.instance_url,
+					user_agent=f"{APP_NAME}/{APP_VERSION}"
 				)
 				self.prefs.client_id = client_id
 				self.prefs.client_secret = client_secret
