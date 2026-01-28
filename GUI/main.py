@@ -170,8 +170,12 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnExplore, m_explore)
 		m_instance = menu3.Append(-1, "View &Instance\tAlt+I", "instance")
 		self.Bind(wx.EVT_MENU, self.OnViewInstance, m_instance)
-		m_find = menu3.Append(-1, "Find in timeline\tF3", "find")
+		m_find = menu3.Append(-1, "Find in timeline\tCtrl+F", "find")
 		self.Bind(wx.EVT_MENU, self.OnFind, m_find)
+		m_find_next = menu3.Append(-1, "Find next\tF3", "find_next")
+		self.Bind(wx.EVT_MENU, self.OnFindNext, m_find_next)
+		m_find_prev = menu3.Append(-1, "Find previous\tShift+F3", "find_prev")
+		self.Bind(wx.EVT_MENU, self.OnFindPrevious, m_find_prev)
 		self.m_close_timeline = menu3.Append(-1, "Close timeline\tCtrl+W", "removetimeline")
 		self.m_close_timeline.Enable(False)
 		self.Bind(wx.EVT_MENU, self.OnCloseTimeline, self.m_close_timeline)
@@ -1710,6 +1714,62 @@ class MainGui(wx.Frame):
 
 		if not found:
 			speak.speak(f"Not found: {self._find_text}")
+
+	def OnFindNext(self, event=None):
+		"""Find next occurrence of the search text."""
+		if not self._find_text:
+			# No previous search, open dialog
+			self.OnFind(event)
+			return
+
+		tl = get_app().currentAccount.currentTimeline
+		if not tl.statuses:
+			speak.speak("No posts to search")
+			return
+
+		# Get displayed text for each post
+		displayed = tl.get()
+		start_index = tl.index + 1
+
+		# Search forward, wrapping around
+		for offset in range(len(displayed)):
+			idx = (start_index + offset) % len(displayed)
+			if self._find_text in displayed[idx].lower():
+				tl.index = idx
+				self.list2.SetSelection(idx)
+				self.on_list2_change(None)
+				speak.speak(displayed[idx])
+				return
+
+		speak.speak(f"Not found: {self._find_text}")
+
+	def OnFindPrevious(self, event=None):
+		"""Find previous occurrence of the search text."""
+		if not self._find_text:
+			# No previous search, open dialog
+			self.OnFind(event)
+			return
+
+		tl = get_app().currentAccount.currentTimeline
+		if not tl.statuses:
+			speak.speak("No posts to search")
+			return
+
+		# Get displayed text for each post
+		displayed = tl.get()
+		start_index = tl.index - 1
+
+		# Search backward, wrapping around
+		for offset in range(len(displayed)):
+			idx = (start_index - offset) % len(displayed)
+			if self._find_text in displayed[idx].lower():
+				tl.index = idx
+				self.list2.SetSelection(idx)
+				self.on_list2_change(None)
+				speak.speak(displayed[idx])
+				return
+
+		speak.speak(f"Not found: {self._find_text}")
 
 	def OnLists(self, event=None):
 		s=lists.ListsGui(get_app().currentAccount)
