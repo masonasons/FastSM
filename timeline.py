@@ -278,7 +278,8 @@ class timeline(object):
 		if getattr(self.account.prefs, 'platform_type', '') == 'bluesky':
 			return False
 		# Streamable timeline types
-		if self.type in ('list', 'local', 'federated', 'instance'):
+		# Note: instance (remote) timelines can't stream - most instances require auth
+		if self.type in ('list', 'local', 'federated'):
 			return True
 		# Search timelines with hashtag queries can stream
 		if self.type == 'search' and self.data and str(self.data).startswith('#'):
@@ -297,11 +298,6 @@ class timeline(object):
 			return f"{base_url}/api/v1/streaming/public/local"
 		elif self.type == 'federated':
 			return f"{base_url}/api/v1/streaming/public"
-		elif self.type == 'instance':
-			# Remote instance local timeline - connect to that instance's public/local stream
-			# self.data contains the remote instance URL
-			remote_url = self.data.rstrip('/')
-			return f"{remote_url}/api/v1/streaming/public/local"
 		elif self.type == 'search' and self.data and str(self.data).startswith('#'):
 			# Hashtag search - stream the hashtag
 			tag = str(self.data).lstrip('#')
@@ -367,8 +363,10 @@ class timeline(object):
 
 				# Only list timelines require authentication
 				# Public streams (local, federated, hashtag, instance) don't need auth
+				from version import APP_NAME, APP_VERSION
 				headers = {
 					"Accept": "text/event-stream",
+					"User-Agent": f"{APP_NAME}/{APP_VERSION}",
 				}
 				if self.type == 'list':
 					headers["Authorization"] = f"Bearer {self.account.prefs.access_token}"
