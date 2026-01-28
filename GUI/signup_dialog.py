@@ -126,7 +126,8 @@ class MastodonInstanceDialog(wx.Dialog):
 
 		try:
 			# Try v2 instance API first
-			response = requests.get(f"{instance}/api/v2/instance", timeout=10)
+			headers = {'User-Agent': f'{APP_NAME}/{APP_VERSION}'}
+			response = requests.get(f"{instance}/api/v2/instance", headers=headers, timeout=10)
 			if response.status_code == 200:
 				data = response.json()
 				self.instance_info = data
@@ -174,7 +175,7 @@ class MastodonInstanceDialog(wx.Dialog):
 					speak.speak("Registrations closed")
 			else:
 				# Try v1 instance API as fallback
-				response = requests.get(f"{instance}/api/v1/instance", timeout=10)
+				response = requests.get(f"{instance}/api/v1/instance", headers=headers, timeout=10)
 				if response.status_code == 200:
 					data = response.json()
 					self.instance_info = data
@@ -305,7 +306,8 @@ class MastodonSignupDialog(wx.Dialog):
 
 			# If no rules in instance info, fetch from API
 			if not rules:
-				response = requests.get(f"{self.instance_url}/api/v1/instance/rules", timeout=10)
+				headers = {'User-Agent': f'{APP_NAME}/{APP_VERSION}'}
+				response = requests.get(f"{self.instance_url}/api/v1/instance/rules", headers=headers, timeout=10)
 				if response.status_code == 200:
 					rules = response.json()
 
@@ -386,6 +388,7 @@ class MastodonSignupDialog(wx.Dialog):
 			# since Mastodon.py doesn't support invite_code parameter
 			if self.invite_code:
 				# Get app token for registration
+				headers = {'User-Agent': f'{APP_NAME}/{APP_VERSION}'}
 				token_response = requests.post(
 					f"{self.instance_url}/oauth/token",
 					data={
@@ -394,6 +397,7 @@ class MastodonSignupDialog(wx.Dialog):
 						'grant_type': 'client_credentials',
 						'scope': 'read write follow push'
 					},
+					headers=headers,
 					timeout=30
 				)
 
@@ -424,7 +428,7 @@ class MastodonSignupDialog(wx.Dialog):
 				response = requests.post(
 					f"{self.instance_url}/api/v1/accounts",
 					data=data,
-					headers={'Authorization': f'Bearer {app_token}'},
+					headers={'Authorization': f'Bearer {app_token}', 'User-Agent': f'{APP_NAME}/{APP_VERSION}'},
 					timeout=30
 				)
 
@@ -640,7 +644,7 @@ class BlueskySignupDialog(wx.Dialog):
 			response = requests.post(
 				f"{pds_url}/xrpc/com.atproto.server.createAccount",
 				json=data,
-				headers={"Content-Type": "application/json"},
+				headers={"Content-Type": "application/json", "User-Agent": f"{APP_NAME}/{APP_VERSION}"},
 				timeout=30
 			)
 
