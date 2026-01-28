@@ -1729,11 +1729,9 @@ class MainGui(wx.Frame):
 
 		# Get displayed text for each post
 		displayed = tl.get()
-		start_index = tl.index + 1
 
-		# Search forward, wrapping around
-		for offset in range(len(displayed)):
-			idx = (start_index + offset) % len(displayed)
+		# Search forward from current position (no wrapping)
+		for idx in range(tl.index + 1, len(displayed)):
 			if self._find_text in displayed[idx].lower():
 				tl.index = idx
 				self.list2.SetSelection(idx)
@@ -1741,7 +1739,7 @@ class MainGui(wx.Frame):
 				speak.speak(displayed[idx])
 				return
 
-		speak.speak(f"Not found: {self._find_text}")
+		speak.speak("No more items found")
 
 	def OnFindPrevious(self, event=None):
 		"""Find previous occurrence of the search text."""
@@ -1757,11 +1755,9 @@ class MainGui(wx.Frame):
 
 		# Get displayed text for each post
 		displayed = tl.get()
-		start_index = tl.index - 1
 
-		# Search backward, wrapping around
-		for offset in range(len(displayed)):
-			idx = (start_index - offset) % len(displayed)
+		# Search backward from current position (no wrapping)
+		for idx in range(tl.index - 1, -1, -1):
 			if self._find_text in displayed[idx].lower():
 				tl.index = idx
 				self.list2.SetSelection(idx)
@@ -1769,7 +1765,7 @@ class MainGui(wx.Frame):
 				speak.speak(displayed[idx])
 				return
 
-		speak.speak(f"Not found: {self._find_text}")
+		speak.speak("No more items found")
 
 	def OnLists(self, event=None):
 		s=lists.ListsGui(get_app().currentAccount)
