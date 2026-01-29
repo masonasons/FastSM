@@ -21,6 +21,8 @@ TWEESECAKE_MAP = {
     'favorites': 'likes',
     'image': 'image',
     'max': 'max_length',
+    'media': 'media',
+    'mention': None,
     'new_dm': 'messages',
     'new_mention': 'mentions',
     'new_notification': 'notification',
