@@ -14,7 +14,9 @@ import shutil
 import subprocess
 
 # Mapping from TweeseCake sound names to FastSM names
+# Includes both Mastodon-Default sounds and shared Default sounds
 TWEESECAKE_MAP = {
+    # Mastodon-specific sounds
     'favorite': 'like',
     'favorites': 'likes',
     'image': 'image',
@@ -34,6 +36,14 @@ TWEESECAKE_MAP = {
     'unfavorite': 'unlike',
     'user': 'user',
     'vote': None,  # No FastSM equivalent
+    # Shared/Default sounds
+    'boundary': 'boundary',
+    'close_timeline': 'close',
+    'error': 'error',
+    'follow': 'follow',
+    'media': 'media',
+    'mention': 'mentions',
+    'unfollow': 'unfollow',
 }
 
 # Mapping from TWBlue sound names to FastSM names
