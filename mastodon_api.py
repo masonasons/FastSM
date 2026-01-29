@@ -184,7 +184,6 @@ class mastodon(object):
 				_exit_app()
 
 		# Initialize the API
-		from version import APP_NAME, APP_VERSION
 		self.api = Mastodon(
 			client_id=self.prefs.client_id,
 			client_secret=self.prefs.client_secret,
