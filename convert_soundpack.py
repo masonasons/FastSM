@@ -176,11 +176,12 @@ def convert_soundpack(source_dir, dest_dir, pack_type, ffmpeg_path=None):
     unmapped = []
 
     for source_name, source_path in sorted(source_files.items()):
-        # Look up the FastSM name
-        fastsm_name = mapping.get(source_name)
+        # Look up the FastSM name (case insensitive)
+        source_name_lower = source_name.lower()
+        fastsm_name = mapping.get(source_name_lower)
 
         if fastsm_name is None:
-            if source_name in mapping:
+            if source_name_lower in mapping:
                 # Explicitly mapped to None (no equivalent)
                 print(f"  Skipping {source_name}{extension} (no FastSM equivalent)")
                 skipped += 1
