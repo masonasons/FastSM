@@ -1513,6 +1513,10 @@ class timeline(object):
 		else:
 			tl = items
 		if tl is not None:
+			# Sort scheduled posts by scheduled date (soonest first)
+			if self.type == "scheduled" and tl:
+				tl = sorted(tl, key=lambda x: getattr(x, '_scheduled_at', None) or getattr(x, 'scheduled_at', None) or '')
+
 			newitems = 0
 			objs = []
 			objs2 = []

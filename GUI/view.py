@@ -14,53 +14,74 @@ class ViewGui(wx.Dialog):
 		self.status = status
 		self.type = "post"
 
-		# Get display name for title - handle boosts specially
-		display_name = getattr(status.account, 'display_name', '') or status.account.acct
+		# Check if this is a scheduled post
+		is_scheduled = getattr(status, '_scheduled', False)
 
-		# Check if this is a boost/reblog
-		is_boost = hasattr(status, 'reblog') and status.reblog is not None
-		if is_boost:
-			orig_author = getattr(status.reblog, 'account', None)
-			if orig_author:
-				orig_display = getattr(orig_author, 'display_name', '') or getattr(orig_author, 'acct', 'Unknown')
-				title = f"Boost by {display_name} of {orig_display}'s post"
+		if is_scheduled:
+			# Scheduled post - use own account info and don't try to fetch
+			title = "View Scheduled Post"
+			# Get content from params or content attribute
+			params = getattr(status, 'params', None)
+			if params:
+				if isinstance(params, dict):
+					self.post_text = params.get('text', '')
+				else:
+					self.post_text = getattr(params, 'text', '')
 			else:
-				title = f"Boost by {display_name}"
+				content = getattr(status, 'content', '')
+				if content:
+					self.post_text = self.account.app.html_to_text_for_edit(content, [])
+				else:
+					self.post_text = getattr(status, 'text', '')
 		else:
-			title = f"View Post from {display_name} (@{status.account.acct})"
+			# Regular post handling
+			# Get display name for title - handle boosts specially
+			display_name = getattr(status.account, 'display_name', '') or status.account.acct
 
-		try:
-			# Fetch full status details using platform backend
-			fetched_status = None
-			# For reposts, try to get the reblogged post's details
-			status_id = status.id
-			if hasattr(status, 'reblog') and status.reblog:
-				status_id = status.reblog.id
-			# Remove :repost suffix if present (Bluesky)
-			if isinstance(status_id, str) and ':repost' in status_id:
-				status_id = status_id.replace(':repost', '')
-
-			if hasattr(account, '_platform') and account._platform:
-				fetched_status = account._platform.get_status(status_id)
+			# Check if this is a boost/reblog
+			is_boost = hasattr(status, 'reblog') and status.reblog is not None
+			if is_boost:
+				orig_author = getattr(status.reblog, 'account', None)
+				if orig_author:
+					orig_display = getattr(orig_author, 'display_name', '') or getattr(orig_author, 'acct', 'Unknown')
+					title = f"Boost by {display_name} of {orig_display}'s post"
+				else:
+					title = f"Boost by {display_name}"
 			else:
-				fetched_status = account.api.status(id=status_id)
+				title = f"View Post from {display_name} (@{status.account.acct})"
 
-			# Use fetched status if available, otherwise use original
-			if fetched_status:
-				self.status = fetched_status
-			# else keep self.status as the original
-		except Exception:
-			# Failed to fetch, use original status
-			pass
+			try:
+				# Fetch full status details using platform backend
+				fetched_status = None
+				# For reposts, try to get the reblogged post's details
+				status_id = status.id
+				if hasattr(status, 'reblog') and status.reblog:
+					status_id = status.reblog.id
+				# Remove :repost suffix if present (Bluesky)
+				if isinstance(status_id, str) and ':repost' in status_id:
+					status_id = status_id.replace(':repost', '')
 
-		# Always show full text in view dialog, ignoring CW preference
-		# Use html_to_text_for_edit for proper newline preservation
-		content = getattr(self.status, 'content', '')
-		mentions = getattr(self.status, 'mentions', [])
-		self.post_text = self.account.app.html_to_text_for_edit(content, mentions)
+				if hasattr(account, '_platform') and account._platform:
+					fetched_status = account._platform.get_status(status_id)
+				else:
+					fetched_status = account.api.status(id=status_id)
 
-		# Update display_name to match the current self.status.account (may have changed for boosts)
-		display_name = getattr(self.status.account, 'display_name', '') or self.status.account.acct
+				# Use fetched status if available, otherwise use original
+				if fetched_status:
+					self.status = fetched_status
+				# else keep self.status as the original
+			except Exception:
+				# Failed to fetch, use original status
+				pass
+
+			# Always show full text in view dialog, ignoring CW preference
+			# Use html_to_text_for_edit for proper newline preservation
+			content = getattr(self.status, 'content', '')
+			mentions = getattr(self.status, 'mentions', [])
+			self.post_text = self.account.app.html_to_text_for_edit(content, mentions)
+
+			# Update display_name to match the current self.status.account (may have changed for boosts)
+			display_name = getattr(self.status.account, 'display_name', '') or self.status.account.acct
 
 		wx.Dialog.__init__(self, None, title=title, size=(350, 200))
 
@@ -88,50 +109,83 @@ class ViewGui(wx.Dialog):
 		self.main_box.Add(self.text2, 0, wx.EXPAND | wx.ALL, 10)
 
 		extra = ""
-		# Handle media attachments
-		if hasattr(self.status, 'media_attachments') and self.status.media_attachments:
-			for media in self.status.media_attachments:
-				media_type = getattr(media, 'type', 'unknown') or 'media'
-				# Capitalize media type nicely (image -> Image, gifv -> GIF, video -> Video)
-				type_display = media_type.upper() if media_type == 'gifv' else media_type.capitalize()
-				description = getattr(media, 'description', None) or getattr(media, 'alt', None)
-				if description:
-					extra += f"({type_display}) description: {description}\r\n"
+
+		if is_scheduled:
+			# Scheduled post details
+			scheduled_at = getattr(self.status, '_scheduled_at', None) or getattr(self.status, 'scheduled_at', None)
+			if scheduled_at:
+				extra += "Scheduled for: " + self.account.app.parse_date(scheduled_at) + "\r\n"
+
+			# Get visibility from params or status
+			params = getattr(self.status, 'params', None)
+			if params:
+				if isinstance(params, dict):
+					visibility = params.get('visibility', 'public')
+					spoiler = params.get('spoiler_text', '')
 				else:
-					extra += f"({type_display}) with no description\r\n"
+					visibility = getattr(params, 'visibility', 'public')
+					spoiler = getattr(params, 'spoiler_text', '')
+			else:
+				visibility = getattr(self.status, 'visibility', 'public')
+				spoiler = getattr(self.status, 'spoiler_text', '')
 
-		# Content warning / spoiler text
-		spoiler = getattr(self.status, 'spoiler_text', '')
-		if spoiler:
-			extra += "Content Warning: " + spoiler + "\r\n"
+			if spoiler:
+				extra += "Content Warning: " + spoiler + "\r\n"
+			extra += "Visibility: " + str(visibility) + "\r\n"
 
-		# Server-side filter warnings
-		filtered = getattr(self.status, 'filtered', None)
-		if filtered:
-			filter_titles = []
-			for result in filtered:
-				filter_obj = getattr(result, 'filter', None)
-				if filter_obj:
-					title = getattr(filter_obj, 'title', None)
-					if title:
-						filter_titles.append(title)
-			if filter_titles:
-				extra += "Filtered by: " + ", ".join(filter_titles) + "\r\n"
+			# Handle media attachments
+			media_attachments = getattr(self.status, 'media_attachments', None)
+			if media_attachments:
+				extra += f"Attachments: {len(media_attachments)}\r\n"
 
-		# Visibility (Bluesky doesn't have visibility, so it may be None)
-		visibility = getattr(self.status, 'visibility', None) or 'public'
-		extra += "Visibility: " + str(visibility) + "\r\n"
+			details = extra
+		else:
+			# Regular post details
+			# Handle media attachments
+			if hasattr(self.status, 'media_attachments') and self.status.media_attachments:
+				for media in self.status.media_attachments:
+					media_type = getattr(media, 'type', 'unknown') or 'media'
+					# Capitalize media type nicely (image -> Image, gifv -> GIF, video -> Video)
+					type_display = media_type.upper() if media_type == 'gifv' else media_type.capitalize()
+					description = getattr(media, 'description', None) or getattr(media, 'alt', None)
+					if description:
+						extra += f"({type_display}) description: {description}\r\n"
+					else:
+						extra += f"({type_display}) with no description\r\n"
 
-		# Application/source
-		app = getattr(self.status, 'application', None)
-		source = app.get('name', 'Unknown') if app and isinstance(app, dict) else (getattr(app, 'name', 'Unknown') if app else 'Unknown')
+			# Content warning / spoiler text
+			spoiler = getattr(self.status, 'spoiler_text', '')
+			if spoiler:
+				extra += "Content Warning: " + spoiler + "\r\n"
 
-		# Get created_at safely
-		created_at = getattr(self.status, 'created_at', None)
-		posted_str = self.account.app.parse_date(created_at) if created_at else 'Unknown'
+			# Server-side filter warnings
+			filtered = getattr(self.status, 'filtered', None)
+			if filtered:
+				filter_titles = []
+				for result in filtered:
+					filter_obj = getattr(result, 'filter', None)
+					if filter_obj:
+						title = getattr(filter_obj, 'title', None)
+						if title:
+							filter_titles.append(title)
+				if filter_titles:
+					extra += "Filtered by: " + ", ".join(filter_titles) + "\r\n"
 
-		quotes_count = getattr(self.status, 'quotes_count', 0) or 0
-		details = extra + "Posted: " + posted_str + "\r\nFrom: " + source + "\r\nFavourited " + str(getattr(self.status, 'favourites_count', 0) or 0) + " times\r\nBoosted " + str(getattr(self.status, 'boosts_count', 0) or getattr(self.status, 'reblogs_count', 0) or 0) + " times\r\nQuoted " + str(quotes_count) + " times."
+			# Visibility (Bluesky doesn't have visibility, so it may be None)
+			visibility = getattr(self.status, 'visibility', None) or 'public'
+			extra += "Visibility: " + str(visibility) + "\r\n"
+
+			# Application/source
+			app = getattr(self.status, 'application', None)
+			source = app.get('name', 'Unknown') if app and isinstance(app, dict) else (getattr(app, 'name', 'Unknown') if app else 'Unknown')
+
+			# Get created_at safely
+			created_at = getattr(self.status, 'created_at', None)
+			posted_str = self.account.app.parse_date(created_at) if created_at else 'Unknown'
+
+			quotes_count = getattr(self.status, 'quotes_count', 0) or 0
+			details = extra + "Posted: " + posted_str + "\r\nFrom: " + source + "\r\nFavourited " + str(getattr(self.status, 'favourites_count', 0) or 0) + " times\r\nBoosted " + str(getattr(self.status, 'boosts_count', 0) or getattr(self.status, 'reblogs_count', 0) or 0) + " times\r\nQuoted " + str(quotes_count) + " times."
+
 		self.text2.SetValue(details)
 
 		if platform.system() == "Darwin":
@@ -145,54 +199,66 @@ class ViewGui(wx.Dialog):
 		self.view_boosters.Bind(wx.EVT_BUTTON, self.OnViewBoosters)
 		self.main_box.Add(self.view_boosters, 0, wx.ALL, 10)
 
-		if getattr(self.status, 'reblogs_count', 0) == 0:
-			self.view_boosters.Enable(False)
-
 		self.view_favoriters = wx.Button(self.panel, -1, "View Favo&riters")
 		self.view_favoriters.Bind(wx.EVT_BUTTON, self.OnViewFavoriters)
 		self.main_box.Add(self.view_favoriters, 0, wx.ALL, 10)
-
-		if getattr(self.status, 'favourites_count', 0) == 0:
-			self.view_favoriters.Enable(False)
 
 		self.view_history = wx.Button(self.panel, -1, "View Edit &History")
 		self.view_history.Bind(wx.EVT_BUTTON, self.OnViewEditHistory)
 		self.main_box.Add(self.view_history, 0, wx.ALL, 10)
 
-		# Only enable edit history if the post has been edited
-		platform_type = getattr(account.prefs, 'platform_type', 'mastodon')
-		has_edits = getattr(self.status, 'edited_at', None) is not None
-		if not has_edits or platform_type != 'mastodon':
-			self.view_history.Enable(False)
-
 		self.view_quotes = wx.Button(self.panel, -1, "View &Quotes")
 		self.view_quotes.Bind(wx.EVT_BUTTON, self.OnViewQuotes)
 		self.main_box.Add(self.view_quotes, 0, wx.ALL, 10)
-
-		# Only enable view quotes if there are quotes and on Mastodon
-		if quotes_count == 0 or platform_type != 'mastodon':
-			self.view_quotes.Enable(False)
-
-		# Check if this is a boost or quote
-		has_reblog = hasattr(self.status, 'reblog') and self.status.reblog
-		has_quote = hasattr(self.status, 'quote') and self.status.quote
-		if not has_reblog and not has_quote:
-			self.view_orig.Enable(False)
 
 		self.view_image = wx.Button(self.panel, -1, "&View Image")
 		self.view_image.Bind(wx.EVT_BUTTON, self.OnViewImage)
 		self.main_box.Add(self.view_image, 0, wx.ALL, 10)
 
-		# Only enable View Image button if there are image attachments
-		has_images = False
-		if hasattr(self.status, 'media_attachments') and self.status.media_attachments:
-			for attachment in self.status.media_attachments:
-				media_type = getattr(attachment, 'type', '') or ''
-				if media_type.lower() == 'image':
-					has_images = True
-					break
-		if not has_images:
+		# Disable buttons based on status type
+		if is_scheduled:
+			# Scheduled posts haven't been posted yet, so most actions don't apply
+			self.view_orig.Enable(False)
+			self.view_boosters.Enable(False)
+			self.view_favoriters.Enable(False)
+			self.view_history.Enable(False)
+			self.view_quotes.Enable(False)
 			self.view_image.Enable(False)
+		else:
+			# Regular post button states
+			if getattr(self.status, 'reblogs_count', 0) == 0:
+				self.view_boosters.Enable(False)
+
+			if getattr(self.status, 'favourites_count', 0) == 0:
+				self.view_favoriters.Enable(False)
+
+			# Only enable edit history if the post has been edited
+			platform_type = getattr(account.prefs, 'platform_type', 'mastodon')
+			has_edits = getattr(self.status, 'edited_at', None) is not None
+			if not has_edits or platform_type != 'mastodon':
+				self.view_history.Enable(False)
+
+			# Only enable view quotes if there are quotes and on Mastodon
+			quotes_count = getattr(self.status, 'quotes_count', 0) or 0
+			if quotes_count == 0 or platform_type != 'mastodon':
+				self.view_quotes.Enable(False)
+
+			# Check if this is a boost or quote
+			has_reblog = hasattr(self.status, 'reblog') and self.status.reblog
+			has_quote = hasattr(self.status, 'quote') and self.status.quote
+			if not has_reblog and not has_quote:
+				self.view_orig.Enable(False)
+
+			# Only enable View Image button if there are image attachments
+			has_images = False
+			if hasattr(self.status, 'media_attachments') and self.status.media_attachments:
+				for attachment in self.status.media_attachments:
+					media_type = getattr(attachment, 'type', '') or ''
+					if media_type.lower() == 'image':
+						has_images = True
+						break
+			if not has_images:
+				self.view_image.Enable(False)
 
 		self.reply = wx.Button(self.panel, -1, "&Reply")
 		self.reply.Bind(wx.EVT_BUTTON, self.OnReply)
@@ -206,13 +272,25 @@ class ViewGui(wx.Dialog):
 		self.favourite.Bind(wx.EVT_BUTTON, self.OnFavourite)
 		self.main_box.Add(self.favourite, 0, wx.ALL, 10)
 
-		users_in_status = self.account.app.get_user_objects_in_status(self.account, self.status, True, True)
-		if len(users_in_status) > 0:
-			self.profile = wx.Button(self.panel, -1, "View &Profile of " + display_name + " and " + str(len(users_in_status)) + " more")
+		if is_scheduled:
+			# For scheduled posts, use own account name
+			display_name = getattr(self.account.me, 'display_name', '') or self.account.me.acct
+			self.profile = wx.Button(self.panel, -1, "View &Profile")
+			self.message = wx.Button(self.panel, -1, "&Message")
+			# Disable actions that don't apply to scheduled posts
+			self.reply.Enable(False)
+			self.boost.Enable(False)
+			self.favourite.Enable(False)
+			self.message.Enable(False)
+			self.profile.Enable(False)
 		else:
-			self.profile = wx.Button(self.panel, -1, "View &Profile of " + display_name)
+			users_in_status = self.account.app.get_user_objects_in_status(self.account, self.status, True, True)
+			if len(users_in_status) > 0:
+				self.profile = wx.Button(self.panel, -1, "View &Profile of " + display_name + " and " + str(len(users_in_status)) + " more")
+			else:
+				self.profile = wx.Button(self.panel, -1, "View &Profile of " + display_name)
+			self.message = wx.Button(self.panel, -1, "&Message " + display_name)
 
-		self.message = wx.Button(self.panel, -1, "&Message " + display_name)
 		self.message.Bind(wx.EVT_BUTTON, self.OnMessage)
 		self.main_box.Add(self.message, 0, wx.ALL, 10)
 
@@ -222,6 +300,9 @@ class ViewGui(wx.Dialog):
 		self.report_btn = wx.Button(self.panel, -1, "Re&port Post")
 		self.report_btn.Bind(wx.EVT_BUTTON, self.OnReport)
 		self.main_box.Add(self.report_btn, 0, wx.ALL, 10)
+
+		if is_scheduled:
+			self.report_btn.Enable(False)
 
 		self.close = wx.Button(self.panel, wx.ID_CANCEL, "&Close")
 		self.close.Bind(wx.EVT_BUTTON, self.OnClose)
