@@ -292,14 +292,19 @@ class invisible_interface(object):
 		"""Open the context menu from invisible interface."""
 		import wx
 		def show_menu():
-			if not main.window.IsShown():
-				main.window.Show(True)
-				main.window.Raise()
-			# Sync the list selection
-			main.window.list.SetSelection(get_app().currentAccount.currentIndex)
-			main.window.list2.SetSelection(get_app().currentAccount.currentTimeline.index)
-			main.window.list2.SetFocus()
-			main.window.OnPostContextMenu(None)
+			if not main.window:
+				return
+			try:
+				if not main.window.IsShown():
+					main.window.Show(True)
+					main.safe_raise_window(main.window)
+				# Sync the list selection
+				main.window.list.SetSelection(get_app().currentAccount.currentIndex)
+				main.window.list2.SetSelection(get_app().currentAccount.currentTimeline.index)
+				main.window.list2.SetFocus()
+				main.window.OnPostContextMenu(None)
+			except (RuntimeError, Exception):
+				pass  # Window may have been destroyed
 		wx.CallAfter(show_menu)
 
 inv=invisible_interface()

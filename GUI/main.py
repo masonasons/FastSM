@@ -13,6 +13,36 @@ import sound
 import timeline
 import threading
 
+
+def safe_raise_window(win):
+	"""Safely raise a window, handling macOS segfault issues with destroyed windows.
+
+	On macOS, calling Raise() on a window with an invalid native handle causes
+	a segfault at the C++ level before Python exception handling kicks in.
+	This function checks window validity before attempting to raise.
+
+	Returns True if raise succeeded, False otherwise.
+	"""
+	if not win:
+		return False
+	try:
+		# Check if window is being deleted or already destroyed
+		if hasattr(win, 'IsBeingDeleted') and win.IsBeingDeleted():
+			return False
+		# On macOS, also verify the window has a valid native handle
+		if platform.system() == "Darwin":
+			try:
+				# GetHandle() returns 0 or raises if window is invalid
+				handle = win.GetHandle()
+				if not handle:
+					return False
+			except (RuntimeError, Exception):
+				return False
+		win.Raise()
+		return True
+	except (RuntimeError, Exception):
+		return False
+
 class MainGui(wx.Frame):
 	def __init__(self, title):
 		self.invisible=False
@@ -550,14 +580,14 @@ class MainGui(wx.Frame):
 	def ToggleWindow(self):
 		# Window hiding not supported on Mac
 		if platform.system() == "Darwin":
-			self.Raise()
+			safe_raise_window(self)
 			return
 		if self.IsShown():
 			self.Show(False)
 			get_app().prefs.window_shown=False
 		else:
 			self.Show(True)
-			self.Raise()
+			safe_raise_window(self)
 			get_app().prefs.window_shown=True
 			if not get_app().prefs.invisible_sync:
 				self.list.SetSelection(get_app().currentAccount.currentIndex)
@@ -569,14 +599,20 @@ class MainGui(wx.Frame):
 		"""Handle main window activation - restore focus to open dialogs."""
 		if event.GetActive():
 			# When main window is activated, check for open dialogs and raise them
-			# Clean up any closed dialogs first
-			self._open_dialogs = [d for d in self._open_dialogs if d and d.IsShown()]
-			# Raise any open dialogs
-			for dialog in self._open_dialogs:
+			# Clean up any closed dialogs first - use safe checks for macOS
+			valid_dialogs = []
+			for d in self._open_dialogs:
+				if not d:
+					continue
 				try:
-					dialog.Raise()
-				except:
-					pass
+					if d.IsShown():
+						valid_dialogs.append(d)
+				except (RuntimeError, Exception):
+					pass  # Dialog was destroyed
+			self._open_dialogs = valid_dialogs
+			# Raise any open dialogs using safe method
+			for dialog in self._open_dialogs:
+				safe_raise_window(dialog)
 		event.Skip()
 
 	def register_dialog(self, dialog):
