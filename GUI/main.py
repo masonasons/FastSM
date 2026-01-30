@@ -48,9 +48,11 @@ class MainGui(wx.Frame):
 		if platform.system()!="Darwin":
 			self.trayicon=tray.TaskBarIcon(self)
 		self.handler=WXKeyboardHandler(self)
-		self.handler.register_key("control+win+shift+t",self.ToggleWindow)
-		self.handler.register_key("alt+win+shift+q",self.OnClose)
-		self.handler.register_key("control+win+shift+a",self.OnAudioPlayer)
+		# Global hotkeys only on Windows/Linux - not supported properly on Mac
+		if platform.system() != "Darwin":
+			self.handler.register_key("control+win+shift+t",self.ToggleWindow)
+			self.handler.register_key("alt+win+shift+q",self.OnClose)
+			self.handler.register_key("control+win+shift+a",self.OnAudioPlayer)
 		self.Bind(wx.EVT_CLOSE, self.OnClose)
 		self.Bind(wx.EVT_ACTIVATE, self.OnActivate)
 		self.panel = wx.Panel(self)
