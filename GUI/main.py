@@ -19,25 +19,20 @@ def safe_raise_window(win):
 
 	On macOS, calling Raise() on a window with an invalid native handle causes
 	a segfault at the C++ level before Python exception handling kicks in.
-	This function checks window validity before attempting to raise.
+	On macOS, we skip Raise() entirely in event handlers since it's unreliable.
 
 	Returns True if raise succeeded, False otherwise.
 	"""
 	if not win:
 		return False
+	# On macOS, skip Raise() entirely - it can cause segfaults even with valid-looking windows
+	# The window should already be visible/focused through other means
+	if platform.system() == "Darwin":
+		return True
 	try:
 		# Check if window is being deleted or already destroyed
 		if hasattr(win, 'IsBeingDeleted') and win.IsBeingDeleted():
 			return False
-		# On macOS, also verify the window has a valid native handle
-		if platform.system() == "Darwin":
-			try:
-				# GetHandle() returns 0 or raises if window is invalid
-				handle = win.GetHandle()
-				if not handle:
-					return False
-			except (RuntimeError, Exception):
-				return False
 		win.Raise()
 		return True
 	except (RuntimeError, Exception):

@@ -1377,11 +1377,13 @@ class Application:
 
 	def question(self, title, text, parent=None):
 		dlg = wx.MessageDialog(parent, text, title, wx.YES_NO | wx.ICON_QUESTION)
-		try:
-			dlg.Raise()
-			dlg.RequestUserAttention()
-		except (RuntimeError, Exception):
-			pass  # Window may not be ready on macOS
+		# Skip Raise() on macOS - it can cause segfaults and ShowModal brings dialog to front anyway
+		if platform.system() != "Darwin":
+			try:
+				dlg.Raise()
+				dlg.RequestUserAttention()
+			except (RuntimeError, Exception):
+				pass
 		result = dlg.ShowModal()
 		dlg.Destroy()
 		if result == wx.ID_YES:
@@ -1402,21 +1404,25 @@ class Application:
 
 	def warn(self, message, caption='Warning!', parent=None):
 		dlg = wx.MessageDialog(parent, message, caption, wx.OK | wx.ICON_WARNING)
-		try:
-			dlg.Raise()
-			dlg.RequestUserAttention()
-		except (RuntimeError, Exception):
-			pass  # Window may not be ready on macOS
+		# Skip Raise() on macOS - it can cause segfaults and ShowModal brings dialog to front anyway
+		if platform.system() != "Darwin":
+			try:
+				dlg.Raise()
+				dlg.RequestUserAttention()
+			except (RuntimeError, Exception):
+				pass
 		dlg.ShowModal()
 		dlg.Destroy()
 
 	def alert(self, message, caption="", parent=None):
 		dlg = wx.MessageDialog(parent, message, caption, wx.OK)
-		try:
-			dlg.Raise()
-			dlg.RequestUserAttention()
-		except (RuntimeError, Exception):
-			pass  # Window may not be ready on macOS
+		# Skip Raise() on macOS - it can cause segfaults and ShowModal brings dialog to front anyway
+		if platform.system() != "Darwin":
+			try:
+				dlg.Raise()
+				dlg.RequestUserAttention()
+			except (RuntimeError, Exception):
+				pass
 		dlg.ShowModal()
 		dlg.Destroy()
 
@@ -1663,7 +1669,9 @@ class Application:
 					maximum=100,
 					style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE | wx.PD_CAN_ABORT | wx.PD_ELAPSED_TIME | wx.PD_REMAINING_TIME
 				)
-				progress_data['dialog'].Raise()
+				# Skip Raise() on macOS - can cause segfaults
+				if platform.system() != "Darwin":
+					progress_data['dialog'].Raise()
 
 			def update_progress(downloaded, total):
 				if progress_data['dialog'] and total > 0:
@@ -1768,7 +1776,7 @@ del "%~f0"
 					maximum=100,
 					style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE | wx.PD_CAN_ABORT | wx.PD_ELAPSED_TIME | wx.PD_REMAINING_TIME
 				)
-				progress_data['dialog'].Raise()
+				# Skip Raise() on macOS - can cause segfaults
 
 			def update_progress(downloaded, total):
 				if progress_data['dialog'] and total > 0:

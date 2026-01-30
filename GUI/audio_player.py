@@ -347,7 +347,9 @@ def show_audio_player(parent=None, silent=False):
 	# If dialog already open, just focus it
 	if _audio_player_dialog is not None:
 		try:
-			_audio_player_dialog.Raise()
+			# Skip Raise() on macOS - can cause segfaults
+			if platform.system() != "Darwin":
+				_audio_player_dialog.Raise()
 			_audio_player_dialog.SetFocus()
 			return _audio_player_dialog
 		except:
