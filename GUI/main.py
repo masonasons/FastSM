@@ -1082,8 +1082,8 @@ class MainGui(wx.Frame):
 			# Fall back to URL-based media detection
 			elif len(sound.get_media_urls(get_app().find_urls_in_status(status))) > 0:
 				sound.play(get_app().currentAccount, "media")
-		# Check if post mentions the current user
-		if status and get_app().prefs.earcon_mention:
+		# Check if post mentions the current user (skip in mentions timeline - redundant)
+		if status and get_app().prefs.earcon_mention and get_app().currentAccount.currentTimeline.type != "mentions":
 			status_to_check = status.reblog if hasattr(status, 'reblog') and status.reblog else status
 			mentions = getattr(status_to_check, 'mentions', []) or []
 			my_id = str(get_app().currentAccount.me.id)
