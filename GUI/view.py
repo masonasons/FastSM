@@ -488,13 +488,15 @@ class ViewGui(wx.Dialog):
 			self.pin_btn.SetLabel("Un&pin Post" if is_pinned else "&Pin Post")
 
 	def OnDelete(self, event):
-		"""Delete the post after confirmation."""
-		import speak
-		dlg = wx.MessageDialog(self, "Are you sure you want to delete this post?", "Confirm Delete", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING)
-		if dlg.ShowModal() == wx.ID_YES:
-			misc.delete(self.account, self.status)
-			self.Close()
-		dlg.Destroy()
+		"""Delete the post, with optional confirmation based on settings."""
+		if get_app().prefs.confirm_delete:
+			dlg = wx.MessageDialog(self, "Are you sure you want to delete this post?", "Confirm Delete", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+			if dlg.ShowModal() != wx.ID_YES:
+				dlg.Destroy()
+				return
+			dlg.Destroy()
+		misc.delete(self.account, self.status)
+		self.Close()
 
 	def OnClose(self, event):
 		from . import main
