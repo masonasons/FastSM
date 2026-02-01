@@ -1414,6 +1414,18 @@ class timeline(object):
 		self._loading_all_active = False
 
 	def _do_load(self, back=False, speech=False, items=[]):
+		# Conversation timelines use load_conversation() instead of func
+		if self.type == "conversation":
+			if back:
+				# Conversation threads don't support loading previous
+				return False
+			# Refresh the conversation thread
+			self.statuses = []
+			self._status_ids = set()
+			self.load_conversation()
+			if speech:
+				speak.speak("Refreshed")
+			return True
 		if items == []:
 			if back:
 				# Check if we should fill a gap first
