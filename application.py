@@ -1501,29 +1501,33 @@ class Application:
 		"""Check if the app was installed via installer (vs portable/zip).
 
 		Returns True if installed via Inno Setup installer, False if portable.
-		Detection is based on registry entries created by Inno Setup.
+		Detection is based on whether the app is running from typical install locations:
+		- Program Files (admin install)
+		- User's AppData/Local/Programs (per-user install)
 		"""
 		if platform.system() != "Windows":
 			return False
 
-		try:
-			import winreg
-			# Inno Setup AppId from installer.iss (without curly braces for registry key)
-			app_id = "7E8F4A2B-3C5D-4E6F-8A9B-1C2D3E4F5A6B"
-			uninstall_key = f"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{{{app_id}}}_is1"
+		if not getattr(sys, 'frozen', False):
+			return False
 
-			# Check HKLM first (admin install), then HKCU (user install)
-			for hive in [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]:
-				try:
-					key = winreg.OpenKey(hive, uninstall_key, 0, winreg.KEY_READ)
-					winreg.CloseKey(key)
-					return True
-				except FileNotFoundError:
-					continue
-				except Exception:
-					continue
-		except ImportError:
-			pass
+		try:
+			# Get the directory where the executable is running from
+			app_dir = os.path.dirname(sys.executable).lower()
+
+			# Check for typical install locations
+			program_files = os.environ.get('PROGRAMFILES', 'C:\\Program Files').lower()
+			program_files_x86 = os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)').lower()
+			local_appdata = os.environ.get('LOCALAPPDATA', '').lower()
+
+			# Admin install: Program Files\FastSM
+			if app_dir.startswith(program_files) or app_dir.startswith(program_files_x86):
+				return True
+
+			# Per-user install: AppData\Local\Programs\FastSM
+			if local_appdata and app_dir.startswith(os.path.join(local_appdata, 'programs')):
+				return True
+
 		except Exception:
 			pass
 
