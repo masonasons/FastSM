@@ -304,6 +304,25 @@ class ViewGui(wx.Dialog):
 		if is_scheduled:
 			self.report_btn.Enable(False)
 
+		# Check if this is the user's own post (for pin/delete)
+		actual_status = self.status.reblog if hasattr(self.status, 'reblog') and self.status.reblog else self.status
+		status_author = getattr(actual_status, 'account', None)
+		is_own_post = status_author and str(getattr(status_author, 'id', '')) == str(account.me.id)
+
+		# Pin/Unpin button (only for own posts)
+		if is_own_post and not is_scheduled:
+			is_pinned = getattr(actual_status, '_pinned', False) or getattr(actual_status, 'pinned', False)
+			pin_label = "Un&pin Post" if is_pinned else "&Pin Post"
+			self.pin_btn = wx.Button(self.panel, -1, pin_label)
+			self.pin_btn.Bind(wx.EVT_BUTTON, self.OnPinToggle)
+			self.main_box.Add(self.pin_btn, 0, wx.ALL, 10)
+
+		# Delete button (only for own posts)
+		if is_own_post:
+			self.delete_btn = wx.Button(self.panel, -1, "&Delete Post")
+			self.delete_btn.Bind(wx.EVT_BUTTON, self.OnDelete)
+			self.main_box.Add(self.delete_btn, 0, wx.ALL, 10)
+
 		self.close = wx.Button(self.panel, wx.ID_CANCEL, "&Close")
 		self.close.Bind(wx.EVT_BUTTON, self.OnClose)
 		self.main_box.Add(self.close, 0, wx.ALL, 10)
@@ -458,6 +477,24 @@ class ViewGui(wx.Dialog):
 	def OnReport(self, event):
 		"""Report the post."""
 		misc.report_status(self.account, self.status, self)
+
+	def OnPinToggle(self, event):
+		"""Toggle pin status on the post."""
+		misc.pin_toggle(self.account, self.status)
+		# Update button label
+		actual_status = self.status.reblog if hasattr(self.status, 'reblog') and self.status.reblog else self.status
+		is_pinned = getattr(actual_status, '_pinned', False) or getattr(actual_status, 'pinned', False)
+		if hasattr(self, 'pin_btn'):
+			self.pin_btn.SetLabel("Un&pin Post" if is_pinned else "&Pin Post")
+
+	def OnDelete(self, event):
+		"""Delete the post after confirmation."""
+		import speak
+		dlg = wx.MessageDialog(self, "Are you sure you want to delete this post?", "Confirm Delete", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING)
+		if dlg.ShowModal() == wx.ID_YES:
+			misc.delete(self.account, self.status)
+			self.Close()
+		dlg.Destroy()
 
 	def OnClose(self, event):
 		from . import main
