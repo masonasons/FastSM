@@ -1596,7 +1596,7 @@ class Application:
 						asset_name = asset['name'].lower()
 						if platform.system() == "Windows":
 							# If installed, prefer the installer; if portable, prefer the zip
-							if is_installed and 'setup' in asset_name and asset_name.endswith('.exe'):
+							if is_installed and 'installer' in asset_name and asset_name.endswith('.exe'):
 								threading.Thread(target=self.download_update, args=[asset['browser_download_url'], True], daemon=True).start()
 								return
 							elif not is_installed and 'windows' in asset_name and asset_name.endswith('.zip'):
@@ -1610,7 +1610,7 @@ class Application:
 					for asset in latest['assets']:
 						asset_name = asset['name'].lower()
 						if platform.system() == "Windows":
-							if 'setup' in asset_name and asset_name.endswith('.exe'):
+							if 'installer' in asset_name and asset_name.endswith('.exe'):
 								threading.Thread(target=self.download_update, args=[asset['browser_download_url'], True], daemon=True).start()
 								return
 							elif 'windows' in asset_name and asset_name.endswith('.zip'):

@@ -54,7 +54,7 @@ jobs:
         id: artifact
         run: |
           $zip = Get-ChildItem -Path . -Filter "FastSM-*-Windows.zip" | Select-Object -First 1
-          $installer = Get-ChildItem -Path "$env:USERPROFILE\app_dist\FastSM" -Filter "FastSM-*-Setup.exe" | Select-Object -First 1
+          $installer = Get-ChildItem -Path "$env:USERPROFILE\app_dist\FastSM" -Filter "FastSMInstaller.exe" | Select-Object -First 1
           echo "zip_path=$($zip.FullName)" >> $env:GITHUB_OUTPUT
           echo "zip_name=$($zip.Name)" >> $env:GITHUB_OUTPUT
           echo "installer_path=$($installer.FullName)" >> $env:GITHUB_OUTPUT
@@ -162,7 +162,7 @@ jobs:
             This release is automatically updated on every commit to master.
 
             ## Downloads
-            - **Windows Installer:** FastSM-${{ steps.version.outputs.version }}-Setup.exe (Recommended)
+            - **Windows Installer:** FastSMInstaller.exe (Recommended)
             - **Windows Portable:** FastSM-${{ steps.version.outputs.version }}-Windows.zip
             - **macOS:** FastSM-${{ steps.version.outputs.version }}.dmg
           files: artifacts/*

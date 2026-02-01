@@ -34,7 +34,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 ; Output installer filename
-OutputBaseFilename={#MyAppName}-{#MyAppVersion}-Setup
+OutputBaseFilename=FastSMInstaller
 OutputDir={#OutputDir}
 Compression=lzma2/max
 SolidCompression=yes
