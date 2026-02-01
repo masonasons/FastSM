@@ -787,6 +787,23 @@ class Application:
 			# Use text field if available, otherwise strip HTML from content
 			status_text = getattr(status, 'text', '') or self.strip_html(getattr(status, 'content', ''))
 
+			# Collapse consecutive usernames at start of text if max_usernames_display is set
+			max_usernames = getattr(self.prefs, 'max_usernames_display', 0)
+			if max_usernames > 0:
+				import re
+				username_pattern = r'^((?:@[\w.-]+(?:@[\w.-]+)?(?:\s+|$))+)'
+				match = re.match(username_pattern, status_text)
+				if match:
+					username_portion = match.group(1)
+					usernames = re.findall(r'@[\w.-]+(?:@[\w.-]+)?', username_portion)
+					if len(usernames) > max_usernames:
+						first_username = usernames[0]
+						remaining_count = len(usernames) - 1
+						rest_of_text = status_text[len(username_portion):].lstrip()
+						status_text = f"{first_username} and {remaining_count} more"
+						if rest_of_text:
+							status_text += f" {rest_of_text}"
+
 			# Handle quote notifications - format similar to how quotes are shown in timelines
 			if hasattr(status, 'quote') and status.quote:
 				quote = status.quote
