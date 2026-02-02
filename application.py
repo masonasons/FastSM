@@ -107,7 +107,10 @@ class Application:
 		else:
 			self.confpath = self.prefs._user_config_home + "/FastSM"
 
-		if platform.system() == "Darwin":
+		# Redirect stderr to errors.log in config directory (not app directory)
+		# This is especially important for installed versions where the app directory
+		# (Program Files) is write-protected
+		if getattr(sys, 'frozen', False):
 			try:
 				# Ensure config directory exists before writing errors.log
 				if not os.path.exists(self.confpath):
