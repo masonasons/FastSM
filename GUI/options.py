@@ -525,36 +525,57 @@ class templates(wx.Panel, wx.Dialog):
 		self.postTemplate = wx.TextCtrl(self, -1, "", name="Post template")
 		self.main_box.Add(self.postTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.postTemplate.AppendText(get_app().prefs.postTemplate)
+		self.postTemplate_placeholder_btn = wx.Button(self, -1, "Insert Placeholder...")
+		self.main_box.Add(self.postTemplate_placeholder_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+		self.postTemplate_placeholder_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_placeholder_menu(e, self.postTemplate, 'status'))
 		self.quoteTemplate_label = wx.StaticText(self, -1, "Quote template")
 		self.main_box.Add(self.quoteTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.quoteTemplate = wx.TextCtrl(self, -1, "", name="Quote template")
 		self.main_box.Add(self.quoteTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.quoteTemplate.AppendText(get_app().prefs.quoteTemplate)
+		self.quoteTemplate_placeholder_btn = wx.Button(self, -1, "Insert Placeholder...")
+		self.main_box.Add(self.quoteTemplate_placeholder_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+		self.quoteTemplate_placeholder_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_placeholder_menu(e, self.quoteTemplate, 'quote'))
 		self.boostTemplate_label = wx.StaticText(self, -1, "Boost template")
 		self.main_box.Add(self.boostTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.boostTemplate = wx.TextCtrl(self, -1, "", name="Boost template")
 		self.main_box.Add(self.boostTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.boostTemplate.AppendText(get_app().prefs.boostTemplate)
+		self.boostTemplate_placeholder_btn = wx.Button(self, -1, "Insert Placeholder...")
+		self.main_box.Add(self.boostTemplate_placeholder_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+		self.boostTemplate_placeholder_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_placeholder_menu(e, self.boostTemplate, 'boost'))
 		self.copyTemplate_label = wx.StaticText(self, -1, "Copy template")
 		self.main_box.Add(self.copyTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.copyTemplate = wx.TextCtrl(self, -1, "", name="Copy template")
 		self.main_box.Add(self.copyTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.copyTemplate.AppendText(get_app().prefs.copyTemplate)
+		self.copyTemplate_placeholder_btn = wx.Button(self, -1, "Insert Placeholder...")
+		self.main_box.Add(self.copyTemplate_placeholder_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+		self.copyTemplate_placeholder_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_placeholder_menu(e, self.copyTemplate, 'status'))
 		self.messageTemplate_label = wx.StaticText(self, -1, "Direct Message template")
 		self.main_box.Add(self.messageTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.messageTemplate = wx.TextCtrl(self, -1, "", name="Direct Message template")
 		self.main_box.Add(self.messageTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.messageTemplate.AppendText(get_app().prefs.messageTemplate)
+		self.messageTemplate_placeholder_btn = wx.Button(self, -1, "Insert Placeholder...")
+		self.main_box.Add(self.messageTemplate_placeholder_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+		self.messageTemplate_placeholder_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_placeholder_menu(e, self.messageTemplate, 'status'))
 		self.userTemplate_label = wx.StaticText(self, -1, "User template")
 		self.main_box.Add(self.userTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.userTemplate = wx.TextCtrl(self, -1, "", name="User template")
 		self.main_box.Add(self.userTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.userTemplate.AppendText(get_app().prefs.userTemplate)
+		self.userTemplate_placeholder_btn = wx.Button(self, -1, "Insert Placeholder...")
+		self.main_box.Add(self.userTemplate_placeholder_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+		self.userTemplate_placeholder_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_placeholder_menu(e, self.userTemplate, 'user'))
 		self.notificationTemplate_label = wx.StaticText(self, -1, "Notification template")
 		self.main_box.Add(self.notificationTemplate_label, 0, wx.LEFT | wx.TOP, 10)
 		self.notificationTemplate = wx.TextCtrl(self, -1, "", name="Notification template")
 		self.main_box.Add(self.notificationTemplate, 0, wx.EXPAND | wx.ALL, 10)
 		self.notificationTemplate.AppendText(get_app().prefs.notificationTemplate)
+		self.notificationTemplate_placeholder_btn = wx.Button(self, -1, "Insert Placeholder...")
+		self.main_box.Add(self.notificationTemplate_placeholder_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+		self.notificationTemplate_placeholder_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_placeholder_menu(e, self.notificationTemplate, 'notification'))
 		self.include_media_descriptions = wx.CheckBox(self, -1, "Include image/media descriptions in post text")
 		self.main_box.Add(self.include_media_descriptions, 0, wx.ALL, 10)
 		self.include_media_descriptions.SetValue(get_app().prefs.include_media_descriptions)
@@ -566,6 +587,124 @@ class templates(wx.Panel, wx.Dialog):
 		self.max_usernames_display = wx.SpinCtrl(self, -1, min=0, max=20, initial=get_app().prefs.max_usernames_display, name="Collapse usernames threshold")
 		self.main_box.Add(self.max_usernames_display, 0, wx.EXPAND | wx.ALL, 10)
 		self.SetSizer(self.main_box)
+
+	def show_placeholder_menu(self, event, text_ctrl, template_type):
+		"""Show a context menu with available placeholders for the template type."""
+		menu = wx.Menu()
+		
+		# Define placeholders based on template type
+		if template_type == 'status':
+			placeholders = [
+				('$text$', 'Post text content'),
+				('$created_at$', 'Creation date/time'),
+				('$account.display_name$', 'Author display name'),
+				('$account.acct$', 'Author account handle'),
+				('$account.username$', 'Author username'),
+				('$account.url$', 'Author profile URL'),
+				('$favourites_count$', 'Number of favorites'),
+				('$boosts_count$', 'Number of boosts'),
+				('$replies_count$', 'Number of replies'),
+				('$visibility$', 'Post visibility'),
+				('$spoiler_text$', 'Content warning text'),
+				('$url$', 'Post URL'),
+				('$language$', 'Post language code'),
+				('$application.name$', 'Posting application name'),
+				('$application.website$', 'Posting application website'),
+				('$in_reply_to_id$', 'Replied post ID'),
+				('$in_reply_to_account_id$', 'Replied account ID'),
+			]
+		elif template_type == 'boost':
+			placeholders = [
+				('$text$', 'Post text content'),
+				('$created_at$', 'Creation date/time'),
+				('$account.display_name$', 'Booster display name'),
+				('$account.acct$', 'Booster account handle'),
+				('$reblog.account.display_name$', 'Original author display name'),
+				('$reblog.account.acct$', 'Original author account handle'),
+				('$reblog.text$', 'Original post text'),
+				('$reblog.created_at$', 'Original post date/time'),
+				('$favourites_count$', 'Number of favorites'),
+				('$boosts_count$', 'Number of boosts'),
+				('$replies_count$', 'Number of replies'),
+				('$url$', 'Post URL'),
+				('$language$', 'Post language code'),
+				('$application.name$', 'Posting application name'),
+				('$application.website$', 'Posting application website'),
+				('$reblog.url$', 'Original post URL'),
+				('$reblog.language$', 'Original post language code'),
+				('$reblog.application.name$', 'Original posting application name'),
+				('$reblog.application.website$', 'Original posting application website'),
+			]
+		elif template_type == 'quote':
+			placeholders = [
+				('$text$', 'Post text content'),
+				('$created_at$', 'Creation date/time'),
+				('$account.display_name$', 'Quoter display name'),
+				('$account.acct$', 'Quoter account handle'),
+				('$account.username$', 'Quoter username'),
+				('$url$', 'Post URL'),
+				('$language$', 'Post language code'),
+				('$application.name$', 'Posting application name'),
+				('$application.website$', 'Posting application website'),
+				('$quote.account.display_name$', 'Quoted author display name'),
+				('$quote.account.acct$', 'Quoted author account handle'),
+				('$quote.text$', 'Quoted post text'),
+				('$quote.created_at$', 'Quoted post date/time'),
+				('$quote.url$', 'Quoted post URL'),
+				('$quote.language$', 'Quoted post language code'),
+				('$quote.application.name$', 'Quoted posting application name'),
+				('$quote.application.website$', 'Quoted posting application website'),
+			]
+		elif template_type == 'user':
+			placeholders = [
+				('$display_name$', 'User display name'),
+				('$acct$', 'User account handle'),
+				('$username$', 'Username'),
+				('$note$', 'User bio/description'),
+				('$followers_count$', 'Number of followers'),
+				('$following_count$', 'Number following'),
+				('$statuses_count$', 'Number of posts'),
+				('$url$', 'Profile URL'),
+				('$id$', 'User ID'),
+				('$avatar$', 'Avatar URL'),
+				('$header$', 'Header/Banner URL'),
+				('$bot$', 'Is bot account'),
+				('$locked$', 'Is locked/private account'),
+				('$created_at$', 'Account creation date'),
+			]
+		elif template_type == 'notification':
+			placeholders = [
+				('$type$', 'Notification type'),
+				('$created_at$', 'Notification date/time'),
+				('$account.display_name$', 'Triggering user display name'),
+				('$account.acct$', 'Triggering user account handle'),
+				('$account.username$', 'Triggering user username'),
+				('$account.url$', 'Triggering user profile URL'),
+				('$status.text$', 'Related post text (if any)'),
+				('$status.created_at$', 'Related post date/time (if any)'),
+				('$status.url$', 'Related post URL (if any)'),
+				('$status.language$', 'Related post language code (if any)'),
+				('$status.application.name$', 'Related posting application name'),
+				('$status.application.website$', 'Related posting application website'),
+			]
+		else:
+			placeholders = []
+		
+		# Create menu items
+		for placeholder, description in placeholders:
+			item = menu.Append(wx.ID_ANY, f"{placeholder} - {description}")
+			self.Bind(wx.EVT_MENU, lambda e, p=placeholder, tc=text_ctrl: self.insert_placeholder(tc, p), item)
+		
+		# Show the menu at the button position
+		self.PopupMenu(menu)
+		menu.Destroy()
+	
+	def insert_placeholder(self, text_ctrl, placeholder):
+		"""Insert a placeholder at the current cursor position in the text control."""
+		insert_pos = text_ctrl.GetInsertionPoint()
+		text_ctrl.WriteText(placeholder)
+		text_ctrl.SetInsertionPoint(insert_pos + len(placeholder))
+		text_ctrl.SetFocus()
 
 class advanced(wx.Panel, wx.Dialog):
 	def __init__(self, parent):
