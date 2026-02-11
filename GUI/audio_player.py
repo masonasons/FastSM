@@ -18,7 +18,12 @@ class AudioPlayerDialog(wx.Dialog):
 		_audio_player_dialog = self
 
 		# Include sound engine in title
-		engine_name = "VLC" if sound.player_type == 'vlc' else "sound_lib"
+		if sound.player_type == 'vlc':
+			engine_name = "VLC"
+		elif sound.player_type == 'soundlib':
+			engine_name = "sound_lib"
+		else:
+			engine_name = "external"
 		title = f"Audio Player ({engine_name})"
 		wx.Dialog.__init__(self, parent, title=title, size=(400, 200),
 			style=wx.DEFAULT_DIALOG_STYLE | wx.STAY_ON_TOP)
@@ -43,8 +48,11 @@ class AudioPlayerDialog(wx.Dialog):
 		main_sizer.Add(self.volume_label, 0, wx.ALL, 10)
 
 		# Instructions
-		instructions = wx.StaticText(self.panel, -1,
-			"Up/Down: Volume | Left/Right: Seek 5s | Space: Play/Pause | E/R/T: Elapsed/Remaining/Total | Escape: Close")
+		if sound.player_type == 'external':
+			instruction_text = "Up/Down: Volume (app setting only) | Escape: Close"
+		else:
+			instruction_text = "Up/Down: Volume | Left/Right: Seek 5s | Space: Play/Pause | E/R/T: Elapsed/Remaining/Total | Escape: Close"
+		instructions = wx.StaticText(self.panel, -1, instruction_text)
 		main_sizer.Add(instructions, 0, wx.ALL, 10)
 
 		# Close button
@@ -102,6 +110,8 @@ class AudioPlayerDialog(wx.Dialog):
 				if length_ms < 0:
 					length_ms = 0
 				return pos_ms // 1000, length_ms // 1000
+			if sound.player_type == 'external':
+				return None, None
 			else:
 				pos = sound.player.position
 				length = sound.player.length
@@ -160,7 +170,7 @@ class AudioPlayerDialog(wx.Dialog):
 			try:
 				if sound.player_type == 'vlc':
 					sound.player.audio_set_volume(int(new_volume * 100))
-				else:
+				elif sound.player_type == 'soundlib':
 					sound.player.volume = new_volume
 			except:
 				pass
@@ -173,6 +183,8 @@ class AudioPlayerDialog(wx.Dialog):
 	def _seek(self, seconds):
 		"""Seek forward or backward by seconds."""
 		if sound.player is None:
+			return
+		if sound.player_type == 'external':
 			return
 
 		try:
@@ -212,6 +224,8 @@ class AudioPlayerDialog(wx.Dialog):
 		"""Toggle play/pause on the media player."""
 		if sound.player is None:
 			return
+		if sound.player_type == 'external':
+			return
 
 		try:
 			if sound.player_type == 'vlc':
@@ -250,6 +264,10 @@ class AudioPlayerDialog(wx.Dialog):
 				if state in (vlc.State.Ended, vlc.State.Error):
 					self._close_dialog()
 					return
+			elif sound.player_type == 'external':
+				if sound.player.poll() is not None:
+					self._close_dialog()
+					return
 			else:
 				# sound_lib - check if stopped and near end
 				if not sound.player.is_playing:
@@ -278,7 +296,7 @@ class AudioPlayerDialog(wx.Dialog):
 
 				pos_seconds = pos_ms // 1000
 				length_seconds = length_ms // 1000
-			else:
+			elif sound.player_type == 'soundlib':
 				# sound_lib uses bytes
 				pos = sound.player.position
 				length = sound.player.length
@@ -286,6 +304,9 @@ class AudioPlayerDialog(wx.Dialog):
 
 				pos_seconds = int(pos / bytes_per_second)
 				length_seconds = int(length / bytes_per_second)
+			else:
+				self.position_label.SetLabel("Streaming via external player")
+				return
 
 			pos_str = f"{pos_seconds // 60}:{pos_seconds % 60:02d}"
 			length_str = f"{length_seconds // 60}:{length_seconds % 60:02d}"
@@ -333,6 +354,8 @@ def show_audio_player(parent=None, silent=False):
 			# Consider active if not in terminal states
 			# Stopped is OK - VLC transitions through it
 			is_active = state not in (vlc.State.NothingSpecial, vlc.State.Ended, vlc.State.Error)
+		elif sound.player_type == 'external':
+			is_active = sound.player.poll() is None
 		else:
 			# sound_lib uses is_playing property
 			is_active = sound.player.is_playing

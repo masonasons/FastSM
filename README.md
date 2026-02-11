@@ -10,7 +10,7 @@ FastSM is a (currently) Mastodon/Bluesky client which is based off of the code f
 - Audio player with YouTube/Twitter support via yt-dlp
 - AI-powered image descriptions (GPT/Gemini)
 - Customizable soundpacks
-- Invisible interface mode (Windows)
+- Invisible interface mode (Windows/Linux)
 - Explore/Discover dialog for finding users and content
 - Poll support (viewing and voting)
 - Content warning handling
@@ -26,7 +26,7 @@ The options dialog (accessible via Application menu > Global Options) is organiz
 - **Audio**: Sound settings for media, navigation, and errors, plus audio output device selection
 - **YouTube**: yt-dlp path, cookies file, and Deno path settings for YouTube/Twitter audio extraction
 - **Templates**: Post display templates, demojify display names, and 24-hour time settings
-- **Invisible Interface** (Windows only): Invisible interface settings and keymap selection
+- **Invisible Interface** (Windows/Linux): Invisible interface settings and keymap selection
 - **Advanced**: API settings and general application settings
 - **Confirmation**: Toggle confirmations for actions like follow, unfollow, boost, favorite, etc.
 - **AI**: Configure GPT/Gemini API keys and prompts for AI image descriptions

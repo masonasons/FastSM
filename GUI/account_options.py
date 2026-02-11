@@ -1,9 +1,13 @@
-from sound_lib import stream
 import platform
 import os, sys
 import wx
 from . import main, theme
 from application import get_app
+
+try:
+	from sound_lib import stream
+except Exception:
+	stream = None
 
 def _get_bundled_path():
 	"""Get the path to bundled resources (for PyInstaller frozen apps)."""
@@ -32,13 +36,14 @@ class general(wx.Panel, wx.Dialog):
 		]
 		if bundled_path:
 			sound_paths.append(os.path.join(bundled_path, "sounds/default/boundary.ogg"))
-		for path in sound_paths:
-			if os.path.exists(path):
-				try:
-					self.snd = stream.FileStream(file=path)
-					break
-				except:
-					pass
+			if stream is not None:
+				for path in sound_paths:
+					if os.path.exists(path):
+						try:
+							self.snd = stream.FileStream(file=path)
+							break
+						except:
+							pass
 		self.account=account
 		super(general, self).__init__(parent)
 		self.main_box = wx.BoxSizer(wx.VERTICAL)
@@ -147,13 +152,13 @@ class general(wx.Panel, wx.Dialog):
 
 	def OnPan(self,event):
 		pan=self.soundpan.GetValue()/50
-		if self.snd:
+		if self.snd and hasattr(self.snd, "pan"):
 			self.snd.pan=pan
 			self.snd.play()
 
 	def OnVolume(self, event):
 		volume = self.soundvolume.GetValue() / 100
-		if self.snd:
+		if self.snd and hasattr(self.snd, "volume"):
 			self.snd.volume = volume
 			self.snd.play()
 
@@ -217,15 +222,15 @@ class OptionsGui(wx.Dialog):
 						threading.Thread(target=tl.load, daemon=True).start()
 						break
 
-		# Explicitly save preferences to ensure persistence
-		self.account.prefs.save()
+			# Explicitly save preferences to ensure persistence
+			self.account.prefs.save()
 
-		if self.general.snd:
-			self.general.snd.free()
-		self.Destroy()
+			if self.general.snd and hasattr(self.general.snd, "free"):
+				self.general.snd.free()
+			self.Destroy()
 
 	def OnClose(self, event):
-		if self.general.snd:
+		if self.general.snd and hasattr(self.general.snd, "free"):
 			self.general.snd.free()
 		self.Destroy()
 

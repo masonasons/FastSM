@@ -54,6 +54,9 @@ class timeline(object):
 		self._stream_thread = None
 		self._stream_started = False
 		self._stream_lock = threading.Lock()
+		# Manual refresh focus restore (set by main window before F5 refresh).
+		self._manual_refresh_pending = False
+		self._manual_refresh_focus_id = None
 
 		for i in self.app.timeline_settings:
 			if i.account_id == self.account.me.id and i.tl == self.name:
@@ -1055,10 +1058,33 @@ class timeline(object):
 		if items == []:
 			self._loading = True
 		try:
-			return self._do_load(back, speech, items)
+			result = self._do_load(back, speech, items)
+			# If a manual refresh requested focus restoration, apply it after load.
+			if items == [] and not back:
+				self._restore_manual_refresh_focus()
+			return result
 		finally:
 			if items == []:
 				self._loading = False
+
+	def _restore_manual_refresh_focus(self):
+		"""Restore focus to the pre-refresh status by ID when requested."""
+		if not self._manual_refresh_pending:
+			return
+
+		focus_id = self._manual_refresh_focus_id
+		self._manual_refresh_pending = False
+		self._manual_refresh_focus_id = None
+
+		if not focus_id:
+			return
+
+		for i, status in enumerate(self.statuses):
+			if str(getattr(status, "id", "")) == str(focus_id):
+				self.index = i
+				if self.app.currentAccount == self.account and self.account.currentTimeline == self:
+					wx.CallAfter(main.window.refreshList)
+				return
 
 	def load_all_previous(self):
 		"""Load all previous posts in a loop until the timeline is fully loaded or an error occurs."""

@@ -1,10 +1,12 @@
 #!/usr/bin/env python
-"""Build script for FastSM using PyInstaller - supports Windows and macOS."""
+"""Build script for FastSM using PyInstaller (Windows, macOS, Linux)."""
 
+import importlib.util
 import os
 import subprocess
 import sys
 import shutil
+import tarfile
 import tempfile
 import platform as platform_mod
 from pathlib import Path
@@ -56,9 +58,17 @@ def cleanup_build_info_file(script_dir: Path):
         print("Cleaned up build_info.txt")
 
 
-def get_hidden_imports():
+def module_available(module_name: str) -> bool:
+    """Check whether a module can be imported in the current environment."""
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except Exception:
+        return False
+
+
+def get_hidden_imports(target_platform: str):
     """Get list of hidden imports that PyInstaller might miss."""
-    return [
+    imports = [
         # wx submodules
         "wx.adv",
         "wx.html",
@@ -99,16 +109,6 @@ def get_hidden_imports():
         "sound",
         "speak",
         "version",
-        # keyboard_handler
-        "keyboard_handler",
-        "keyboard_handler.wx_handler",
-        # Windows-specific
-        "accessible_output2",
-        "accessible_output2.outputs",
-        "accessible_output2.outputs.auto",
-        "sound_lib",
-        "sound_lib.stream",
-        "sound_lib.output",
         # requests/urllib
         "requests",
         "urllib3",
@@ -121,9 +121,61 @@ def get_hidden_imports():
         "datetime",
         "pickle",
         "pyperclip",
-        # Spell check
-        "enchant",
     ]
+
+    if target_platform in ("windows", "macos") and module_available("accessible_output2"):
+        imports.extend([
+            "accessible_output2",
+            "accessible_output2.outputs",
+            "accessible_output2.outputs.auto",
+        ])
+
+    if module_available("keyboard_handler"):
+        imports.extend([
+            "keyboard_handler",
+            "keyboard_handler.wx_handler",
+        ])
+
+    if module_available("sound_lib"):
+        imports.extend([
+            "sound_lib",
+            "sound_lib.stream",
+            "sound_lib.output",
+        ])
+
+    if module_available("enchant"):
+        imports.append("enchant")
+
+    return imports
+
+
+def add_hidden_imports(cmd: list, target_platform: str):
+    """Append valid hidden imports to a PyInstaller command."""
+    for imp in get_hidden_imports(target_platform):
+        if module_available(imp):
+            cmd.extend(["--hidden-import", imp])
+
+
+def get_excluded_modules(target_platform: str):
+    """Get optional modules to exclude from the frozen bundle."""
+    # FastSM does not rely on scientific/Qt stacks. Excluding these avoids
+    # large transitive pulls (and Linux BLAS runtime issues from bundled numpy).
+    return [
+        "numpy",
+        "scipy",
+        "matplotlib",
+        "qtpy",
+        "PyQt5",
+        "PyQt6",
+        "PySide2",
+        "PySide6",
+    ]
+
+
+def add_excluded_modules(cmd: list, target_platform: str):
+    """Append module exclusions to a PyInstaller command."""
+    for mod in get_excluded_modules(target_platform):
+        cmd.extend(["--exclude-module", mod])
 
 
 def get_data_files(script_dir: Path):
@@ -157,7 +209,7 @@ def copy_data_files(script_dir: Path, dest_dir: Path, include_docs: bool = True)
             shutil.rmtree(sounds_dst)
         shutil.copytree(sounds_src, sounds_dst)
 
-    # Keymaps folder (invisible hotkeys only supported on Windows)
+    # Keymaps folder (used by invisible hotkeys on Windows/Linux)
     keymaps_src = script_dir / "keymaps"
     if keymaps_src.exists():
         keymaps_dst = dest_dir / "keymaps"
@@ -242,8 +294,8 @@ def build_windows(script_dir: Path, output_dir: Path) -> tuple:
     ]
 
     # Add hidden imports
-    for imp in get_hidden_imports():
-        cmd.extend(["--hidden-import", imp])
+    add_hidden_imports(cmd, "windows")
+    add_excluded_modules(cmd, "windows")
 
     # Add data files
     for src, dst in get_data_files(script_dir):
@@ -253,13 +305,17 @@ def build_windows(script_dir: Path, output_dir: Path) -> tuple:
     for src, dst in get_binaries():
         cmd.extend(["--add-binary", f"{src}{os.pathsep}{dst}"])
 
-    # Collect all submodules for key packages
-    cmd.extend(["--collect-all", "accessible_output2"])
-    cmd.extend(["--collect-all", "sound_lib"])
-    cmd.extend(["--collect-all", "keyboard_handler"])
+    # Collect all submodules for key packages (when available)
+    if module_available("accessible_output2"):
+        cmd.extend(["--collect-all", "accessible_output2"])
+    if module_available("sound_lib"):
+        cmd.extend(["--collect-all", "sound_lib"])
+    if module_available("keyboard_handler"):
+        cmd.extend(["--collect-all", "keyboard_handler"])
     # Enchant is imported inside try/except so PyInstaller can't trace it
-    cmd.extend(["--collect-submodules", "enchant"])
-    cmd.extend(["--collect-data", "enchant"])
+    if module_available("enchant"):
+        cmd.extend(["--collect-submodules", "enchant"])
+        cmd.extend(["--collect-data", "enchant"])
 
     # Add runtime hook to redirect stderr to config directory early
     runtime_hook = script_dir / "runtime_hook.py"
@@ -322,6 +378,88 @@ def create_windows_zip(output_dir: Path, app_dir: Path) -> Path:
     return zip_path
 
 
+def create_linux_tarball(output_dir: Path, app_dir: Path) -> Path:
+    """Create a tar.gz archive of the Linux build for distribution."""
+    tar_name = f"{APP_NAME}-{APP_VERSION}-Linux.tar.gz"
+    tar_path = output_dir / tar_name
+
+    if tar_path.exists():
+        tar_path.unlink()
+
+    print(f"Creating tarball: {tar_name}...")
+    with tarfile.open(tar_path, "w:gz") as tarf:
+        tarf.add(app_dir, arcname=APP_NAME)
+
+    tar_size_mb = tar_path.stat().st_size / (1024 * 1024)
+    print(f"Tarball created: {tar_path}")
+    print(f"Tarball size: {tar_size_mb:.1f} MB")
+    return tar_path
+
+
+def build_linux(script_dir: Path, output_dir: Path) -> tuple:
+    """Build for Linux using PyInstaller."""
+    dist_dir = output_dir / "dist"
+    build_dir = output_dir / "build"
+
+    for d in [dist_dir, build_dir]:
+        if d.exists():
+            print(f"Cleaning {d}...")
+            shutil.rmtree(d)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    create_build_info_file(script_dir)
+
+    main_script = script_dir / "FastSM.pyw"
+    cmd = [
+        sys.executable, "-m", "PyInstaller",
+        "--name", APP_NAME,
+        "--windowed",
+        "--noconfirm",
+        f"--distpath={dist_dir}",
+        f"--workpath={build_dir}",
+        f"--specpath={output_dir}",
+    ]
+
+    add_hidden_imports(cmd, "linux")
+    add_excluded_modules(cmd, "linux")
+
+    for src, dst in get_data_files(script_dir):
+        cmd.extend(["--add-data", f"{src}{os.pathsep}{dst}"])
+
+    # Include optional dependency trees when present.
+    if module_available("keyboard_handler"):
+        cmd.extend(["--collect-all", "keyboard_handler"])
+    if module_available("sound_lib"):
+        cmd.extend(["--collect-all", "sound_lib"])
+
+    runtime_hook = script_dir / "runtime_hook.py"
+    if runtime_hook.exists():
+        cmd.extend(["--runtime-hook", str(runtime_hook)])
+
+    cmd.append(str(main_script))
+
+    print(f"Building {APP_NAME} v{APP_VERSION} for Linux...")
+    print(f"Output: {output_dir}")
+    print()
+
+    try:
+        result = subprocess.run(cmd, cwd=script_dir)
+    finally:
+        cleanup_build_info_file(script_dir)
+
+    if result.returncode != 0:
+        return False, None
+
+    app_dir = dist_dir / APP_NAME
+    if not app_dir.exists():
+        print("Error: Build output not found")
+        return False, None
+
+    copy_data_files(script_dir, app_dir)
+    tar_path = create_linux_tarball(output_dir, app_dir)
+    return True, tar_path
+
+
 def build_macos(script_dir: Path, output_dir: Path) -> tuple:
     """Build for macOS using PyInstaller.
 
@@ -362,8 +500,8 @@ def build_macos(script_dir: Path, output_dir: Path) -> tuple:
     ]
 
     # Add hidden imports
-    for imp in get_hidden_imports():
-        cmd.extend(["--hidden-import", imp])
+    add_hidden_imports(cmd, "macos")
+    add_excluded_modules(cmd, "macos")
 
     # Add data files
     for src, dst in get_data_files(script_dir):
@@ -377,8 +515,9 @@ def build_macos(script_dir: Path, output_dir: Path) -> tuple:
     if rthook.exists():
         cmd.extend(["--runtime-hook", str(rthook)])
 
-    # Collect keyboard_handler
-    cmd.extend(["--collect-all", "keyboard_handler"])
+    # Collect keyboard_handler if available
+    if module_available("keyboard_handler"):
+        cmd.extend(["--collect-all", "keyboard_handler"])
 
     # Add main script
     cmd.append(str(main_script))
@@ -583,6 +722,8 @@ def main():
         success, artifact_path = build_windows(script_dir, output_dir)
     elif platform == "macos":
         success, artifact_path = build_macos(script_dir, output_dir)
+    elif platform == "linux":
+        success, artifact_path = build_linux(script_dir, output_dir)
     else:
         print(f"Unsupported platform: {platform}")
         sys.exit(1)

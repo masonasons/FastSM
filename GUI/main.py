@@ -6,12 +6,31 @@ import sys
 import application
 from application import get_app
 import wx
-from keyboard_handler.wx_handler import WXKeyboardHandler
 import speak
 from . import account_options, accounts, chooser, custom_timelines, explore_dialog, hashtag_dialog, invisible, lists, misc, options, profile, search, theme, timeline_filter, timelines, tray, tweet, view
 import sound
 import timeline
 import threading
+
+try:
+	from keyboard_handler.wx_handler import WXKeyboardHandler
+	GlobalKeyboardHandler = None
+	KEYBOARD_HANDLER_AVAILABLE = True
+except Exception:
+	WXKeyboardHandler = None
+	GlobalKeyboardHandler = None
+	KEYBOARD_HANDLER_AVAILABLE = False
+
+class _NoopKeyboardHandler:
+	"""No-op fallback when keyboard_handler is unavailable."""
+	def __init__(self, *_args, **_kwargs):
+		pass
+
+	def register_key(self, *_args, **_kwargs):
+		return False
+
+	def unregister_key(self, *_args, **_kwargs):
+		return False
 
 
 def safe_raise_window(win):
@@ -38,6 +57,20 @@ def safe_raise_window(win):
 	except (RuntimeError, Exception):
 		return False
 
+def _set_linux_gtk_key_theme_default():
+	"""Try to force GTK key theme to Default for this process on Linux."""
+	if platform.system() != "Linux":
+		return
+	try:
+		import gi
+		gi.require_version("Gtk", "3.0")
+		from gi.repository import Gtk
+		settings = Gtk.Settings.get_default()
+		if settings is not None:
+			settings.set_property("gtk-key-theme-name", "Default")
+	except Exception:
+		pass
+
 class MainGui(wx.Frame):
 	def __init__(self, title):
 		self.invisible=False
@@ -45,14 +78,30 @@ class MainGui(wx.Frame):
 		self._open_dialogs = []  # Track open dialogs for focus restoration
 		wx.Frame.__init__(self, None, title=title,size=(800,600))
 		self.Center()
+		_set_linux_gtk_key_theme_default()
 		if platform.system()!="Darwin":
-			self.trayicon=tray.TaskBarIcon(self)
-		self.handler=WXKeyboardHandler(self)
+			try:
+				self.trayicon=tray.TaskBarIcon(self)
+			except Exception:
+				self.trayicon = None
+		if KEYBOARD_HANDLER_AVAILABLE:
+			self.handler = WXKeyboardHandler(self)
+		else:
+			self.handler = _NoopKeyboardHandler()
+		self.hotkeys_available = KEYBOARD_HANDLER_AVAILABLE
 		# Global hotkeys only on Windows/Linux - not supported properly on Mac
-		if platform.system() != "Darwin":
-			self.handler.register_key("control+win+shift+t",self.ToggleWindow)
-			self.handler.register_key("alt+win+shift+q",self.OnClose)
-			self.handler.register_key("control+win+shift+a",self.OnAudioPlayer)
+		if platform.system() != "Darwin" and self.hotkeys_available:
+			reg_results = []
+			if platform.system() == "Linux":
+				reg_results.append(self.handler.register_key("control+alt+shift+t", self.ToggleWindow))
+				reg_results.append(self.handler.register_key("alt+shift+q", self.OnClose))
+				reg_results.append(self.handler.register_key("control+alt+shift+a", self.OnAudioPlayer))
+			else:
+				reg_results.append(self.handler.register_key("control+win+shift+t",self.ToggleWindow))
+				reg_results.append(self.handler.register_key("alt+win+shift+q",self.OnClose))
+				reg_results.append(self.handler.register_key("control+win+shift+a",self.OnAudioPlayer))
+			if not all(reg_results):
+				self.hotkeys_available = False
 		self.Bind(wx.EVT_CLOSE, self.OnClose)
 		self.Bind(wx.EVT_ACTIVATE, self.OnActivate)
 		self.panel = wx.Panel(self)
@@ -330,12 +379,14 @@ class MainGui(wx.Frame):
 
 		# Add accelerator table for keyboard shortcuts
 		if platform.system() != "Darwin":
-			# Windows/Linux: Add Alt+M for context menu
+			# Windows/Linux: explicit key bindings from menu accelerators.
 			self.context_menu_id = wx.NewIdRef()
 			self.Bind(wx.EVT_MENU, self.OnPostContextMenu, id=self.context_menu_id)
-			accel = wx.AcceleratorTable([
+			accel_entries = [
 				(wx.ACCEL_ALT, ord('M'), self.context_menu_id),
-			])
+			]
+			accel_entries.extend(self._build_menu_accelerator_entries())
+			accel = wx.AcceleratorTable(accel_entries)
 			self.SetAcceleratorTable(accel)
 		else:
 			# macOS: Add arrow key combos to accelerator table (only fires when main window focused)
@@ -387,14 +438,14 @@ class MainGui(wx.Frame):
 		self.main_box.Add(self.list2, 1, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 10)
 		self.list2.Bind(wx.EVT_LISTBOX, self.on_list2_change)
 		self.list2.Bind(wx.EVT_CONTEXT_MENU, self.OnPostContextMenu)
-		# On Mac, bind key events directly to list controls for shortcuts
-		# (menu accelerators are disabled on Mac to prevent firing in dialogs)
-		if platform.system() == "Darwin":
-			self.list2.Bind(wx.EVT_KEY_DOWN, self.OnListKeyDown)
-			self.list.Bind(wx.EVT_KEY_DOWN, self.OnListKeyDown)
-			# Use CHAR_HOOK for Option+M since it produces special characters
-			self.list2.Bind(wx.EVT_CHAR_HOOK, self.OnListCharHook)
-			self.list.Bind(wx.EVT_CHAR_HOOK, self.OnListCharHook)
+		# Bind char hook on all platforms so control-key combos can override
+		# toolkit-specific key themes (e.g., Emacs-style Ctrl+N/Ctrl+P on GTK).
+		self.list2.Bind(wx.EVT_CHAR_HOOK, self.OnListCharHook)
+		self.list.Bind(wx.EVT_CHAR_HOOK, self.OnListCharHook)
+		# Bind key events for list controls so platform key themes cannot
+		# swallow app shortcuts before they reach menu accelerators.
+		self.list2.Bind(wx.EVT_KEY_DOWN, self.OnListKeyDown)
+		self.list.Bind(wx.EVT_KEY_DOWN, self.OnListKeyDown)
 		self.panel.SetSizer(self.main_box)
 		self.panel.Layout()
 		# Note: theme is applied in FastSM.pyw after prefs are loaded
@@ -414,6 +465,110 @@ class MainGui(wx.Frame):
 			except:
 				pass
 		return keymap
+
+	def _accelerator_keycode_from_token(self, token):
+		"""Convert a wx menu accelerator key token to keycode."""
+		key_token = token.strip()
+		if not key_token:
+			return None
+
+		key_upper = key_token.upper()
+		special_keys = {
+			"RETURN": wx.WXK_RETURN,
+			"ENTER": wx.WXK_RETURN,
+			"DELETE": wx.WXK_DELETE,
+			"DEL": wx.WXK_DELETE,
+			"BACK": wx.WXK_BACK,
+			"BACKSPACE": wx.WXK_BACK,
+			"UP": wx.WXK_UP,
+			"DOWN": wx.WXK_DOWN,
+			"LEFT": wx.WXK_LEFT,
+			"RIGHT": wx.WXK_RIGHT,
+			"PGUP": wx.WXK_PAGEUP,
+			"PAGEUP": wx.WXK_PAGEUP,
+			"PGDN": wx.WXK_PAGEDOWN,
+			"PAGEDOWN": wx.WXK_PAGEDOWN,
+			"HOME": wx.WXK_HOME,
+			"END": wx.WXK_END,
+			"SPACE": wx.WXK_SPACE,
+			"TAB": wx.WXK_TAB,
+			"ESC": wx.WXK_ESCAPE,
+		}
+		if key_upper in special_keys:
+			return special_keys[key_upper]
+
+		if key_upper.startswith("F") and key_upper[1:].isdigit():
+			f_key_name = f"WXK_F{int(key_upper[1:])}"
+			return getattr(wx, f_key_name, None)
+
+		if len(key_token) == 1:
+			return ord(key_token.upper())
+
+		return None
+
+	def _parse_menu_accelerator(self, accel_text):
+		"""Parse menu accelerator text like Ctrl+Shift+N into wx flags/keycode."""
+		if not accel_text:
+			return None
+
+		parts = [p.strip() for p in accel_text.split("+") if p.strip()]
+		if not parts:
+			return None
+
+		mod_flags = 0
+		mod_map = {
+			"CTRL": wx.ACCEL_CTRL,
+			"CONTROL": wx.ACCEL_CTRL,
+			"RAWCTRL": getattr(wx, "ACCEL_RAW_CTRL", wx.ACCEL_CTRL),
+			"CMD": wx.ACCEL_CMD,
+			"ALT": wx.ACCEL_ALT,
+			"SHIFT": wx.ACCEL_SHIFT,
+		}
+
+		for mod in parts[:-1]:
+			mod_upper = mod.upper()
+			if mod_upper not in mod_map:
+				return None
+			mod_flags |= mod_map[mod_upper]
+
+		key_code = self._accelerator_keycode_from_token(parts[-1])
+		if key_code is None:
+			return None
+
+		return mod_flags, key_code
+
+	def _iter_menu_items(self, menu):
+		"""Yield menu items recursively, including submenu items."""
+		for item in menu.GetMenuItems():
+			submenu = item.GetSubMenu()
+			if submenu is not None:
+				yield from self._iter_menu_items(submenu)
+			if not item.IsSeparator():
+				yield item
+
+	def _build_menu_accelerator_entries(self):
+		"""Build explicit accelerator table entries from menu labels."""
+		entries = []
+		seen = set()
+		for i in range(self.menuBar.GetMenuCount()):
+			menu = self.menuBar.GetMenu(i)
+			if menu is None:
+				continue
+			for item in self._iter_menu_items(menu):
+				label = item.GetItemLabel()
+				if "\t" not in label:
+					continue
+				accel_text = label.split("\t", 1)[1]
+				parsed = self._parse_menu_accelerator(accel_text)
+				if parsed is None:
+					continue
+				flags, key_code = parsed
+				signature = (flags, key_code)
+				if signature in seen:
+					continue
+				seen.add(signature)
+				entries.append((flags, key_code, item.GetId()))
+		return entries
 
 	def _load_keymap_with_inheritance(self):
 		"""Load keymap with inheritance from default.
@@ -476,6 +631,10 @@ class MainGui(wx.Frame):
 		if platform.system() == "Darwin":
 			self.invisible = False
 			return
+		if not self.hotkeys_available:
+			self.invisible = False
+			speak.speak("Global hotkeys are unavailable. Install keyboard_handler to use the invisible interface.")
+			return
 		self.invisible=True
 		keymap = self._load_keymap_with_inheritance()
 		# Store registered keys so we can unregister them later
@@ -486,6 +645,9 @@ class MainGui(wx.Frame):
 	def unregister_keys(self):
 		# Invisible hotkeys not supported on Mac
 		if platform.system() == "Darwin":
+			return
+		if not self.hotkeys_available:
+			self.invisible = False
 			return
 		self.invisible=False
 		# Unregister the keys that were actually registered, not the current keymap
@@ -632,8 +794,17 @@ class MainGui(wx.Frame):
 		get_app().currentAccount.currentTimeline.toggle_mute()
 
 	def OnListCharHook(self, event):
-		"""Handle char hook for Option+M on Mac (context menu)."""
+		"""Handle list-level character hooks for key theme compatibility."""
 		key = event.GetKeyCode()
+		raw_key = event.GetRawKeyCode() if hasattr(event, "GetRawKeyCode") else 0
+
+		# On Linux with GTK Emacs key theme, Ctrl+N may be consumed by the list
+		# as "next line". Handle it explicitly for New Post.
+		if event.ControlDown() and not event.AltDown() and not event.ShiftDown():
+			if key in (ord('N'), ord('n'), 14) or raw_key in (ord('N'), ord('n')):
+				self.OnTweet()
+				return  # Consume event
+
 		# Use Option+M for context menu on Mac
 		if event.AltDown() and not event.RawControlDown() and not event.ShiftDown():
 			if key == ord('M') or key == ord('m'):
@@ -642,9 +813,21 @@ class MainGui(wx.Frame):
 		event.Skip()
 
 	def OnListKeyDown(self, event):
-		"""Handle key events for list controls on Mac."""
+		"""Handle key events for list controls."""
 		key = event.GetKeyCode()
 		mods = event.GetModifiers()
+		raw_key = event.GetRawKeyCode() if hasattr(event, "GetRawKeyCode") else 0
+		ctrl_down = event.ControlDown()
+		ctrl_only = ctrl_down and not event.ShiftDown() and not event.AltDown()
+
+		# Handle GTK Emacs key theme translations explicitly in timeline lists.
+		# Ctrl+N should always open New Post from the timeline.
+		if ctrl_only and (key in (ord('N'), ord('n'), 14) or raw_key in (ord('N'), ord('n'))):
+			self.OnTweet()
+			return
+		# Ctrl+P should not move selection as "up arrow" in timeline lists.
+		if ctrl_only and (key in (ord('P'), ord('p'), 16) or raw_key in (ord('P'), ord('p'))):
+			return
 
 		if key == wx.WXK_RETURN:
 			if mods == wx.MOD_CONTROL | wx.MOD_SHIFT:
@@ -759,7 +942,7 @@ class MainGui(wx.Frame):
 						cache.cleanup_orphaned_data(active_keys)
 					except Exception as e:
 						print(f"Error cleaning up cache: {e}")
-		if platform.system()!="Darwin":
+		if platform.system()!="Darwin" and self.trayicon is not None:
 			self.trayicon.on_exit(event,False)
 		# Clean up account resources (close timeline caches)
 		for account in get_app().accounts:
@@ -1051,6 +1234,9 @@ class MainGui(wx.Frame):
 			# Clamp index to valid range and set selection
 			tl.index = max(0, min(tl.index, count - 1))
 			self.list2.SetSelection(tl.index)
+			# Never leave the list in an unselected state when items exist.
+			if self.list2.GetSelection() == wx.NOT_FOUND:
+				self.list2.SetSelection(tl.index)
 		self.list2.Thaw()
 
 	def OnViewUserDb(self, event=None):
@@ -1062,9 +1248,23 @@ class MainGui(wx.Frame):
 		get_app().save_users()
 
 	def on_list2_change(self, event):
-		get_app().currentAccount.currentTimeline.index=self.list2.GetSelection()
+		tl = get_app().currentAccount.currentTimeline
+		selection = self.list2.GetSelection()
+		count = self.list2.GetCount()
+
+		# Do not allow "unselected" state while items exist.
+		if selection == wx.NOT_FOUND:
+			if count > 0:
+				fallback = tl.index if 0 <= tl.index < count else 0
+				self.list2.SetSelection(fallback)
+				selection = fallback
+			else:
+				tl.index = 0
+				return
+
+		tl.index = selection
 		# Track position change for timeline sync
-		get_app().currentAccount.currentTimeline.mark_position_moved()
+		tl.mark_position_moved()
 		status = self.get_current_status()
 		if status and get_app().prefs.earcon_audio:
 			# Get the actual status (unwrap boosts)
@@ -1094,7 +1294,21 @@ class MainGui(wx.Frame):
 					break
 
 	def onRefresh(self,event=None):
-		threading.Thread(target=get_app().currentAccount.currentTimeline.load, daemon=True).start()
+		tl = get_app().currentAccount.currentTimeline
+		if getattr(tl, "_loading", False):
+			return
+
+		focus_id = None
+		if tl.statuses and 0 <= tl.index < len(tl.statuses):
+			current = tl.statuses[tl.index]
+			status_id = getattr(current, "id", None)
+			if status_id is not None:
+				focus_id = str(status_id)
+
+		# Manual refresh should keep focus on the same status when possible.
+		tl._manual_refresh_focus_id = focus_id
+		tl._manual_refresh_pending = True
+		threading.Thread(target=tl.load, daemon=True).start()
 
 	def add_to_list(self, items):
 		if not items:

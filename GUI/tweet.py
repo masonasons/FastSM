@@ -51,6 +51,9 @@ class TweetGui(wx.Dialog):
 		if platform.system() == "Darwin":
 			self.text.MacCheckSpelling(True)
 		self.main_box.Add(self.text, 0, wx.ALL, 10)
+		self.char_count_label = wx.StaticText(self.panel, -1, "")
+		self.char_count_label.SetName("Character count")
+		self.main_box.Add(self.char_count_label, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 		self.text.Bind(wx.EVT_TEXT, self.Chars)
 		if self.type != "message":
 			self.text.AppendText(inittext)
@@ -585,7 +588,9 @@ class TweetGui(wx.Dialog):
 			percent = "0"
 		if self.max_length > 0 and length > self.max_length:
 			self.maximum()
-		self.SetLabel(self.type + " - " + str(length) + " of " + str(self.max_length) + " characters (" + percent + " Percent)")
+		self.char_count_label.SetLabel(
+			str(length) + " of " + str(self.max_length) + " characters (" + percent + " Percent)"
+		)
 
 	def _upload_media(self):
 		"""Upload media attachments and return list of media IDs."""

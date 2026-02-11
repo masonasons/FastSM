@@ -15,12 +15,12 @@ def _get_config_dir():
     # Standard config locations
     if platform.system() == "Windows":
         base = os.environ.get("APPDATA", os.path.expanduser("~"))
-        return os.path.join(base, "FastSM")
+        return os.path.join(base, "fastsm")
     elif platform.system() == "Darwin":
-        return os.path.expanduser("~/Library/Application Support/FastSM")
+        return os.path.expanduser("~/Library/Application Support/fastsm")
     else:
         base = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
-        return os.path.join(base, "FastSM")
+        return os.path.join(base, "fastsm")
 
 def _setup_error_logging():
     """Redirect stderr to config directory."""

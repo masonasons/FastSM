@@ -4,11 +4,26 @@ import os
 import json
 import atexit
 import platform
+import shutil
 from collections.abc import MutableMapping
 
 # Cache for portable mode detection
 _portable_path = None
 _portable_checked = False
+_migration_checked = False
+
+APP_CONFIG_DIRNAME = "fastsm"
+LEGACY_APP_CONFIG_DIRNAMES = ("FastSM",)
+
+
+def get_app_config_dirname():
+	"""Get the canonical app config directory name."""
+	return APP_CONFIG_DIRNAME
+
+
+def get_legacy_config_dirnames():
+	"""Get legacy app config directory names used by older versions."""
+	return LEGACY_APP_CONFIG_DIRNAMES
 
 
 def is_portable_mode():
@@ -56,6 +71,63 @@ def get_config_home():
 		return os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
 
 
+def _normalize_config_name(name, portable_mode):
+	"""Normalize config names to the canonical app directory."""
+	if name is None:
+		name = ""
+	name = str(name)
+
+	known_roots = (APP_CONFIG_DIRNAME,) + LEGACY_APP_CONFIG_DIRNAMES
+	known_prefixes = tuple(f"{root}/" for root in known_roots)
+
+	if portable_mode:
+		# In portable mode, userdata is already app-specific.
+		if name in known_roots:
+			return ""
+		for prefix in known_prefixes:
+			if name.startswith(prefix):
+				return name[len(prefix):]
+		return name
+
+	if name in known_roots:
+		return APP_CONFIG_DIRNAME
+	for prefix in known_prefixes:
+		if name.startswith(prefix):
+			rest = name[len(prefix):]
+			return f"{APP_CONFIG_DIRNAME}/{rest}" if rest else APP_CONFIG_DIRNAME
+	# Be tolerant of bare account names in non-portable mode.
+	if name.startswith("account"):
+		return f"{APP_CONFIG_DIRNAME}/{name}"
+	if name == "":
+		return APP_CONFIG_DIRNAME
+	return name
+
+
+def ensure_config_migrated():
+	"""Migrate legacy config directory to canonical one (non-portable only)."""
+	global _migration_checked
+	if _migration_checked:
+		return
+	_migration_checked = True
+
+	if is_portable_mode():
+		return
+
+	config_home = get_config_home()
+	new_dir = os.path.join(config_home, APP_CONFIG_DIRNAME)
+	if os.path.isdir(new_dir):
+		return
+
+	for legacy_name in LEGACY_APP_CONFIG_DIRNAMES:
+		legacy_dir = os.path.join(config_home, legacy_name)
+		if os.path.isdir(legacy_dir):
+			try:
+				shutil.copytree(legacy_dir, new_dir)
+			except Exception:
+				pass
+			return
+
+
 class Config(MutableMapping):
 	"""A simple JSON-based configuration class with attribute access and autosave."""
 
@@ -65,6 +137,10 @@ class Config(MutableMapping):
 		self._parent = _parent
 		self._closed = False
 		self._user_config_home = get_config_home()
+		self._portable_mode = is_portable_mode()
+		if not self._portable_mode:
+			ensure_config_migrated()
+		self._normalized_name = _normalize_config_name(name, self._portable_mode)
 
 		if _data is None:
 			self._data = {}
@@ -80,18 +156,12 @@ class Config(MutableMapping):
 	def config_file(self):
 		"""Get the path to the config file."""
 		# In portable mode, don't add app name prefix (userdata is already app-specific)
-		# But still add subdirectories for account configs etc.
-		if is_portable_mode():
-			# Strip "FastSM/" prefix if present, keep the rest
-			name = self._name
-			if name.startswith("FastSM/"):
-				name = name[7:]  # Remove "FastSM/" prefix
-			elif name == "FastSM":
-				name = ""  # Main config, no subdirectory
-			if name:
-				return os.path.join(self._user_config_home, name, "config.json")
+		# but keep subdirectories for account configs etc.
+		if self._portable_mode:
+			if self._normalized_name:
+				return os.path.join(self._user_config_home, self._normalized_name, "config.json")
 			return os.path.join(self._user_config_home, "config.json")
-		return os.path.join(self._user_config_home, self._name, "config.json")
+		return os.path.join(self._user_config_home, self._normalized_name, "config.json")
 
 	def _convert_nested(self, data):
 		"""Convert nested dicts to Config objects."""
@@ -108,9 +178,39 @@ class Config(MutableMapping):
 			with open(self.config_file, 'r') as f:
 				self._data = json.load(f)
 		except FileNotFoundError:
-			pass
+			# Fallback: read from legacy locations if migration was not possible.
+			for legacy_file in self._legacy_config_files():
+				try:
+					with open(legacy_file, 'r') as f:
+						self._data = json.load(f)
+						return
+				except FileNotFoundError:
+					continue
+				except Exception:
+					continue
 		except Exception as e:
 			print(f"Error loading config: {e}")
+
+	def _legacy_config_files(self):
+		"""Get possible legacy config file paths for backward compatibility."""
+		if self._portable_mode:
+			return []
+		if not self._normalized_name:
+			return []
+		if self._normalized_name == APP_CONFIG_DIRNAME:
+			suffix = ""
+		elif self._normalized_name.startswith(APP_CONFIG_DIRNAME + "/"):
+			suffix = self._normalized_name[len(APP_CONFIG_DIRNAME) + 1:]
+		else:
+			return []
+
+		paths = []
+		for legacy_root in LEGACY_APP_CONFIG_DIRNAMES:
+			if suffix:
+				paths.append(os.path.join(self._user_config_home, legacy_root, suffix, "config.json"))
+			else:
+				paths.append(os.path.join(self._user_config_home, legacy_root, "config.json"))
+		return paths
 
 	def save(self):
 		"""Save configuration to file."""

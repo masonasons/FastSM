@@ -1,0 +1,8 @@
+# Windows/macOS-specific dependencies
+# Install with: pip install -r requirements.txt -r requirements-desktop.txt
+
+# Audio playback (BASS-based)
+git+https://www.github.com/accessibleapps/sound_lib
+
+# Screen reader output (Windows only, but safe to install on macOS)
+git+https://www.github.com/accessibleapps/accessible_output2

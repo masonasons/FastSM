@@ -4,7 +4,7 @@ Welcome to FastSM!
 
 ## What is FastSM?
 
-FastSM is a fully accessible, easy-to-use, lightweight social media client that supports both Mastodon and Bluesky. Based on the Quinter App created back in 2021, it works on both Windows and Mac, and is open source, allowing anyone to contribute!
+FastSM is a fully accessible, easy-to-use, lightweight social media client that supports both Mastodon and Bluesky. Based on the Quinter App created back in 2021, it works on Windows, macOS, and Linux, and is open source, allowing anyone to contribute!
 
 ## Supported Platforms
 
@@ -18,7 +18,7 @@ FastSM has two interfaces:
 ### GUI Interface
 Control FastSM like any other application with buttons, lists, menus, and standard keyboard shortcuts.
 
-### Invisible Interface (Windows only)
+### Invisible Interface (Windows/Linux)
 Control FastSM from anywhere on your computer using global hotkeys. This is disabled by default but can be enabled in the Advanced settings. Multiple keymaps are available, including a Windows 11-optimized keymap.
 
 ## Main Window
@@ -62,7 +62,7 @@ All menu items show their keyboard shortcuts. Common shortcuts include:
 - **Ctrl+Enter**: Play media
 - **Ctrl+Shift+Enter**: Stop audio
 
-### Invisible Interface Keys (Windows only)
+### Invisible Interface Keys (Windows/Linux)
 
 Default keymap (can be customized via keymap files):
 
@@ -235,7 +235,7 @@ Customize display templates for:
 
 #### Advanced Tab
 
-- **Enable invisible interface**: Enable global hotkeys (Windows only)
+- **Enable invisible interface**: Enable global hotkeys (Windows/Linux)
 - **Sync invisible interface with UI**: Keep invisible interface in sync (disable for better performance)
 - **Repeat items at edges of invisible interface**: Repeat when reaching timeline boundaries
 - **Keymap**: Select keyboard layout (default, win11, or custom)
@@ -360,9 +360,9 @@ The autocomplete searches both your local user cache and the server for matches.
 FastSM supports custom soundpacks. Place soundpack folders in:
 - `sounds/` folder in your FastSM directory
 - User config directory:
-  - Windows: `%APPDATA%\FastSM\sounds\`
-  - macOS: `~/Library/Application Support/FastSM/sounds/`
-  - Linux: `~/.config/FastSM/sounds/`
+  - Windows: `%APPDATA%\fastsm\sounds\`
+  - macOS: `~/Library/Application Support/fastsm/sounds/`
+  - Linux: `~/.config/fastsm/sounds/`
 
 Download soundpacks from: [FastSM Soundpacks](https://spc.jonathanr.me/fastsm/)
 

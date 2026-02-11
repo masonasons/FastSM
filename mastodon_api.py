@@ -50,13 +50,14 @@ class mastodon(object):
 		self.stream_thread = None
 		self.stream = None
 		self._stream_started = False
-		# In portable mode, don't add FastSM prefix (userdata is already app-specific)
+		config_root = config.get_app_config_dirname()
+		# In portable mode, don't add app prefix (userdata is already app-specific)
 		if config.is_portable_mode():
 			self.prefs = config.Config(name="account"+str(index), autosave=True)
-			self.confpath = self.prefs._user_config_home+"/account"+str(index)
+			self.confpath = os.path.join(self.prefs._user_config_home, f"account{index}")
 		else:
-			self.prefs = config.Config(name="FastSM/account"+str(index), autosave=True)
-			self.confpath = self.prefs._user_config_home+"/FastSM/account"+str(index)
+			self.prefs = config.Config(name=f"{config_root}/account{index}", autosave=True)
+			self.confpath = os.path.join(self.prefs._user_config_home, config_root, f"account{index}")
 
 		# Platform backend (initialized after authentication)
 		self._platform = None

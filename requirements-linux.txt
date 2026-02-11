@@ -1,0 +1,14 @@
+# Linux-specific dependencies
+# Install with: pip install -r requirements.txt -r requirements-linux.txt
+# To limit compile parallelism, set FASTSM_BUILD_JOBS (used by build.sh).
+
+# Audio playback
+pygame>=2.0.0
+
+# Optional: python-vlc for URL streaming (fallback: mpv or ffplay command line)
+# python-vlc
+
+# Optional: speech-dispatcher Python bindings for TTS
+# speechd
+# If speechd is not available, espeak-ng or espeak will be used as fallback
+# Optional system packages for media playback fallback: mpv or ffmpeg (ffplay)

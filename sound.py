@@ -1,10 +1,43 @@
 import os
 import sys
-import sound_lib
-from sound_lib import stream
-from sound_lib import output as o
 import speak
 import re
+import shutil
+import subprocess
+
+try:
+	import sound_lib
+	from sound_lib import stream
+	from sound_lib import output as o
+	SOUND_LIB_AVAILABLE = True
+except Exception:
+	sound_lib = None
+	stream = None
+	o = None
+	SOUND_LIB_AVAILABLE = False
+
+try:
+	import pygame
+	PYGAME_AVAILABLE = True
+except Exception:
+	pygame = None
+	PYGAME_AVAILABLE = False
+
+_pygame_ready = False
+
+
+def _ensure_pygame_audio():
+	"""Initialize pygame mixer lazily for Linux fallback audio."""
+	global _pygame_ready
+	if _pygame_ready or not PYGAME_AVAILABLE:
+		return _pygame_ready
+	try:
+		if not pygame.mixer.get_init():
+			pygame.mixer.init()
+		_pygame_ready = True
+	except Exception:
+		_pygame_ready = False
+	return _pygame_ready
 
 def _setup_vlc_path():
 	"""Set up VLC library path for bundled or system VLC."""
@@ -150,11 +183,40 @@ def _find_ytdlp_executable():
 YTDLP_PATH = _find_ytdlp_executable()
 
 out = None  # Will be initialized with selected device
-handles = []  # List of active sound handles for concurrent playback
+handles = []  # List of active UI sound handles for concurrent playback
+_external_ui_sound_procs = []  # External process fallback for UI sounds
 player = None  # Media player for URL streams (VLC or sound_lib)
-player_type = None  # 'vlc' or 'soundlib' to track which player is active
+player_type = None  # 'vlc', 'soundlib', or 'external'
 vlc_instance = None  # VLC instance (reused for efficiency)
 _play_in_progress = False  # Flag to prevent multiple concurrent play attempts
+_external_player_proc = None
+
+
+def _get_external_player_command(url):
+	"""Get a command-line media player fallback for Linux."""
+	players = [
+		["mpv", "--no-video", "--really-quiet", "--", url],
+		["ffplay", "-nodisp", "-autoexit", "-loglevel", "error", url],
+	]
+	for cmd in players:
+		if shutil.which(cmd[0]):
+			return cmd
+	return None
+
+
+def _get_external_file_player_command(path):
+	"""Get a command for playing local UI sounds when libraries fail."""
+	players = [
+		["paplay", path],
+		["pw-play", path],
+		["mpv", "--no-video", "--really-quiet", "--", path],
+		["ffplay", "-nodisp", "-autoexit", "-loglevel", "error", path],
+		["ogg123", "-q", path],
+	]
+	for cmd in players:
+		if shutil.which(cmd[0]):
+			return cmd
+	return None
 
 def get_output_devices():
 	"""Get list of available audio output devices.
@@ -162,6 +224,9 @@ def get_output_devices():
 	Returns:
 		List of tuples: (device_index, device_name)
 	"""
+	if not SOUND_LIB_AVAILABLE:
+		return [(1, "Default audio device")]
+
 	devices = []
 	try:
 		from ctypes import byref
@@ -196,6 +261,9 @@ def init_audio_output(device_index=1):
 	"""Initialize audio output with the specified device. Call from application after prefs load."""
 	global out, vlc_instance
 
+	if not SOUND_LIB_AVAILABLE:
+		out = None
+
 	# Free existing output first
 	if out is not None:
 		try:
@@ -204,14 +272,15 @@ def init_audio_output(device_index=1):
 			pass
 		out = None
 
-	try:
-		out = o.Output(device=device_index)
-	except Exception as e:
-		# Fall back to device 1 (default) if device selection fails
+	if SOUND_LIB_AVAILABLE:
 		try:
-			out = o.Output(device=1)
-		except:
-			pass
+			out = o.Output(device=device_index)
+		except Exception:
+			# Fall back to device 1 (default) if device selection fails
+			try:
+				out = o.Output(device=1)
+			except Exception:
+				pass
 
 	# Reset VLC instance so it gets recreated with new settings on next playback
 	if vlc_instance is not None:
@@ -392,22 +461,41 @@ def get_media_type_for_earcon(status):
 
 def _cleanup_finished_handles():
 	"""Remove handles that have finished playing."""
-	global handles
+	global handles, _external_ui_sound_procs
 	active = []
 	for h in handles:
-		try:
-			# Check if still playing (is_playing property or similar)
-			if h.is_playing:
-				active.append(h)
-			else:
-				try:
-					h.free()
-				except sound_lib.main.BassError:
-					pass
-		except (sound_lib.main.BassError, AttributeError):
-			# Handle is invalid or already freed, skip it
-			pass
+		backend = h.get("backend")
+		if backend == "soundlib":
+			handle = h.get("handle")
+			try:
+				# Check if still playing (is_playing property or similar)
+				if handle.is_playing:
+					active.append(h)
+				else:
+					try:
+						handle.free()
+					except Exception:
+						pass
+			except Exception:
+				# Handle is invalid or already freed, skip it
+				pass
+		elif backend == "pygame":
+			channel = h.get("channel")
+			try:
+				if channel and channel.get_busy():
+					active.append(h)
+			except Exception:
+				pass
 	handles = active
+
+	active_procs = []
+	for proc in _external_ui_sound_procs:
+		try:
+			if proc.poll() is None:
+				active_procs.append(proc)
+		except Exception:
+			pass
+	_external_ui_sound_procs = active_procs
 
 def _get_bundled_path():
 	"""Get the path to bundled resources (for PyInstaller frozen apps)."""
@@ -453,7 +541,7 @@ def _find_sound_path(app, account, filename, bundled_path):
 	return None
 
 def play(account, filename, pack="", wait=False):
-	global handles
+	global handles, _external_ui_sound_procs
 	app = account.app
 
 	# Clean up finished handles before playing new sound
@@ -472,22 +560,55 @@ def play(account, filename, pack="", wait=False):
 
 	if not path:
 		return
-	try:
-		handle = stream.FileStream(file=path)
-		handle.pan = account.prefs.soundpan
-		# Use per-account soundpack volume (with fallback for old configs)
-		handle.volume = getattr(account.prefs, 'soundpack_volume', 1.0)
-		handle.looping = False
-		if wait:
-			handle.play_blocking()
-		else:
-			handle.play()
-			handles.append(handle)
-	except sound_lib.main.BassError:
-		pass
+	if SOUND_LIB_AVAILABLE:
+		try:
+			handle = stream.FileStream(file=path)
+			handle.pan = account.prefs.soundpan
+			# Use per-account soundpack volume (with fallback for old configs)
+			handle.volume = getattr(account.prefs, 'soundpack_volume', 1.0)
+			handle.looping = False
+			if wait:
+				handle.play_blocking()
+			else:
+				handle.play()
+				handles.append({"backend": "soundlib", "handle": handle})
+			return
+		except Exception:
+			pass
+
+	if _ensure_pygame_audio():
+		try:
+			snd = pygame.mixer.Sound(path)
+			snd.set_volume(getattr(account.prefs, 'soundpack_volume', 1.0))
+			channel = snd.play()
+			if wait and channel:
+				while channel.get_busy():
+					pygame.time.wait(10)
+				return
+			if channel:
+				# Keep the Sound object alive with the channel entry.
+				handles.append({"backend": "pygame", "channel": channel, "sound": snd})
+				return
+		except Exception:
+			pass
+
+	cmd = _get_external_file_player_command(path)
+	if cmd:
+		try:
+			proc = subprocess.Popen(
+				cmd,
+				stdout=subprocess.DEVNULL,
+				stderr=subprocess.DEVNULL,
+			)
+			if wait:
+				proc.wait(timeout=10)
+			else:
+				_external_ui_sound_procs.append(proc)
+		except Exception:
+			pass
 
 def play_url(url, vlc_only=False):
-	global player, player_type, vlc_instance, _play_in_progress
+	global player, player_type, vlc_instance, _play_in_progress, _external_player_proc
 	from application import get_app
 
 	# Prevent multiple concurrent play attempts
@@ -546,43 +667,71 @@ def play_url(url, vlc_only=False):
 			speak.speak("This URL requires VLC media player which is not available.")
 			return
 
-		# Fall back to sound_lib
 		# Extract actual stream URL for YouTube and similar services
 		stream_url = _extract_stream_url(url)
 
-		try:
-			player = stream.URLStream(url=stream_url)
-			# Apply media volume from preferences
-			player.volume = getattr(get_app().prefs, 'media_volume', 1.0)
-			player.play()
-			player_type = 'soundlib'
-			# Auto-open audio player if setting enabled
-			if getattr(get_app().prefs, 'auto_open_audio_player', False):
-				try:
-					from GUI import audio_player
-					audio_player.auto_show_audio_player()
-				except:
-					pass
-		except Exception as e:
-			speak.speak(f"Could not play audio: {e}")
+		if SOUND_LIB_AVAILABLE:
+			try:
+				player = stream.URLStream(url=stream_url)
+				# Apply media volume from preferences
+				player.volume = getattr(get_app().prefs, 'media_volume', 1.0)
+				player.play()
+				player_type = 'soundlib'
+				# Auto-open audio player if setting enabled
+				if getattr(get_app().prefs, 'auto_open_audio_player', False):
+					try:
+						from GUI import audio_player
+						audio_player.auto_show_audio_player()
+					except:
+						pass
+				return
+			except Exception as e:
+				speak.speak(f"Could not play audio with sound_lib: {e}")
+
+		# Last fallback on Linux: mpv/ffplay command-line players.
+		cmd = _get_external_player_command(stream_url)
+		if cmd:
+			try:
+				_external_player_proc = subprocess.Popen(
+					cmd,
+					stdout=subprocess.DEVNULL,
+					stderr=subprocess.DEVNULL,
+				)
+				player = _external_player_proc
+				player_type = 'external'
+				return
+			except Exception as e:
+				speak.speak(f"Could not launch external player: {e}")
+
+		speak.speak("Could not play audio: install VLC, sound_lib, mpv, or ffplay")
 	finally:
 		_play_in_progress = False
 
 def stop():
 	"""Stop media player (URL streams)."""
-	global player, player_type
+	global player, player_type, _external_player_proc
 	if player is not None:
 		try:
-			player.stop()
-			# VLC uses release(), sound_lib uses free()
 			if player_type == 'vlc':
+				player.stop()
 				player.release()
-			else:
+			elif player_type == 'soundlib':
+				player.stop()
 				player.free()
+			elif player_type == 'external':
+				if player.poll() is None:
+					player.terminate()
+					try:
+						player.wait(timeout=1.0)
+					except Exception:
+						player.kill()
+			else:
+				player.stop()
 		except:
 			pass
 		player = None
 		player_type = None
+		_external_player_proc = None
 		# Close audio player dialog if open
 		try:
 			from GUI import audio_player
@@ -592,14 +741,36 @@ def stop():
 
 def stop_all():
 	"""Stop all sounds including UI sounds and media player."""
-	global handles, player
+	global handles, player, _external_ui_sound_procs
 	# Stop media player
 	stop()
 	# Stop all UI sound handles
 	for h in handles:
-		try:
-			h.stop()
-			h.free()
-		except sound_lib.main.BassError:
-			pass
+		backend = h.get("backend")
+		if backend == "soundlib":
+			handle = h.get("handle")
+			try:
+				handle.stop()
+				handle.free()
+			except Exception:
+				pass
+		elif backend == "pygame":
+			channel = h.get("channel")
+			try:
+				if channel:
+					channel.stop()
+			except Exception:
+				pass
 	handles = []
+
+	for proc in _external_ui_sound_procs:
+		try:
+			if proc.poll() is None:
+				proc.terminate()
+				try:
+					proc.wait(timeout=1.0)
+				except Exception:
+					proc.kill()
+		except Exception:
+			pass
+	_external_ui_sound_procs = []

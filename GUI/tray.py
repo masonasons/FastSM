@@ -1,5 +1,6 @@
 import wx.adv
-from wx import Icon
+import wx
+import os
 from . import main
 TRAY_TOOLTIP = 'FastSM'
 TRAY_ICON = 'icon.png'
@@ -39,5 +40,23 @@ class TaskBarIcon(wx.adv.TaskBarIcon):
 			self.frame.OnClose(event)
 
 	def set_icon(self, path):
-#		icon = wx.Icon(wx.Bitmap(path))
-		self.SetIcon(Icon(), TRAY_TOOLTIP)
+		icon = wx.Icon()
+
+		# Try explicit icon path first.
+		if path and os.path.exists(path):
+			try:
+				icon = wx.Icon(path)
+			except Exception:
+				icon = wx.Icon()
+
+		# Fallback to a stock art icon so Linux always gets a valid bitmap.
+		if not icon.IsOk():
+			try:
+				bmp = wx.ArtProvider.GetBitmap(wx.ART_INFORMATION, wx.ART_OTHER, (16, 16))
+				if bmp.IsOk():
+					icon = wx.Icon(bmp)
+			except Exception:
+				pass
+
+		if icon.IsOk():
+			self.SetIcon(icon, TRAY_TOOLTIP)

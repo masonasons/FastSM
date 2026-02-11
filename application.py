@@ -100,12 +100,13 @@ class Application:
 		import mastodon_api as t
 		import timeline
 
-		self.prefs = config.Config(name="FastSM", autosave=True)
-		# In portable mode, userdata folder is already app-specific, don't add /FastSM
+		config_root = config.get_app_config_dirname()
+		self.prefs = config.Config(name=config_root, autosave=True)
+		# In portable mode, userdata folder is already app-specific, don't add app root
 		if config.is_portable_mode():
 			self.confpath = self.prefs._user_config_home
 		else:
-			self.confpath = self.prefs._user_config_home + "/FastSM"
+			self.confpath = os.path.join(self.prefs._user_config_home, config_root)
 
 		# Redirect stderr to errors.log in config directory (not app directory)
 		# This is especially important for installed versions where the app directory
@@ -178,8 +179,15 @@ class Application:
 		self.prefs.wrap = self.prefs.get("wrap", False)
 		# Content warning handling: 'hide' = show CW only, 'show' = show CW + text, 'ignore' = show text only
 		self.prefs.cw_mode = self.prefs.get("cw_mode", "hide")
-		# Keymap for invisible interface (default inherits from default.keymap)
-		self.prefs.keymap = self.prefs.get("keymap", "default")
+		# Keymap for invisible interface (Linux defaults to linux.keymap)
+		default_keymap = "linux" if platform.system() == "Linux" else "default"
+		self.prefs.keymap = self.prefs.get("keymap", default_keymap)
+		# Migrate existing Linux configs from legacy default keymap once.
+		if platform.system() == "Linux":
+			linux_keymap_migrated = self.prefs.get("linux_keymap_migrated", False)
+			if not linux_keymap_migrated and self.prefs.keymap == "default":
+				self.prefs.keymap = "linux"
+			self.prefs.linux_keymap_migrated = True
 		# Sync home timeline position with Mastodon marker API
 		self.prefs.sync_timeline_position = self.prefs.get("sync_timeline_position", False)
 		# Dark mode: 'off', 'on', or 'auto' (follow system)
@@ -301,12 +309,12 @@ class Application:
 		"""Check if an account has credentials saved (no dialogs needed)."""
 		import config
 		try:
-			# In portable mode, don't add FastSM prefix (userdata is already app-specific)
+			# In portable mode, don't add app prefix (userdata is already app-specific)
 			# Use save_on_exit=False to avoid overwriting real account prefs on exit
 			if config.is_portable_mode():
 				prefs = config.Config(name="account"+str(index), autosave=False, save_on_exit=False)
 			else:
-				prefs = config.Config(name="FastSM/account"+str(index), autosave=False, save_on_exit=False)
+				prefs = config.Config(name=f"{config.get_app_config_dirname()}/account{index}", autosave=False, save_on_exit=False)
 			platform_type = prefs.get("platform_type", "")
 
 			if platform_type == "bluesky":
@@ -326,7 +334,7 @@ class Application:
 			if config.is_portable_mode():
 				prefs = config.Config(name="account"+str(index), autosave=False, save_on_exit=False)
 			else:
-				prefs = config.Config(name="FastSM/account"+str(index), autosave=False, save_on_exit=False)
+				prefs = config.Config(name=f"{config.get_app_config_dirname()}/account{index}", autosave=False, save_on_exit=False)
 
 			platform_type = prefs.get("platform_type", "")
 			if not platform_type:

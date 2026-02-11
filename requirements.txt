@@ -5,8 +5,8 @@ pyperclip
 requests
 wxpython
 Pillow
-git+https://github.com/accessibleapps/accessible_output2
 git+https://github.com/accessibleapps/keyboard_handler
-git+https://github.com/accessibleapps/sound_lib
+git+https://github.com/accessibleapps/accessible_output2 ; sys_platform != 'linux'
+git+https://github.com/accessibleapps/sound_lib ; sys_platform != 'linux'
 # Windows only
 pyenchant ; sys_platform == 'win32'

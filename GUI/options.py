@@ -38,7 +38,7 @@ class general(wx.Panel, wx.Dialog):
 
 
 class invisible_tab(wx.Panel, wx.Dialog):
-	"""Invisible interface settings (Windows only)."""
+	"""Invisible interface settings (Windows/Linux)."""
 	def _get_available_keymaps(self):
 		"""Get list of available keymaps from bundled and user config folders."""
 		keymaps = ['default']  # Always have default
@@ -309,8 +309,12 @@ class youtube_tab(wx.Panel, wx.Dialog):
 
 	def on_ytdlp_browse(self, event):
 		"""Browse for yt-dlp executable."""
+		if sys.platform == 'win32':
+			wildcard = "Executable files (*.exe)|*.exe|All files (*.*)|*.*"
+		else:
+			wildcard = "All files (*.*)|*.*"
 		with wx.FileDialog(self, "Select yt-dlp executable",
-			wildcard="Executable files (*.exe)|*.exe|All files (*.*)|*.*",
+			wildcard=wildcard,
 			style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as dlg:
 			if dlg.ShowModal() == wx.ID_OK:
 				self.ytdlp_path.SetValue(dlg.GetPath())
@@ -325,8 +329,12 @@ class youtube_tab(wx.Panel, wx.Dialog):
 
 	def on_deno_browse(self, event):
 		"""Browse for Deno executable."""
+		if sys.platform == 'win32':
+			wildcard = "Executable files (*.exe)|*.exe|All files (*.*)|*.*"
+		else:
+			wildcard = "All files (*.*)|*.*"
 		with wx.FileDialog(self, "Select Deno executable",
-			wildcard="Executable files (*.exe)|*.exe|All files (*.*)|*.*",
+			wildcard=wildcard,
 			style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as dlg:
 			if dlg.ShowModal() == wx.ID_OK:
 				self.deno_path.SetValue(dlg.GetPath())
@@ -904,7 +912,7 @@ class OptionsGui(wx.Dialog):
 		self.notebook.AddPage(self.youtube_tab, "YouTube")
 		self.templates=templates(self.notebook)
 		self.notebook.AddPage(self.templates, "Templates")
-		# Invisible interface tab (Windows only)
+		# Invisible interface tab (Windows/Linux)
 		if platform.system()!="Darwin":
 			self.invisible_tab=invisible_tab(self.notebook)
 			self.notebook.AddPage(self.invisible_tab, "Invisible Interface")
