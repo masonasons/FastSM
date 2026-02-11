@@ -13,7 +13,7 @@ _portable_checked = False
 _migration_checked = False
 
 APP_CONFIG_DIRNAME = "fastsm"
-LEGACY_APP_CONFIG_DIRNAMES = ("FastSM", "fastfm")
+LEGACY_APP_CONFIG_DIRNAMES = ("FastSM",)
 
 
 def get_app_config_dirname():

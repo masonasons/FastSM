@@ -63,7 +63,7 @@ def _has_bluesky_accounts():
 		legacy_dirs = _config.get_legacy_config_dirnames()
 	except Exception:
 		config_dir = "fastsm"
-		legacy_dirs = ("FastSM", "fastfm")
+		legacy_dirs = ("FastSM",)
 	# Check for portable mode (userdata folder in current directory)
 	userdata_path = os.path.join(os.getcwd(), "userdata")
 	if os.path.isdir(userdata_path):
