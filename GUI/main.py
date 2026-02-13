@@ -570,6 +570,16 @@ class MainGui(wx.Frame):
 							except (AttributeError, TypeError):
 								pass
 
+	def _get_status_state_for_menu(self, status):
+		"""Return status to check and state flags for menu labels."""
+		if not status:
+			return None, False, False, False
+		status_to_check = status.reblog if hasattr(status, 'reblog') and status.reblog else status
+		is_favourited = getattr(status_to_check, 'favourited', False) or getattr(status, 'favourited', False)
+		is_reblogged = getattr(status_to_check, 'reblogged', False) or getattr(status, 'reblogged', False)
+		is_bookmarked = getattr(status_to_check, 'bookmarked', False) or getattr(status, 'bookmarked', False)
+		return status_to_check, is_favourited, is_reblogged, is_bookmarked
+
 	def OnHideWindow(self, event=None):
 		"""Hide the window (menu handler)."""
 		self.ToggleWindow()
@@ -1314,9 +1324,7 @@ class MainGui(wx.Frame):
 			else:
 				# Notifications with posts (favourite, reblog, mention, etc.)
 				notif_status = getattr(item, 'status', None)
-				is_favourited = getattr(notif_status, 'favourited', False) if notif_status else False
-				is_reblogged = getattr(notif_status, 'reblogged', False) if notif_status else False
-				is_bookmarked = getattr(notif_status, 'bookmarked', False) if notif_status else False
+				status_to_check, is_favourited, is_reblogged, is_bookmarked = self._get_status_state_for_menu(notif_status)
 				platform_type = getattr(get_app().currentAccount.prefs, 'platform_type', 'mastodon')
 
 				# View Image - only show if notification post has image attachments (at top of menu)
@@ -1460,10 +1468,7 @@ class MainGui(wx.Frame):
 
 		else:
 			# Standard post menu for all other timelines
-			status_to_check = item.reblog if hasattr(item, 'reblog') and item.reblog else item
-			is_favourited = getattr(status_to_check, 'favourited', False)
-			is_reblogged = getattr(status_to_check, 'reblogged', False)
-			is_bookmarked = getattr(status_to_check, 'bookmarked', False)
+			status_to_check, is_favourited, is_reblogged, is_bookmarked = self._get_status_state_for_menu(item)
 			platform_type = getattr(get_app().currentAccount.prefs, 'platform_type', 'mastodon')
 
 			# View Image - only show if post has image attachments (at top of menu)
