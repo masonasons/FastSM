@@ -272,6 +272,8 @@ class ViewGui(wx.Dialog):
 		self.favourite.Bind(wx.EVT_BUTTON, self.OnFavourite)
 		self.main_box.Add(self.favourite, 0, wx.ALL, 10)
 
+		self._update_action_labels()
+
 		if is_scheduled:
 			# For scheduled posts, use own account name
 			display_name = getattr(self.account.me, 'display_name', '') or self.account.me.acct
@@ -344,16 +346,55 @@ class ViewGui(wx.Dialog):
 		self.panel.Layout()
 		theme.apply_theme(self)
 
+	def _get_status_for_state(self):
+		"""Return the status to check for state, plus favourited/reblogged flags."""
+		status_to_check = self.status.reblog if hasattr(self.status, 'reblog') and self.status.reblog else self.status
+		is_favourited = getattr(status_to_check, 'favourited', False) or getattr(self.status, 'favourited', False)
+		is_reblogged = getattr(status_to_check, 'reblogged', False) or getattr(self.status, 'reblogged', False)
+		return status_to_check, is_favourited, is_reblogged
+
+	def _set_status_state(self, status_to_check, attr, value):
+		"""Apply state to the current status and any wrapped status."""
+		try:
+			setattr(status_to_check, attr, value)
+		except Exception:
+			pass
+		if status_to_check is not self.status:
+			try:
+				setattr(self.status, attr, value)
+			except Exception:
+				pass
+		if hasattr(self.status, 'reblog') and self.status.reblog and self.status.reblog is not status_to_check:
+			try:
+				setattr(self.status.reblog, attr, value)
+			except Exception:
+				pass
+
+	def _sync_status_state(self, status_id, **state_updates):
+		from . import main
+		if hasattr(main, 'window') and main.window:
+			main.window._sync_status_state_across_buffers(self.account, status_id, **state_updates)
+
+	def _update_action_labels(self):
+		status_to_check, is_favourited, is_reblogged = self._get_status_for_state()
+		if hasattr(self, 'boost'):
+			self.boost.SetLabel("Un&boost" if is_reblogged else "&Boost")
+		if hasattr(self, 'favourite'):
+			self.favourite.SetLabel("Un&favourite" if is_favourited else "&Favourite")
+
 	def OnLike(self, event):
 		"""Like/favourite the post."""
 		import speak
 		try:
-			status_id = misc.get_interaction_id(self.account, self.status)
-			if not getattr(self.status, 'favourited', False):
+			status_to_check, is_favourited, _ = self._get_status_for_state()
+			status_id = misc.get_interaction_id(self.account, status_to_check)
+			if not is_favourited:
 				self.account.favourite(status_id)
 				self.account.app.prefs.favourites_sent += 1
-				self.status.favourited = True
+				self._set_status_state(status_to_check, 'favourited', True)
+				self._sync_status_state(status_id, favourited=True)
 				sound.play(self.account, "like")
+				self._update_action_labels()
 			else:
 				speak.speak("Already liked")
 		except Exception as error:
@@ -363,11 +404,14 @@ class ViewGui(wx.Dialog):
 		"""Unlike/unfavourite the post."""
 		import speak
 		try:
-			status_id = misc.get_interaction_id(self.account, self.status)
-			if getattr(self.status, 'favourited', False):
+			status_to_check, is_favourited, _ = self._get_status_for_state()
+			status_id = misc.get_interaction_id(self.account, status_to_check)
+			if is_favourited:
 				self.account.unfavourite(status_id)
-				self.status.favourited = False
+				self._set_status_state(status_to_check, 'favourited', False)
+				self._sync_status_state(status_id, favourited=False)
 				sound.play(self.account, "unlike")
+				self._update_action_labels()
 			else:
 				speak.speak("Not liked")
 		except Exception as error:
@@ -389,7 +433,35 @@ class ViewGui(wx.Dialog):
 		misc.reply(self.account, self.status)
 
 	def OnBoost(self, event):
-		misc.boost(self.account, self.status)
+		try:
+			status_to_check, _, is_reblogged = self._get_status_for_state()
+			status_id = misc.get_interaction_id(self.account, status_to_check)
+			if is_reblogged:
+				if get_app().prefs.confirm_unboost:
+					dlg = wx.MessageDialog(self, "Are you sure you want to unboost this post?", "Confirm Unboost", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+					if dlg.ShowModal() != wx.ID_YES:
+						dlg.Destroy()
+						return
+					dlg.Destroy()
+				self.account.unboost(status_id)
+				new_state = False
+				sound.play(self.account, "delete")
+			else:
+				if get_app().prefs.confirm_boost:
+					dlg = wx.MessageDialog(self, "Are you sure you want to boost this post?", "Confirm Boost", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+					if dlg.ShowModal() != wx.ID_YES:
+						dlg.Destroy()
+						return
+					dlg.Destroy()
+				self.account.boost(status_id)
+				self.account.app.prefs.boosts_sent += 1
+				new_state = True
+				sound.play(self.account, "send_repost")
+			self._set_status_state(status_to_check, 'reblogged', new_state)
+			self._sync_status_state(status_id, reblogged=new_state)
+			self._update_action_labels()
+		except Exception as error:
+			self.account.app.handle_error(error, "toggle boost")
 
 	def OnViewBoosters(self, event):
 		users = []
@@ -461,7 +533,35 @@ class ViewGui(wx.Dialog):
 			self.account.app.handle_error(error, "view quotes")
 
 	def OnFavourite(self, event):
-		misc.favourite(self.account, self.status)
+		try:
+			status_to_check, is_favourited, _ = self._get_status_for_state()
+			status_id = misc.get_interaction_id(self.account, status_to_check)
+			if is_favourited:
+				if get_app().prefs.confirm_unfavorite:
+					dlg = wx.MessageDialog(self, "Are you sure you want to unfavorite this post?", "Confirm Unfavorite", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+					if dlg.ShowModal() != wx.ID_YES:
+						dlg.Destroy()
+						return
+					dlg.Destroy()
+				self.account.unfavourite(status_id)
+				new_state = False
+				sound.play(self.account, "unlike")
+			else:
+				if get_app().prefs.confirm_favorite:
+					dlg = wx.MessageDialog(self, "Are you sure you want to favorite this post?", "Confirm Favorite", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+					if dlg.ShowModal() != wx.ID_YES:
+						dlg.Destroy()
+						return
+					dlg.Destroy()
+				self.account.favourite(status_id)
+				self.account.app.prefs.favourites_sent += 1
+				new_state = True
+				sound.play(self.account, "like")
+			self._set_status_state(status_to_check, 'favourited', new_state)
+			self._sync_status_state(status_id, favourited=new_state)
+			self._update_action_labels()
+		except Exception as error:
+			self.account.app.handle_error(error, "toggle favourite")
 
 	def OnProfile(self, event):
 		u = [self.status.account]
