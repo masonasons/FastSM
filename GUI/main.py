@@ -580,6 +580,22 @@ class MainGui(wx.Frame):
 		is_bookmarked = getattr(status_to_check, 'bookmarked', False) or getattr(status, 'bookmarked', False)
 		return status_to_check, is_favourited, is_reblogged, is_bookmarked
 
+	def _can_edit_status(self, status):
+		"""Return True if the current user can edit this status."""
+		if not status:
+			return False
+		# Boost wrappers are activities, not editable posts.
+		if hasattr(status, 'reblog') and status.reblog:
+			return False
+		account = get_app().currentAccount
+		if hasattr(account, 'supports_feature') and not account.supports_feature('editing'):
+			return False
+		me = getattr(account, 'me', None)
+		status_account = getattr(status, 'account', None)
+		if not me or not status_account:
+			return False
+		return str(getattr(status_account, 'id', '')) == str(getattr(me, 'id', ''))
+
 	def OnHideWindow(self, event=None):
 		"""Hide the window (menu handler)."""
 		self.ToggleWindow()
@@ -1358,6 +1374,10 @@ class MainGui(wx.Frame):
 				m_reply = menu.Append(-1, "Reply")
 				self.Bind(wx.EVT_MENU, self.OnReply, m_reply)
 
+				if self._can_edit_status(notif_status):
+					m_edit = menu.Append(-1, "Edit")
+					self.Bind(wx.EVT_MENU, self.OnEdit, m_edit)
+
 				m_boost = menu.Append(-1, "Unboost" if is_reblogged else "Boost")
 				self.Bind(wx.EVT_MENU, self.OnBoostToggle, m_boost)
 
@@ -1500,6 +1520,10 @@ class MainGui(wx.Frame):
 
 			m_reply = menu.Append(-1, "Reply")
 			self.Bind(wx.EVT_MENU, self.OnReply, m_reply)
+
+			if self._can_edit_status(item):
+				m_edit = menu.Append(-1, "Edit")
+				self.Bind(wx.EVT_MENU, self.OnEdit, m_edit)
 
 			m_boost = menu.Append(-1, "Unboost" if is_reblogged else "Boost")
 			self.Bind(wx.EVT_MENU, self.OnBoostToggle, m_boost)
@@ -2018,11 +2042,13 @@ class MainGui(wx.Frame):
 	def OnEdit(self, event=None):
 		status = self.get_current_status()
 		if status:
-			# Check if this is our own post
-			if hasattr(status, 'account') and hasattr(get_app().currentAccount, 'me'):
-				if str(status.account.id) != str(get_app().currentAccount.me.id):
+			if not self._can_edit_status(status):
+				account = get_app().currentAccount
+				if hasattr(account, 'supports_feature') and not account.supports_feature('editing'):
+					speak.speak("Editing posts is not supported on this platform")
+				else:
 					speak.speak("You can only edit your own posts")
-					return
+				return
 			misc.edit(get_app().currentAccount, status)
 
 	def OnQuote(self, event=None):
