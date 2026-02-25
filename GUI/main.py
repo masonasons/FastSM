@@ -91,8 +91,11 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnAccountOptions, m_account_options)
 		m_hide_window = menu.Append(-1, "Hide Window\tCtrl+Shift+W", "hide_window")
 		self.Bind(wx.EVT_MENU, self.OnHideWindow, m_hide_window)
-		m_close = menu.Append(wx.ID_EXIT, "Exit\tAlt+X", "exit")
-		self.Bind(wx.EVT_MENU, self.OnClose, m_close)
+		if platform.system() != "Darwin":
+			# This shortcut does not work on Mac, so has been set to other platforms only.
+			# To close on Mac, use CMD+Q.
+			m_close = menu.Append(wx.ID_EXIT, "Exit\tAlt+X", "exit")
+			self.Bind(wx.EVT_MENU, self.OnClose, m_close)
 		self.menuBar.Append(menu, "&Application")
 		menu2 = wx.Menu()
 		m_tweet = menu2.Append(-1, "New post\tCtrl+N", "post")
