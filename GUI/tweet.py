@@ -5,6 +5,7 @@ import sound
 import platform
 import datetime
 import os
+import locale
 from . import poll, theme
 from application import get_app
 
@@ -120,6 +121,64 @@ class TweetGui(wx.Dialog):
 					if orig_cw:
 						self.cw_text.SetValue(orig_cw)
 				self.main_box.Add(self.cw_text, 0, wx.ALL, 10)
+
+			# Language selection
+			self.language = None
+			self.language_label = wx.StaticText(self.panel, -1, "&Language")
+			self.main_box.Add(self.language_label, 0, wx.LEFT | wx.TOP, 10)
+			# Same language list as in options
+			self.language_choices = [
+				("Auto-detect", None),
+				("English", "en"),
+				("Spanish", "es"),
+				("French", "fr"),
+				("German", "de"),
+				("Italian", "it"),
+				("Portuguese", "pt"),
+				("Japanese", "ja"),
+				("Chinese", "zh"),
+				("Korean", "ko"),
+				("Russian", "ru"),
+				("Arabic", "ar"),
+				("Hindi", "hi"),
+				("Dutch", "nl"),
+				("Polish", "pl"),
+				("Turkish", "tr"),
+				("Swedish", "sv"),
+				("Danish", "da"),
+				("Norwegian", "no"),
+				("Finnish", "fi"),
+				("Greek", "el"),
+				("Czech", "cs"),
+				("Hungarian", "hu"),
+				("Romanian", "ro"),
+				("Thai", "th"),
+				("Vietnamese", "vi"),
+				("Indonesian", "id"),
+				("Malay", "ms"),
+				("Hebrew", "he"),
+				("Ukrainian", "uk"),
+				("Catalan", "ca"),
+			]
+			self.language = wx.Choice(self.panel, -1,
+				choices=[name for name, code in self.language_choices],
+				size=(800,600), name="Language")
+			# Set default from preferences or use the status language for replies/edits
+			default_lang = None
+			if (self.type == "reply" or self.type == "edit") and status is not None:
+				# Use the original post's language if available
+				default_lang = getattr(status, 'language', None)
+			if default_lang is None:
+				# Use global default language setting
+				default_lang = getattr(self.account.app.prefs, 'default_language', None)
+			# Find the index for the default language
+			lang_index = 0
+			for i, (name, code) in enumerate(self.language_choices):
+				if code == default_lang:
+					lang_index = i
+					break
+			self.language.SetSelection(lang_index)
+			self.main_box.Add(self.language, 0, wx.ALL, 10)
 
 			# Media attachments - only show if platform supports it
 			self.media_list = None
@@ -675,6 +734,12 @@ class TweetGui(wx.Dialog):
 			if self.cw_text is not None and self.cw_text.GetValue().strip():
 				spoiler_text = self.cw_text.GetValue().strip()
 
+			# Get language selection
+			language = None
+			if self.language is not None:
+				lang_index = self.language.GetSelection()
+				language = self.language_choices[lang_index][1]
+
 			# Upload media attachments if any
 			media_ids = None
 			if self.media_list is not None and self.media_attachments:
@@ -700,11 +765,12 @@ class TweetGui(wx.Dialog):
 							text=self.text.GetValue(),
 							visibility=visibility,
 							spoiler_text=spoiler_text,
-							media_ids=media_ids
+							media_ids=media_ids,
+							language=language
 						)
 					elif self.type == "quote":
 						self.account.app.prefs.quotes_sent += 1
-						status = self.account.quote(self.status, self.text.GetValue(), visibility=visibility)
+						status = self.account.quote(self.status, self.text.GetValue(), visibility=visibility, language=language)
 					else:
 						self.account.app.prefs.replies_sent += 1
 						# Use original status ID if available (for mentions timeline)
@@ -727,7 +793,8 @@ class TweetGui(wx.Dialog):
 							visibility=visibility,
 							spoiler_text=spoiler_text,
 							media_ids=media_ids,
-							scheduled_at=scheduled_at
+							scheduled_at=scheduled_at,
+							language=language
 						)
 				else:
 					# Check if poll is set and platform supports it
@@ -754,7 +821,8 @@ class TweetGui(wx.Dialog):
 							spoiler_text=spoiler_text,
 							poll=poll_obj,
 							media_ids=media_ids,
-							scheduled_at=scheduled_at
+							scheduled_at=scheduled_at,
+							language=language
 						)
 					else:
 						status = self.account.post(
@@ -762,7 +830,8 @@ class TweetGui(wx.Dialog):
 							visibility=visibility,
 							spoiler_text=spoiler_text,
 							media_ids=media_ids,
-							scheduled_at=scheduled_at
+							scheduled_at=scheduled_at,
+							language=language
 						)
 				self.account.app.prefs.chars_sent += len(self.text.GetValue())
 			except Exception as error:

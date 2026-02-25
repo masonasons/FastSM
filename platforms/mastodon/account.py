@@ -610,12 +610,17 @@ class MastodonAccount(PlatformAccount):
         if reply_to_id:
             post_kwargs['in_reply_to_id'] = reply_to_id
 
+        # Handle language parameter
+        language = kwargs.pop('language', None)
+        if language:
+            post_kwargs['language'] = language
+
         post_kwargs.update(kwargs)
 
         status = self.api.status_post(**post_kwargs)
         return mastodon_status_to_universal(status)
 
-    def quote(self, status, text: str, visibility: Optional[str] = None) -> UniversalStatus:
+    def quote(self, status, text: str, visibility: Optional[str] = None, **kwargs) -> UniversalStatus:
         """Quote a status."""
         if visibility is None:
             visibility = self.default_visibility
@@ -630,6 +635,9 @@ class MastodonAccount(PlatformAccount):
             acct = getattr(status.account, 'acct', '')
             is_remote = '@' in acct
 
+        # Extract language parameter
+        language = kwargs.get('language', None)
+
         result = None
         quote_succeeded = False
 
@@ -641,6 +649,8 @@ class MastodonAccount(PlatformAccount):
                 'visibility': visibility,
                 'quoted_status_id': status_id
             }
+            if language:
+                params['language'] = language
             result = self.api._Mastodon__api_request('POST', '/api/v1/statuses', params)
             # Verify the quote was actually attached
             # Check for quote, quote_id, or quoted_status_id in response
@@ -653,7 +663,10 @@ class MastodonAccount(PlatformAccount):
         if not quote_succeeded:
             result = None
             try:
-                result = self.api.status_post(status=text, quote_id=status_id, visibility=visibility)
+                post_kwargs = {'status': text, 'quote_id': status_id, 'visibility': visibility}
+                if language:
+                    post_kwargs['language'] = language
+                result = self.api.status_post(**post_kwargs)
                 # Check if quote was attached - also check for quote_id attribute
                 if result and (
                     (hasattr(result, 'quote') and result.quote) or
@@ -701,6 +714,11 @@ class MastodonAccount(PlatformAccount):
 
         if media_ids:
             edit_kwargs['media_ids'] = media_ids
+
+        # Handle language parameter
+        language = kwargs.get('language', None)
+        if language:
+            edit_kwargs['language'] = language
 
         result = self.api.status_update(**edit_kwargs)
         return mastodon_status_to_universal(result)
