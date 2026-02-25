@@ -2,6 +2,7 @@ import timeline
 import platform
 import os, sys
 import wx
+import locale
 from . import main, theme
 from application import get_app
 from version import APP_NAME, APP_VERSION
@@ -34,6 +35,56 @@ class general(wx.Panel, wx.Dialog):
 		cw_mode_map = {'hide': 0, 'show': 1, 'ignore': 2}
 		self.cw_mode.SetSelection(cw_mode_map.get(get_app().prefs.cw_mode, 0))
 		self.main_box.Add(self.cw_mode, 0, wx.ALL, 10)
+
+		# Default language for posts
+		lang_label = wx.StaticText(self, -1, "Default language for posts:")
+		self.main_box.Add(lang_label, 0, wx.LEFT | wx.TOP, 10)
+		# Common languages list with ISO 639-1 codes
+		self.language_choices = [
+			("Auto-detect", None),
+			("English", "en"),
+			("Spanish", "es"),
+			("French", "fr"),
+			("German", "de"),
+			("Italian", "it"),
+			("Portuguese", "pt"),
+			("Japanese", "ja"),
+			("Chinese", "zh"),
+			("Korean", "ko"),
+			("Russian", "ru"),
+			("Arabic", "ar"),
+			("Hindi", "hi"),
+			("Dutch", "nl"),
+			("Polish", "pl"),
+			("Turkish", "tr"),
+			("Swedish", "sv"),
+			("Danish", "da"),
+			("Norwegian", "no"),
+			("Finnish", "fi"),
+			("Greek", "el"),
+			("Czech", "cs"),
+			("Hungarian", "hu"),
+			("Romanian", "ro"),
+			("Thai", "th"),
+			("Vietnamese", "vi"),
+			("Indonesian", "id"),
+			("Malay", "ms"),
+			("Hebrew", "he"),
+			("Ukrainian", "uk"),
+			("Catalan", "ca"),
+		]
+		self.default_language = wx.Choice(self, -1,
+			choices=[name for name, code in self.language_choices],
+			name="Default language for posts")
+		# Try to get current setting, defaulting to auto-detect
+		current_lang = getattr(get_app().prefs, 'default_language', None)
+		lang_index = 0
+		for i, (name, code) in enumerate(self.language_choices):
+			if code == current_lang:
+				lang_index = i
+				break
+		self.default_language.SetSelection(lang_index)
+		self.main_box.Add(self.default_language, 0, wx.ALL, 10)
 		self.SetSizer(self.main_box)
 
 
@@ -1081,6 +1132,9 @@ class OptionsGui(wx.Dialog):
 		get_app().prefs.ctrl_enter_to_send=self.general.ctrl_enter_to_send.GetValue()
 		# Content warning mode
 		get_app().prefs.cw_mode = new_cw_mode
+		# Default language for posts
+		lang_index = self.general.default_language.GetSelection()
+		get_app().prefs.default_language = self.general.language_choices[lang_index][1]
 		self.Destroy()
 		if reverse:
 			timeline.reverse(get_app())

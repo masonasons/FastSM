@@ -536,6 +536,12 @@ class BlueskyAccount(PlatformAccount):
             if labels:
                 post_kwargs['labels'] = labels
 
+            # Handle language parameter
+            # Note: Bluesky's AT Protocol supports langs parameter in send_post
+            language = kwargs.get('language', None)
+            if language:
+                post_kwargs['langs'] = [language]
+
             response = self.client.send_post(**post_kwargs)
 
             # Fetch the created post to return full data
