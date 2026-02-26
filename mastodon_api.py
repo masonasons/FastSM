@@ -880,7 +880,7 @@ class mastodon(object):
 
 		return result
 
-	def edit(self, status_id, text, visibility=None, spoiler_text=None, media_ids=None, **kwargs):
+	def edit(self, status_id, text, visibility=None, spoiler_text=None, media_ids=None, language=None, **kwargs):
 		"""Edit an existing status"""
 		# Use platform backend if available
 		if hasattr(self, '_platform') and self._platform:
@@ -890,6 +890,7 @@ class mastodon(object):
 				visibility=visibility,
 				spoiler_text=spoiler_text,
 				media_ids=media_ids,
+				language=language,
 				**kwargs
 			)
 
@@ -901,6 +902,8 @@ class mastodon(object):
 			edit_kwargs['spoiler_text'] = spoiler_text
 		if media_ids:
 			edit_kwargs['media_ids'] = media_ids
+		if language:
+			edit_kwargs['language'] = language
 
 		return self.api.status_update(**edit_kwargs)
 
