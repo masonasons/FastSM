@@ -1087,14 +1087,30 @@ class MainGui(wx.Frame):
 
 		This is more efficient than refreshList() for single-item additions.
 		"""
+		tl = get_app().currentAccount.currentTimeline
+		# Save current selection before modifying list
+		old_index = tl.index
+		old_count = self.list2.GetCount()
+
 		self.list2.Freeze()
 		self.list2.Insert(display_text, position)
-		tl = get_app().currentAccount.currentTimeline
-		# Adjust selection if needed
-		if position <= tl.index:
-			# Item inserted before or at current position, shift selection down
-			tl.index = min(tl.index + 1, self.list2.GetCount() - 1)
+
+		# Adjust index if item was inserted before current position
+		if position <= old_index:
+			# Item inserted before or at current position, shift index down
+			tl.index = old_index + 1
+		else:
+			tl.index = old_index
+
+		# Clamp to valid range
+		new_count = self.list2.GetCount()
+		if new_count > 0:
+			tl.index = max(0, min(tl.index, new_count - 1))
+
 		self.list2.SetSelection(tl.index)
+		# Ensure the selection is visible
+		if tl.index >= 0:
+			self.list2.EnsureVisible(tl.index)
 		self.list2.Thaw()
 
 	def OnViewUserDb(self, event=None):

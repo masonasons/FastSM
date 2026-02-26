@@ -36,7 +36,6 @@ Improvements:
 - Autocomplete now only triggers on @usernames and adds space after
 - Preserve newlines in user bios in profile viewer
 - Remove 'No more posts' speech when loading previous
-- Optimize streaming updates - single items now use O(1) insert instead of O(n) list rebuild
 - Auto-updater detects installed vs portable and uses appropriate update method
 
 Bug Fixes:

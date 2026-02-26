@@ -486,13 +486,12 @@ class timeline(object):
 
 		return True
 
-	def _add_status_with_filter(self, status, to_front=False, skip_cache_invalidation=False):
+	def _add_status_with_filter(self, status, to_front=False):
 		"""Add a status to the timeline, respecting any active filter.
 
 		Args:
 			status: The status to add
 			to_front: If True, insert at front of list; if False, append to end
-			skip_cache_invalidation: If True, don't invalidate display cache (for incremental updates)
 
 		Returns:
 			True if the status was added to the visible list, False if filtered out
@@ -525,8 +524,7 @@ class timeline(object):
 				self.statuses.insert(0, status)
 			else:
 				self.statuses.append(status)
-			if not skip_cache_invalidation:
-				self.invalidate_display_cache()
+			self.invalidate_display_cache()
 			return True
 
 	def has_status(self, status_id):
@@ -1586,45 +1584,16 @@ class timeline(object):
 					if not self.app.prefs.reversed:
 						objs.reverse()
 						objs2.reverse()
-
-					# Check if we can use incremental update (single streaming item, is current timeline)
-					use_incremental = (
-						items != [] and
-						len(objs) == 1 and
-						self.app.currentAccount == self.account and
-						self.account.currentTimeline == self and
-						hasattr(self, '_display_list_cache') and
-						self._display_list_cache is not None
-					)
-
 					# Filter objs2 to only include items that pass the filter
 					filtered_objs2 = []
 					for i in objs:
-						# Skip cache invalidation if using incremental update
-						shown = self._add_status_with_filter(i, to_front=not self.app.prefs.reversed, skip_cache_invalidation=use_incremental)
+						shown = self._add_status_with_filter(i, to_front=not self.app.prefs.reversed)
 						if shown:
 							filtered_objs2.append(i)
 					objs2 = filtered_objs2
 
 				if self.app.currentAccount == self.account and self.account.currentTimeline == self:
-					# For single streaming items, use incremental update for better performance
-					# This avoids O(n) list rebuild for each streaming item
-					if items != [] and len(filtered_objs2) == 1:
-						# Single streaming item - try incremental update
-						status = filtered_objs2[0]
-						to_front = not self.app.prefs.reversed
-						display = self.add_display_item(status, to_front=to_front)
-						if display is not None:
-							# Incremental update successful
-							# Position is 0 for front, len(statuses)-1 for back
-							position = 0 if to_front else len(self.statuses) - 1
-							wx.CallAfter(main.window.insertListItem, display, position)
-						else:
-							# Cache out of sync, fall back to full refresh
-							wx.CallAfter(main.window.refreshList)
-					else:
-						# Bulk items or API load - use full refresh
-						wx.CallAfter(main.window.refreshList)
+					wx.CallAfter(main.window.refreshList)
 
 				if items == []:
 					# Don't set since_id for timelines that use internal pagination IDs
