@@ -622,7 +622,7 @@ class BlueskyAccount(PlatformAccount):
             print(f"Error building reply ref: {e}")
             return None
 
-    def quote(self, status, text: str, visibility: Optional[str] = None) -> UniversalStatus:
+    def quote(self, status, text: str, visibility: Optional[str] = None, language: Optional[str] = None, **kwargs) -> UniversalStatus:
         """Quote a post."""
         try:
             status_uri = status.id if hasattr(status, 'id') else status
@@ -639,7 +639,9 @@ class BlueskyAccount(PlatformAccount):
                 record=models.ComAtprotoRepoStrongRef.Main(uri=status_uri, cid=status_cid)
             )
 
-            response = self.client.send_post(text=text, embed=embed)
+            # Bluesky uses 'langs' as a list
+            langs = [language] if language else None
+            response = self.client.send_post(text=text, embed=embed, langs=langs)
             if hasattr(response, 'uri'):
                 return self.get_status(response.uri)
             return None

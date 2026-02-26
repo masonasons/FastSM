@@ -832,11 +832,11 @@ class mastodon(object):
 			return self._platform.unboost(id)
 		self.api.status_unreblog(id=id)
 
-	def quote(self, status, text, visibility=None):
+	def quote(self, status, text, visibility=None, language=None):
 		"""Quote a status - try native quote, fallback to URL"""
 		# Use platform backend if available
 		if hasattr(self, '_platform') and self._platform:
-			return self._platform.quote(status, text, visibility=visibility)
+			return self._platform.quote(status, text, visibility=visibility, language=language)
 
 		if visibility is None:
 			visibility = self.default_visibility
@@ -852,6 +852,8 @@ class mastodon(object):
 				'visibility': visibility,
 				'quoted_status_id': status_id
 			}
+			if language:
+				params['language'] = language
 			result = self.api._Mastodon__api_request('POST', '/api/v1/statuses', params)
 			# Verify the quote was actually attached
 			if result and ('quote' in result or 'quote_id' in result):
@@ -863,7 +865,7 @@ class mastodon(object):
 		if not quote_succeeded:
 			result = None
 			try:
-				result = self.api.status_post(status=text, quote_id=status_id, visibility=visibility)
+				result = self.api.status_post(status=text, quote_id=status_id, visibility=visibility, language=language)
 				if result and (hasattr(result, 'quote') and result.quote):
 					quote_succeeded = True
 			except:
@@ -874,7 +876,7 @@ class mastodon(object):
 			original_url = getattr(status, 'url', None)
 			if not original_url:
 				original_url = f"{self.prefs.instance_url}/@{status.account.acct}/{status_id}"
-			result = self.api.status_post(status=f"{text}\n\n{original_url}", visibility=visibility)
+			result = self.api.status_post(status=f"{text}\n\n{original_url}", visibility=visibility, language=language)
 
 		return result
 
