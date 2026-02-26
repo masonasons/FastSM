@@ -1,34 +1,75 @@
 FastSM Changelog
 ================
 
-0.4.2
-Add option to include/exclude link preview card text in posts (Templates settings, on by default)
-Add ability to report users and posts (user viewer, post view, context menus, Actions menu)
-- Rule violations show server rules as checklist to select specific violations
-- Thread posts can be multi-selected to include in report (Mastodon)
-Disable VLC entirely on macOS - was causing crashes
-Fix crash when using "Load posts here" with filtered timeline
-Fix Mac crash when timeline fails to load - GUI updates now thread-safe
-Fix Mac crash from speech in background threads - now routes to main thread
-Fix Bluesky reply not recognizing mentioned users when post fetch delayed
-Fix Bluesky mentions appearing in notifications - now respects mentions_in_notifications setting
-Fix mentions appearing in notifications from cache - now filtered when loading
-Fix polls from cache having no options - now refreshes status from API before voting
-Fix Bluesky posts showing wrong time in Sent timeline - use UTC instead of local time
-Fix YouTube playback on macOS - yt-dlp now detected without requiring VLC
-Fix Mac crash at startup - safe window Raise() calls and delayed update check
-Fix conversation timeline not focusing on source post when opened
-Use plaintext content from fediverse posts when available (Misskey, Iceshrimp, Akkoma, etc.)
-- Checks _misskey_content, source.content, and text fields before falling back to HTML stripping
-- Clear timeline cache to see improved formatting on existing posts
-Fix blank posts when plaintext fields exist but are empty/whitespace
-Fix user/sent timelines pulling old posts after refresh when pinned posts present
-Fix server-side filters with "hide" action showing posts as CW instead of hiding completely
-Improve user autocomplete - now works with word at cursor, no @ required
-Add View Instance option (Alt+I in window, Ctrl+Win+Alt+I invisible interface)
-- Shows instance name, description, version, stats, rules, contact info
-- Shows server limits: max characters, media limits, poll settings
-- Automatically detects remote instance when viewing instance/remote user timelines
+0.5.0
+
+New Features:
+- Add language selection for posts - choose language when posting (default in account options)
+- Add Windows installer option - installer or portable zip available in releases
+- Add "Insert Placeholder..." buttons to all template fields in options
+- Add pin/unpin and delete buttons to View Post dialog (for your own posts)
+- Add mention earcon - plays when navigating to a post that mentions you
+- Add soundpack converter script in the git repo for TweeseCake and TWBlue soundpack formats
+- Add per-timeline streaming support for lists, local, federated, and hashtag timelines
+- Add View Instance option (Alt+I in window, Ctrl+Win+Alt+I invisible interface)
+  - Shows instance name, description, version, stats, rules, contact info
+  - Shows server limits: max characters, media limits, poll settings
+  - Automatically detects remote instance when viewing instance/remote user timelines
+- Add option to include/exclude link preview card text in posts (Templates settings)
+- Add ability to report users and posts (user viewer, post view, context menus)
+  - Rule violations show server rules as checklist to select specific violations
+  - Thread posts can be multi-selected to include in report (Mastodon)
+- Show Edit option in post context menu when you can edit the post
+
+Improvements:
+- Improve notification template - now properly supports $type$ and other variables
+- Improve user autocomplete - now works with word at cursor, no @ required
+- Improve find functionality - F3/Shift+F3, no wrap, better feedback
+- Improve scheduled posts timeline
+- Use plaintext content from fediverse posts when available (Misskey, Iceshrimp, Akkoma, etc.)
+  - Checks _misskey_content, source.content, and text fields before falling back to HTML stripping
+- Apply max_usernames_display setting to mentions in notifications
+- Preserve position when refreshing conversation timelines
+- Use follow/unfollow sounds for accept/reject follow requests
+- Skip mention earcon in mentions timeline (redundant)
+- Rename send_tweet sound to send_post
+- Autocomplete now only triggers on @usernames and adds space after
+- Preserve newlines in user bios in profile viewer
+- Remove 'No more posts' speech when loading previous
+- Optimize streaming updates - single items now use O(1) insert instead of O(n) list rebuild
+- Auto-updater detects installed vs portable and uses appropriate update method
+
+Bug Fixes:
+- Fix quoting broken due to missing language parameter
+- Fix editing broken due to missing language parameter
+- Fix quote post template in notifications showing "Re: URL" instead of proper format
+- Fix bookmarks/favorites only loading 40 posts - now properly paginates
+- Fix Cmd+Q not closing FastSM on Mac
+- Fix boost/favorite state mismatch between View Post dialog and context menus
+- Fix errors.log being created in app folder instead of config directory
+- Fix updater failing with apostrophes in folder path
+- Fix global hotkeys causing issues on macOS - now disabled
+- Fix macOS crashes from Raise() calls on destroyed windows
+- Fix Mac crash when timeline fails to load - GUI updates now thread-safe
+- Fix Mac crash from speech in background threads - now routes to main thread
+- Fix crash when using "Load posts here" with filtered timeline
+- Fix refreshing conversation timelines throwing 'func' attribute error
+- Fix Bluesky reply not recognizing mentioned users when post fetch delayed
+- Fix Bluesky mentions appearing in notifications - now respects setting
+- Fix mentions appearing in notifications from cache - now filtered when loading
+- Fix polls from cache having no options - now refreshes from API before voting
+- Fix Bluesky posts showing wrong time in Sent timeline - use UTC
+- Fix YouTube playback on macOS - yt-dlp detected without VLC
+- Fix conversation timeline not focusing on source post when opened
+- Fix blank posts when plaintext fields exist but are empty/whitespace
+- Fix user/sent timelines pulling old posts after refresh when pinned posts present
+- Fix server-side filters with "hide" action showing posts as CW instead of hiding
+- Fix View Instance in remote user timelines
+- Fix dialog focus after Windows+D minimize/restore
+- Fix account creation dialog bugs
+- Fix confirm_delete setting not honored in View Post dialog delete button
+- Fix multiple audio streams playing when spamming play button
+- Disable VLC entirely on macOS - was causing crashes
 
 0.4.1
 Reimplement VLC less intrusively this time.

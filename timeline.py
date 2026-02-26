@@ -486,12 +486,13 @@ class timeline(object):
 
 		return True
 
-	def _add_status_with_filter(self, status, to_front=False):
+	def _add_status_with_filter(self, status, to_front=False, skip_cache_invalidation=False):
 		"""Add a status to the timeline, respecting any active filter.
 
 		Args:
 			status: The status to add
 			to_front: If True, insert at front of list; if False, append to end
+			skip_cache_invalidation: If True, don't invalidate display cache (for incremental updates)
 
 		Returns:
 			True if the status was added to the visible list, False if filtered out
@@ -524,7 +525,8 @@ class timeline(object):
 				self.statuses.insert(0, status)
 			else:
 				self.statuses.append(status)
-			self.invalidate_display_cache()
+			if not skip_cache_invalidation:
+				self.invalidate_display_cache()
 			return True
 
 	def has_status(self, status_id):
@@ -1584,18 +1586,45 @@ class timeline(object):
 					if not self.app.prefs.reversed:
 						objs.reverse()
 						objs2.reverse()
+
+					# Check if we can use incremental update (single streaming item, is current timeline)
+					use_incremental = (
+						items != [] and
+						len(objs) == 1 and
+						self.app.currentAccount == self.account and
+						self.account.currentTimeline == self and
+						hasattr(self, '_display_list_cache') and
+						self._display_list_cache is not None
+					)
+
 					# Filter objs2 to only include items that pass the filter
 					filtered_objs2 = []
 					for i in objs:
-						shown = self._add_status_with_filter(i, to_front=not self.app.prefs.reversed)
+						# Skip cache invalidation if using incremental update
+						shown = self._add_status_with_filter(i, to_front=not self.app.prefs.reversed, skip_cache_invalidation=use_incremental)
 						if shown:
 							filtered_objs2.append(i)
 					objs2 = filtered_objs2
 
 				if self.app.currentAccount == self.account and self.account.currentTimeline == self:
-					# Always use refreshList to ensure display list matches statuses
-					# This avoids synchronization issues with incremental updates
-					wx.CallAfter(main.window.refreshList)
+					# For single streaming items, use incremental update for better performance
+					# This avoids O(n) list rebuild for each streaming item
+					if items != [] and len(filtered_objs2) == 1:
+						# Single streaming item - try incremental update
+						status = filtered_objs2[0]
+						to_front = not self.app.prefs.reversed
+						display = self.add_display_item(status, to_front=to_front)
+						if display is not None:
+							# Incremental update successful
+							# Position is 0 for front, len(statuses)-1 for back
+							position = 0 if to_front else len(self.statuses) - 1
+							wx.CallAfter(main.window.insertListItem, display, position)
+						else:
+							# Cache out of sync, fall back to full refresh
+							wx.CallAfter(main.window.refreshList)
+					else:
+						# Bulk items or API load - use full refresh
+						wx.CallAfter(main.window.refreshList)
 
 				if items == []:
 					# Don't set since_id for timelines that use internal pagination IDs
@@ -1772,6 +1801,50 @@ class timeline(object):
 	def invalidate_display_cache(self):
 		"""Invalidate the cached display list (call when statuses change)."""
 		self._display_list_cache = None
+
+	def _get_display_string(self, status):
+		"""Get display string for a single status (using cache if available)."""
+		cached = getattr(status, '_display_cache', None)
+		if cached is not None:
+			return cached
+
+		if self.type == "notifications":
+			display = self.app.process_notification(status, account=self.account)
+		elif self.type == "conversations":
+			display = self.app.process_conversation(status, account=self.account)
+		else:
+			display = self.app.process_status(status, account=self.account)
+
+		# Try to cache
+		try:
+			status._display_cache = display
+		except (AttributeError, TypeError):
+			pass
+		return display
+
+	def add_display_item(self, status, to_front=True):
+		"""Add a single item to display list incrementally (for streaming).
+
+		Returns the display string if successful, None if full refresh needed.
+		"""
+		# If no cache exists, need full rebuild
+		if not hasattr(self, '_display_list_cache') or self._display_list_cache is None:
+			return None
+
+		# Check if cache is out of sync (shouldn't happen, but be safe)
+		if len(self._display_list_cache) != len(self.statuses) - 1:
+			self._display_list_cache = None
+			return None
+
+		display = self._get_display_string(status)
+
+		# Update cache incrementally
+		if to_front:
+			self._display_list_cache.insert(0, display)
+		else:
+			self._display_list_cache.append(display)
+
+		return display
 
 	def prepare(self, items):
 		"""Convert status objects to display strings, preserving order.

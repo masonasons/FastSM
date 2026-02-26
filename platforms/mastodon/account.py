@@ -53,6 +53,10 @@ class MastodonAccount(PlatformAccount):
         except:
             self.default_visibility = 'public'
 
+        # Store last API response for pagination (bookmarks/favourites use internal IDs)
+        self._last_bookmarks_response = None
+        self._last_favourites_response = None
+
     @property
     def me(self) -> UniversalUser:
         return self._me
@@ -163,7 +167,20 @@ class MastodonAccount(PlatformAccount):
 
     def get_favourites(self, limit: int = 40, **kwargs) -> List[UniversalStatus]:
         """Get favourited statuses."""
-        statuses = self.api.favourites(limit=limit, **kwargs)
+        # Mastodon uses internal pagination IDs for favourites, not status IDs
+        # Use fetch_next for "load previous" (when max_id is passed)
+        if 'max_id' in kwargs and self._last_favourites_response is not None:
+            # Load next page using proper pagination
+            kwargs.pop('max_id')  # Don't pass status ID as max_id
+            statuses = self.api.fetch_next(self._last_favourites_response)
+            if statuses is None:
+                statuses = []
+        else:
+            statuses = self.api.favourites(limit=limit, **kwargs)
+
+        # Store response for pagination
+        self._last_favourites_response = statuses if statuses else None
+
         result = self._convert_statuses(statuses)
         for status in result:
             self.user_cache.add_users_from_status(status)
@@ -171,7 +188,20 @@ class MastodonAccount(PlatformAccount):
 
     def get_bookmarks(self, limit: int = 40, **kwargs) -> List[UniversalStatus]:
         """Get bookmarked statuses."""
-        statuses = self.api.bookmarks(limit=limit, **kwargs)
+        # Mastodon uses internal pagination IDs for bookmarks, not status IDs
+        # Use fetch_next for "load previous" (when max_id is passed)
+        if 'max_id' in kwargs and self._last_bookmarks_response is not None:
+            # Load next page using proper pagination
+            kwargs.pop('max_id')  # Don't pass status ID as max_id
+            statuses = self.api.fetch_next(self._last_bookmarks_response)
+            if statuses is None:
+                statuses = []
+        else:
+            statuses = self.api.bookmarks(limit=limit, **kwargs)
+
+        # Store response for pagination
+        self._last_bookmarks_response = statuses if statuses else None
+
         result = self._convert_statuses(statuses)
         for status in result:
             self.user_cache.add_users_from_status(status)
@@ -702,7 +732,7 @@ class MastodonAccount(PlatformAccount):
 
     def edit(self, status_id: str, text: str, visibility: Optional[str] = None,
              spoiler_text: Optional[str] = None, media_ids: Optional[list] = None,
-             **kwargs) -> UniversalStatus:
+             language: Optional[str] = None, **kwargs) -> UniversalStatus:
         """Edit an existing status."""
         edit_kwargs = {
             'id': status_id,
@@ -715,8 +745,6 @@ class MastodonAccount(PlatformAccount):
         if media_ids:
             edit_kwargs['media_ids'] = media_ids
 
-        # Handle language parameter
-        language = kwargs.get('language', None)
         if language:
             edit_kwargs['language'] = language
 

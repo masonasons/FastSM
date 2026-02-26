@@ -1082,6 +1082,21 @@ class MainGui(wx.Frame):
 			self.list2.SetSelection(tl.index)
 		self.list2.Thaw()
 
+	def insertListItem(self, display_text, position=0):
+		"""Insert a single item at a position (for incremental streaming updates).
+
+		This is more efficient than refreshList() for single-item additions.
+		"""
+		self.list2.Freeze()
+		self.list2.Insert(display_text, position)
+		tl = get_app().currentAccount.currentTimeline
+		# Adjust selection if needed
+		if position <= tl.index:
+			# Item inserted before or at current position, shift selection down
+			tl.index = min(tl.index + 1, self.list2.GetCount() - 1)
+		self.list2.SetSelection(tl.index)
+		self.list2.Thaw()
+
 	def OnViewUserDb(self, event=None):
 		u=view.UserViewGui(get_app().currentAccount,get_app().users,"User Database containing "+str(len(get_app().users))+" users.")
 		u.Show()

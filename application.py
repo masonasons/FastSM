@@ -809,6 +809,20 @@ class Application:
 
 			# Handle quote notifications - format similar to how quotes are shown in timelines
 			if hasattr(status, 'quote') and status.quote:
+				import re
+				# Strip quote-related URLs from status_text (same as process_status)
+				# Remove RE:/QT: followed by a URL at the start
+				status_text = re.sub(r'^(RE|QT|re|qt):\s*https?://\S+\s*', '', status_text, flags=re.IGNORECASE).strip()
+				# Get the quoted post's URL to strip it from the text
+				quote_url = getattr(status.quote, 'url', None)
+				if quote_url:
+					# Strip the exact URL if it appears at the end
+					status_text = status_text.rstrip()
+					if status_text.endswith(quote_url):
+						status_text = status_text[:-len(quote_url)].rstrip()
+				# Also strip any trailing Mastodon-style status URLs (https://instance/@user/id)
+				status_text = re.sub(r'\s*https?://[^\s]+/@[^\s]+/\d+\s*$', '', status_text).strip()
+
 				quote = status.quote
 				quote_text = getattr(quote, 'text', '') or self.strip_html(getattr(quote, 'content', ''))
 				quote_account = getattr(quote, 'account', None)
