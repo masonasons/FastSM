@@ -333,21 +333,21 @@ class mastodon(object):
 		self._finish_timeline_init()
 
 	def _prompt_follow_fastsm(self):
-		"""Prompt user to follow FastSM account after new Mastodon sign-in."""
+		"""Prompt user to follow MewProjects account after new Mastodon sign-in."""
 		result = wx.MessageBox(
-			"Would you like to follow FastSM@fwoof.space to get updates about the app?",
-			"Follow FastSM",
+			"Would you like to follow MewProjects@fwoof.space to get updates about the app?",
+			"Follow MewProjects",
 			wx.YES_NO | wx.ICON_QUESTION
 		)
 		if result == wx.YES:
 			try:
-				# Look up the FastSM account via search
-				results = self.api.account_search(q="FastSM@fwoof.space", limit=1)
+				# Look up the MewProjects account via search
+				results = self.api.account_search(q="MewProjects@fwoof.space", limit=1)
 				if results and len(results) > 0:
 					self.api.account_follow(id=results[0].id)
-					speak.speak("Now following FastSM")
+					speak.speak("Now following MewProjects")
 				else:
-					speak.speak("Could not find FastSM account")
+					speak.speak("Could not find MewProjects account")
 			except Exception as e:
 				speak.speak(f"Could not follow: {e}")
 
