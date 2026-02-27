@@ -414,10 +414,13 @@ class MainGui(wx.Frame):
 			])
 			self.SetAcceleratorTable(accel)
 
-		self.menu_button = wx.Button(self.panel, -1, label="Menu")
-		self.menu_button.SetToolTip("Open menu commands (F10)")
-		self.menu_button.Bind(wx.EVT_BUTTON, self.OnMenuCommandPalette)
-		self.main_box.Add(self.menu_button, 0, wx.LEFT | wx.TOP, 10)
+		# Menu button is only needed on Linux (for accessibility with Orca)
+		self.menu_button = None
+		if platform.system() == "Linux":
+			self.menu_button = wx.Button(self.panel, -1, label="Menu")
+			self.menu_button.SetToolTip("Open menu commands (F10)")
+			self.menu_button.Bind(wx.EVT_BUTTON, self.OnMenuCommandPalette)
+			self.main_box.Add(self.menu_button, 0, wx.LEFT | wx.TOP, 10)
 		self.list_label=wx.StaticText(self.panel, -1, label="Timelines")
 		self.main_box.Add(self.list_label, 0, wx.LEFT | wx.TOP, 10)
 		self.list=wx.ListBox(self.panel, -1)
@@ -430,9 +433,10 @@ class MainGui(wx.Frame):
 		self.main_box.Add(self.list2, 1, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 10)
 		self.list2.Bind(wx.EVT_LISTBOX, self.on_list2_change)
 		self.list2.Bind(wx.EVT_CONTEXT_MENU, self.OnPostContextMenu)
-		# Ensure tab navigation includes the menu button before timeline controls.
+		# Ensure tab navigation order for timeline controls.
 		try:
-			self.menu_button.MoveBeforeInTabOrder(self.list)
+			if self.menu_button:
+				self.menu_button.MoveBeforeInTabOrder(self.list)
 			self.list.MoveBeforeInTabOrder(self.list2)
 		except Exception:
 			pass
