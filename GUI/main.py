@@ -447,7 +447,9 @@ class MainGui(wx.Frame):
 		self.panel.SetSizer(self.main_box)
 		self.panel.Layout()
 		# Note: theme is applied in FastSM.pyw after prefs are loaded
-		self._start_remote_control_socket()
+		# Remote control socket is Linux-only (uses UNIX sockets)
+		if platform.system() == "Linux":
+			self._start_remote_control_socket()
 
 	def _load_keymap_file(self, path):
 		"""Load a keymap file and return dict of key -> action mappings."""
