@@ -902,8 +902,7 @@ class mastodon(object):
 			edit_kwargs['spoiler_text'] = spoiler_text
 		if media_ids:
 			edit_kwargs['media_ids'] = media_ids
-		if language:
-			edit_kwargs['language'] = language
+		# Note: language is not supported by Mastodon's status_update API
 
 		return self.api.status_update(**edit_kwargs)
 

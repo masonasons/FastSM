@@ -733,7 +733,11 @@ class MastodonAccount(PlatformAccount):
     def edit(self, status_id: str, text: str, visibility: Optional[str] = None,
              spoiler_text: Optional[str] = None, media_ids: Optional[list] = None,
              language: Optional[str] = None, **kwargs) -> UniversalStatus:
-        """Edit an existing status."""
+        """Edit an existing status.
+
+        Note: language parameter is accepted but ignored because Mastodon's
+        status_update API does not support changing the language of a post.
+        """
         edit_kwargs = {
             'id': status_id,
             'status': text,
@@ -745,8 +749,7 @@ class MastodonAccount(PlatformAccount):
         if media_ids:
             edit_kwargs['media_ids'] = media_ids
 
-        if language:
-            edit_kwargs['language'] = language
+        # Note: language is not supported by Mastodon's status_update API
 
         result = self.api.status_update(**edit_kwargs)
         return mastodon_status_to_universal(result)
