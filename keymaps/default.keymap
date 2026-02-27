@@ -1,5 +1,6 @@
 alt+win+shift+q=close
 control+win+w=ToggleWindow
+alt+win+w=ToggleWindow
 alt+win+n=Post
 alt+win+left=prev_tl
 alt+win+right=next_tl
@@ -42,8 +43,8 @@ control+win+shift+a=AudioPlayer
 alt+win+delete=Delete
 alt+win+o=Options
 control+alt+win+o=AccountOptions
-alt+win+shift+left=previous_from_user
-alt+win+shift+right=next_from_user
+alt+win+shift+pageup=previous_from_user
+alt+win+shift+pagedown=next_from_user
 alt+win+shift+up=previous_in_thread
 alt+win+shift+down=next_in_thread
 control+win+shift+c=Copy

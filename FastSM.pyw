@@ -122,6 +122,9 @@ if _should_preimport_atproto:
 if platform.system() != "Darwin":
 	instance_checker = wx.SingleInstanceChecker("FastSM-" + wx.GetUserId())
 	if instance_checker.IsAnotherRunning():
+		# Treat re-launch as a no-op so desktop launchers do not surface this as an error.
+		if os.environ.get("FASTSM_EXIT_SUCCESS_IF_RUNNING", "1") == "1":
+			sys.exit(0)
 		wx.MessageBox("Another instance of FastSM is already running.", "FastSM", wx.OK | wx.ICON_WARNING)
 		sys.exit(1)
 

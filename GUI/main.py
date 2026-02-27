@@ -3,10 +3,12 @@ import webbrowser
 import platform
 import pyperclip
 import sys
+import socket
 import application
 from application import get_app
 import wx
 from keyboard_handler.wx_handler import WXKeyboardHandler
+from .a11y_hotkeys import AtspiWaylandKeyboardHandler
 import speak
 from . import account_options, accounts, chooser, custom_timelines, explore_dialog, hashtag_dialog, invisible, lists, misc, options, profile, search, theme, timeline_filter, timelines, tray, tweet, view
 import sound
@@ -43,13 +45,39 @@ class MainGui(wx.Frame):
 		self.invisible=False
 		self._find_text = ""  # Current search text for find in timeline
 		self._open_dialogs = []  # Track open dialogs for focus restoration
+		self._control_socket = None
+		self._control_socket_path = None
+		self._control_timer = None
 		wx.Frame.__init__(self, None, title=title,size=(800,600))
 		self.Center()
 		if platform.system()!="Darwin":
-			self.trayicon=tray.TaskBarIcon(self)
-		self.handler=WXKeyboardHandler(self)
+			try:
+				self.trayicon=tray.TaskBarIcon(self)
+			except Exception as e:
+				# Do not fail startup if tray integration is unavailable on this desktop.
+				self.trayicon=None
+				print(f"FastSM tray initialization disabled: {e}", file=sys.stderr)
+		session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+		self._session_type = session_type
+		self._handler_backend = "wx"
+		self._wayland_global_available = False
+		if platform.system() == "Linux" and session_type == "wayland":
+			try:
+				self.handler = AtspiWaylandKeyboardHandler()
+				self._handler_backend = "atspi"
+				self._wayland_global_available = True
+			except Exception as e:
+				self.handler = WXKeyboardHandler(self)
+				print(f"FastSM Wayland hotkey fallback to wx backend: {e}", file=sys.stderr)
+		else:
+			self.handler=WXKeyboardHandler(self)
 		# Global hotkeys only on Windows/Linux - not supported properly on Mac
-		if platform.system() != "Darwin":
+		self._global_hotkeys_supported = platform.system() != "Darwin" and (
+			session_type != "wayland" or self._wayland_global_available
+		)
+		if self._global_hotkeys_supported and not (
+			session_type == "wayland" and self._handler_backend == "atspi"
+		):
 			self.handler.register_key("control+win+shift+t",self.ToggleWindow)
 			self.handler.register_key("alt+win+shift+q",self.OnClose)
 			self.handler.register_key("control+win+shift+a",self.OnAudioPlayer)
@@ -328,22 +356,30 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnViewUserDb, m_view_user_db)
 		m_clean_user_db = menu6.Append(-1, "Refresh user database", "cleanusers")
 		self.Bind(wx.EVT_MENU, self.OnCleanUserDb, m_clean_user_db)
+		m_menu_palette = menu6.Append(-1, "Menu command palette\tF10", "menu_palette")
+		self.Bind(wx.EVT_MENU, self.OnMenuCommandPalette, m_menu_palette)
 		self.menuBar.Append(menu6, "&Help")
 		self.SetMenuBar(self.menuBar)
+
+		self.context_menu_id = wx.NewIdRef()
+		self.menu_palette_id = wx.NewIdRef()
+		self.Bind(wx.EVT_MENU, self.OnPostContextMenu, id=self.context_menu_id)
+		self.Bind(wx.EVT_MENU, self.OnMenuCommandPalette, id=self.menu_palette_id)
 
 		# Add accelerator table for keyboard shortcuts
 		if platform.system() != "Darwin":
 			# Windows/Linux: Add Alt+M for context menu
-			self.context_menu_id = wx.NewIdRef()
-			self.Bind(wx.EVT_MENU, self.OnPostContextMenu, id=self.context_menu_id)
 			accel = wx.AcceleratorTable([
 				(wx.ACCEL_ALT, ord('M'), self.context_menu_id),
+				(0, wx.WXK_F10, self.menu_palette_id),
+				(wx.ACCEL_CTRL | wx.ACCEL_SHIFT, ord('M'), self.menu_palette_id),
 			])
 			self.SetAcceleratorTable(accel)
 		else:
 			# macOS: Add arrow key combos to accelerator table (only fires when main window focused)
 			# This prevents these shortcuts from firing in dialogs like New Post
 			accel = wx.AcceleratorTable([
+				(0, wx.WXK_F10, self.menu_palette_id),
 				# Alt (Option) + Arrow keys
 				(wx.ACCEL_ALT, wx.WXK_UP, self._m_volup.GetId()),
 				(wx.ACCEL_ALT, wx.WXK_DOWN, self._m_voldown.GetId()),
@@ -378,6 +414,10 @@ class MainGui(wx.Frame):
 			])
 			self.SetAcceleratorTable(accel)
 
+		self.menu_button = wx.Button(self.panel, -1, label="Menu")
+		self.menu_button.SetToolTip("Open menu commands (F10)")
+		self.menu_button.Bind(wx.EVT_BUTTON, self.OnMenuCommandPalette)
+		self.main_box.Add(self.menu_button, 0, wx.LEFT | wx.TOP, 10)
 		self.list_label=wx.StaticText(self.panel, -1, label="Timelines")
 		self.main_box.Add(self.list_label, 0, wx.LEFT | wx.TOP, 10)
 		self.list=wx.ListBox(self.panel, -1)
@@ -390,6 +430,12 @@ class MainGui(wx.Frame):
 		self.main_box.Add(self.list2, 1, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 10)
 		self.list2.Bind(wx.EVT_LISTBOX, self.on_list2_change)
 		self.list2.Bind(wx.EVT_CONTEXT_MENU, self.OnPostContextMenu)
+		# Ensure tab navigation includes the menu button before timeline controls.
+		try:
+			self.menu_button.MoveBeforeInTabOrder(self.list)
+			self.list.MoveBeforeInTabOrder(self.list2)
+		except Exception:
+			pass
 		# On Mac, bind key events directly to list controls for shortcuts
 		# (menu accelerators are disabled on Mac to prevent firing in dialogs)
 		if platform.system() == "Darwin":
@@ -401,6 +447,7 @@ class MainGui(wx.Frame):
 		self.panel.SetSizer(self.main_box)
 		self.panel.Layout()
 		# Note: theme is applied in FastSM.pyw after prefs are loaded
+		self._start_remote_control_socket()
 
 	def _load_keymap_file(self, path):
 		"""Load a keymap file and return dict of key -> action mappings."""
@@ -479,26 +526,163 @@ class MainGui(wx.Frame):
 		if platform.system() == "Darwin":
 			self.invisible = False
 			return
+		if not getattr(self, "_global_hotkeys_supported", False):
+			self.invisible = False
+			speak.speak("Invisible interface is not available in this desktop session.")
+			return
 		self.invisible=True
 		keymap = self._load_keymap_with_inheritance()
 		# Store registered keys so we can unregister them later
-		self._registered_keymap = keymap.copy()
+		self._registered_keymap = []
 		for key, action in keymap.items():
-			success=invisible.register_key(key, action)
+			for candidate in self._hotkey_candidates_for_session(key):
+				success = invisible.register_key(candidate, action)
+				if success:
+					self._registered_keymap.append((candidate, action))
 
 	def unregister_keys(self):
 		# Invisible hotkeys not supported on Mac
 		if platform.system() == "Darwin":
 			return
 		self.invisible=False
-		# Unregister the keys that were actually registered, not the current keymap
-		keymap = getattr(self, '_registered_keymap', None)
-		if keymap is None:
+		registered = getattr(self, "_registered_keymap", None)
+		if registered is None:
 			# Fallback to loading keymap if we don't have stored keys
-			keymap = self._load_keymap_with_inheritance()
-		for key, action in keymap.items():
-			success=invisible.register_key(key, action, False)
+			registered = list(self._load_keymap_with_inheritance().items())
+		for key, action in registered:
+			success = invisible.register_key(key, action, False)
 		self._registered_keymap = None
+
+	def _hotkey_candidates_for_session(self, key):
+		"""Return primary and fallback key combinations for current desktop."""
+		candidates = [key]
+		# On Wayland AT-SPI backend, win/super shortcuts can be unreliable.
+		# Keep native win/super shortcuts, and also register Ctrl+Alt fallbacks
+		# so commands remain reachable with Orca when super is intercepted.
+		if getattr(self, "_handler_backend", "") == "atspi":
+			desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
+			parts = [p.strip().lower() for p in str(key).split("+") if p.strip()]
+			if "win" in parts:
+				final_key = parts[-1] if parts else ""
+				fallback = [p for p in parts if p != "win"]
+				if "control" not in fallback:
+					fallback.insert(0, "control")
+				if "alt" not in fallback:
+					fallback.insert(0, "alt")
+				fallback_key = "+".join(fallback)
+				# On GNOME Wayland we also install custom GNOME keybindings that
+				# dispatch via fastsm-remote; avoid double-triggering win combos.
+				if "gnome" in desktop:
+					# Home/End are not consistently delivered by GNOME custom bindings
+					# on all layouts, so keep native Win variants for those keys too.
+					if final_key in ("home", "end"):
+						if fallback_key and fallback_key not in candidates:
+							candidates.append(fallback_key)
+						return candidates
+					return [fallback_key] if fallback_key else []
+				if fallback_key and fallback_key not in candidates:
+					candidates.append(fallback_key)
+		return candidates
+
+	def _start_remote_control_socket(self):
+		"""Start a UNIX socket listener for external shortcut bridge commands."""
+		runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+		sock_path = os.path.join(runtime_dir, "fastsm-control.sock")
+		try:
+			if os.path.exists(sock_path):
+				try:
+					os.unlink(sock_path)
+				except OSError:
+					pass
+			sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+			sock.bind(sock_path)
+			sock.setblocking(False)
+			os.chmod(sock_path, 0o600)
+			self._control_socket = sock
+			self._control_socket_path = sock_path
+			if self._control_timer is None:
+				self._control_timer = wx.Timer(self)
+				self.Bind(wx.EVT_TIMER, self._on_control_timer, self._control_timer)
+			if not self._control_timer.IsRunning():
+				# Slightly slower poll reduces idle CPU while remaining responsive.
+				self._control_timer.Start(120)
+		except Exception as e:
+			print(f"FastSM remote control socket unavailable: {e}", file=sys.stderr)
+
+	def _stop_remote_control_socket(self):
+		"""Stop remote control socket listener and remove socket path."""
+		if self._control_timer is not None and self._control_timer.IsRunning():
+			self._control_timer.Stop()
+		sock = self._control_socket
+		self._control_socket = None
+		if sock is not None:
+			try:
+				sock.close()
+			except Exception:
+				pass
+		if self._control_socket_path and os.path.exists(self._control_socket_path):
+			try:
+				os.unlink(self._control_socket_path)
+			except OSError:
+				pass
+		self._control_socket_path = None
+
+	def _on_control_timer(self, event=None):
+		"""Poll remote control socket on the wx main thread."""
+		sock = self._control_socket
+		if sock is None:
+			return
+		while True:
+			try:
+				data = sock.recv(512)
+			except BlockingIOError:
+				break
+			except OSError:
+				break
+			except Exception:
+				break
+			if not data:
+				continue
+			try:
+				command = data.decode("utf-8", errors="ignore").strip()
+			except Exception:
+				continue
+			if not command:
+				continue
+			self._run_remote_command(command)
+
+	def _run_remote_command(self, command):
+		"""Run a command received from remote control socket."""
+		if command.upper() == "PING":
+			return
+		if not self._invoke_action_by_name(command):
+			print(f"FastSM remote unknown command: {command}", file=sys.stderr)
+
+	def _invoke_action_by_name(self, name):
+		"""Resolve and invoke an action name from keymap/remote control."""
+		alias_map = {
+			"Post": "Tweet",
+			"PostUrl": "TweetUrl",
+		}
+		mapped = alias_map.get(name, name)
+		candidates = (mapped, f"on{mapped}", f"On{mapped}")
+		for attr in candidates:
+			func = getattr(self, attr, None)
+			if callable(func):
+				try:
+					func()
+				except TypeError:
+					func(None)
+				return True
+		for attr in candidates:
+			func = getattr(invisible.inv, attr, None)
+			if callable(func):
+				try:
+					func()
+				except TypeError:
+					func(None)
+				return True
+		return False
 
 	def get_current_status(self):
 		"""Get the current status, handling conversation and notification objects properly"""
@@ -660,6 +844,58 @@ class MainGui(wx.Frame):
 	def OnMute(self,event=None):
 		get_app().currentAccount.currentTimeline.toggle_mute()
 
+	def _iter_menu_commands(self, menu, prefix):
+		"""Flatten a menu tree into (label, menu_id) command entries."""
+		commands = []
+		for item in menu.GetMenuItems():
+			if item.IsSeparator():
+				continue
+			submenu = item.GetSubMenu()
+			label = item.GetItemLabelText().strip()
+			if submenu:
+				next_prefix = prefix if not label else f"{prefix} > {label}"
+				commands.extend(self._iter_menu_commands(submenu, next_prefix))
+				continue
+			if not label or item.GetId() == wx.ID_NONE or not item.IsEnabled():
+				continue
+			commands.append((f"{prefix}: {label}", item.GetId()))
+		return commands
+
+	def _collect_menu_commands(self):
+		"""Collect all enabled top-level menu commands."""
+		commands = []
+		for i in range(self.menuBar.GetMenuCount()):
+			menu = self.menuBar.GetMenu(i)
+			prefix = self.menuBar.GetMenuLabelText(i).replace("&", "").strip()
+			commands.extend(self._iter_menu_commands(menu, prefix))
+		return commands
+
+	def OnMenuCommandPalette(self, event=None):
+		"""Show a keyboard-friendly command palette for menu actions."""
+		commands = self._collect_menu_commands()
+		if not commands:
+			speak.speak("No menu commands available")
+			return
+		labels = [label for label, _menu_id in commands]
+		dlg = wx.SingleChoiceDialog(
+			self,
+			"Type to search, then press Enter to run a menu command.",
+			"FastSM menu commands",
+			labels,
+		)
+		try:
+			dlg.SetSelection(0)
+		except Exception:
+			pass
+		if dlg.ShowModal() == wx.ID_OK:
+			selection = dlg.GetSelection()
+			if selection >= 0 and selection < len(commands):
+				menu_id = commands[selection][1]
+				menu_event = wx.CommandEvent(wx.EVT_MENU.typeId, menu_id)
+				menu_event.SetEventObject(self)
+				wx.PostEvent(self, menu_event)
+		dlg.Destroy()
+
 	def OnListCharHook(self, event):
 		"""Handle char hook for Option+M on Mac (context menu)."""
 		key = event.GetKeyCode()
@@ -788,7 +1024,7 @@ class MainGui(wx.Frame):
 						cache.cleanup_orphaned_data(active_keys)
 					except Exception as e:
 						print(f"Error cleaning up cache: {e}")
-		if platform.system()!="Darwin":
+		if platform.system()!="Darwin" and getattr(self, "trayicon", None):
 			self.trayicon.on_exit(event,False)
 		# Clean up account resources (close timeline caches)
 		for account in get_app().accounts:
@@ -797,6 +1033,7 @@ class MainGui(wx.Frame):
 					account.cleanup()
 				except:
 					pass
+		self._stop_remote_control_socket()
 		self.Destroy()
 		# On Mac, we need to explicitly exit the main loop
 		if platform.system() == "Darwin":
@@ -1023,6 +1260,11 @@ class MainGui(wx.Frame):
 	def on_list_change(self, event):
 		get_app().currentAccount.currentTimeline=get_app().currentAccount.list_timelines()[self.list.GetSelection()]
 		get_app().currentAccount.currentIndex=self.list.GetSelection()
+		tl = get_app().currentAccount.currentTimeline
+		# If startup stagger delayed this timeline and it has not loaded yet,
+		# kick off an immediate load when user focuses it.
+		if tl.initial and not tl._loading and len(tl.statuses) == 0:
+			threading.Thread(target=tl.load, daemon=True).start()
 		if get_app().currentAccount.currentTimeline.removable:
 			self.m_close_timeline.Enable(True)
 		else:
@@ -1030,7 +1272,6 @@ class MainGui(wx.Frame):
 
 		self.play_earcon()
 		# Announce if timeline has gaps to fill
-		tl = get_app().currentAccount.currentTimeline
 		if hasattr(tl, '_gaps') and tl._gaps:
 			speak.speak(f"{len(tl._gaps)} gap{'s' if len(tl._gaps) > 1 else ''} to fill")
 		self.refreshList()
