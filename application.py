@@ -643,7 +643,7 @@ class Application:
 					opt_votes = get_poll_attr(opt, 'votes_count', 0)
 					if is_expired or has_voted:
 						# Show results
-						if votes_count > 0:
+						if votes_count > 0 and opt_votes:
 							pct = (opt_votes / votes_count) * 100
 							opt_text = f"{opt_title}: {pct:.0f}%"
 						else:
