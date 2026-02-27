@@ -180,6 +180,9 @@ class Application:
 		self.prefs.cw_mode = self.prefs.get("cw_mode", "hide")
 		# Keymap for invisible interface (default inherits from default.keymap)
 		self.prefs.keymap = self.prefs.get("keymap", "default")
+		# win11 keymap is Windows-specific and too limited on Linux/macOS.
+		if platform.system() != "Windows" and self.prefs.keymap == "win11":
+			self.prefs.keymap = "default"
 		# Sync home timeline position with Mastodon marker API
 		self.prefs.sync_timeline_position = self.prefs.get("sync_timeline_position", False)
 		# Dark mode: 'off', 'on', or 'auto' (follow system)
@@ -229,9 +232,6 @@ class Application:
 			# Audio init failure shouldn't crash the app
 			print(f"Warning: Audio initialization failed: {e}", file=sys.stderr)
 
-		if self.prefs.invisible:
-			main.window.register_keys()
-
 		# User cache is now in-memory only per-account, no global cache needed
 		self.users = []
 
@@ -270,6 +270,13 @@ class Application:
 				# Load unconfigured accounts sequentially on main thread (need dialogs)
 				for i in sequential:
 					self.add_session(i)
+
+		# Register invisible hotkeys only after accounts/timelines are initialized.
+		if self.prefs.invisible:
+			try:
+				main.window.register_keys()
+			except Exception as e:
+				print(f"Warning: Could not register invisible hotkeys: {e}", file=sys.stderr)
 
 		self._initialized = True
 

@@ -228,13 +228,41 @@ class timeline(object):
 		if self.type != "conversation":
 			# Check if we should load from cache first
 			if self._should_use_cache() and self._load_from_cache():
-				# Cache loaded successfully - spawn background refresh thread
+				# Cache loaded successfully - refresh in background (staggered at startup)
 				threading.Thread(target=self._refresh_after_cache, daemon=True).start()
 			else:
-				# No cache or cache disabled - normal load
-				threading.Thread(target=self.load, daemon=True).start()
+				# No cache or cache disabled - initial load (staggered at startup)
+				threading.Thread(target=self._initial_load_after_startup_delay, daemon=True).start()
 		else:
 			self.load_conversation()
+
+	def _startup_load_delay_seconds(self):
+		"""Return startup delay used to spread heavy timeline work.
+
+		This keeps startup responsive for screen-reader users by avoiding
+		all timelines refreshing simultaneously.
+		"""
+		# Primary timeline should be immediately available.
+		if self.type == "home":
+			return 0.0
+		# Keep core signal timelines near-real-time but lightly staggered.
+		if self.type == "notifications":
+			return 2.0
+		if self.type == "mentions":
+			return 4.0
+		# Remaining timelines can refresh later.
+		delay = 8.0
+		if getattr(self.app.prefs, "invisible", False):
+			# In invisible mode, prioritize immediate interaction over background refresh.
+			delay = 12.0
+		return delay
+
+	def _initial_load_after_startup_delay(self):
+		"""Initial API load with startup staggering."""
+		delay = self._startup_load_delay_seconds()
+		if delay > 0:
+			time.sleep(delay)
+		self.load()
 
 	def _load_remote_user(self, **kwargs):
 		"""Helper to load remote user timeline"""
@@ -734,6 +762,9 @@ class timeline(object):
 
 	def _refresh_after_cache(self):
 		"""Background refresh after loading from cache."""
+		delay = self._startup_load_delay_seconds()
+		if delay > 0:
+			time.sleep(delay)
 		# Do a normal load (will fetch new items from API)
 		# Since initial=False after cache load, this will be treated as an update
 		self.load()

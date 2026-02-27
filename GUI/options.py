@@ -99,6 +99,8 @@ class invisible_tab(wx.Panel, wx.Dialog):
 			for f in os.listdir("keymaps"):
 				if f.endswith(".keymap") and not f.startswith("."):
 					name = f[:-7]  # Remove .keymap extension
+					if platform.system() != "Windows" and name == "win11":
+						continue
 					if name != "default" and name not in keymaps:
 						keymaps.append(name)
 
@@ -108,6 +110,8 @@ class invisible_tab(wx.Panel, wx.Dialog):
 			for f in os.listdir(user_keymaps_path):
 				if f.endswith(".keymap") and not f.startswith("."):
 					name = f[:-7]  # Remove .keymap extension
+					if platform.system() != "Windows" and name == "win11":
+						continue
 					if name != "default" and name not in keymaps:
 						keymaps.append(name)
 
@@ -128,6 +132,15 @@ class invisible_tab(wx.Panel, wx.Dialog):
 		self.position=wx.CheckBox(self, -1, "Speak position information when navigating between timelines of invisible interface and switching timelines")
 		self.main_box.Add(self.position, 0, wx.ALL, 10)
 		self.position.SetValue(get_app().prefs.position)
+		if platform.system() == "Linux" and os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
+			wayland_note = wx.StaticText(
+				self,
+				-1,
+				"Wayland note: invisible hotkeys use the accessibility backend; "
+				"Win-based shortcuts also work as Ctrl+Alt variants for Orca users.",
+			)
+			wayland_note.Wrap(520)
+			self.main_box.Add(wayland_note, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
 		# Keymap selection
 		keymap_label = wx.StaticText(self, -1, "Keymap:")
