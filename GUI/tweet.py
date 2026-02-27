@@ -28,13 +28,6 @@ class TweetGui(wx.Dialog):
 		self.poll_opt4 = None
 		self.media_attachments = []  # List of {'path': str, 'description': str}
 		self.scheduled_at = None  # For scheduled posts
-		self._sending = False
-		self._close_after_send = False
-		self._char_update_timer = None
-		self._pending_char_len = 0
-		self._pending_char_update = False
-		self._last_char_label = None
-		self._last_char_over_limit = False
 
 		# For edit mode, get the original post text with newlines and full handles preserved
 		if self.type == "edit" and status is not None:
@@ -43,7 +36,6 @@ class TweetGui(wx.Dialog):
 			inittext = self.account.app.html_to_text_for_edit(content, mentions)
 
 		wx.Dialog.__init__(self, None, title=type, size=(350,200), style=wx.DEFAULT_DIALOG_STYLE | wx.TAB_TRAVERSAL)
-		self._char_update_timer = wx.Timer(self)
 		self.Bind(wx.EVT_CLOSE, self.OnClose)
 		# Register with main window for focus restoration
 		from . import main
@@ -61,9 +53,6 @@ class TweetGui(wx.Dialog):
 			self.text.MacCheckSpelling(True)
 		self.main_box.Add(self.text, 0, wx.ALL, 10)
 		self.text.Bind(wx.EVT_TEXT, self.Chars)
-		self.Bind(wx.EVT_TIMER, self._on_char_update_timer, self._char_update_timer)
-		self.char_counter = wx.StaticText(self.panel, -1, "")
-		self.main_box.Add(self.char_counter, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 		if self.type != "message":
 			self.text.AppendText(inittext)
 			cursorpos = len(inittext)
@@ -267,8 +256,7 @@ class TweetGui(wx.Dialog):
 		self.close = wx.Button(self.panel, wx.ID_CANCEL, "&Cancel")
 		self.close.Bind(wx.EVT_BUTTON, self.OnClose)
 		self.main_box.Add(self.close, 0, wx.ALL, 10)
-		self._pending_char_len = self._current_char_len()
-		self._flush_char_counter(force=True)
+		self.Chars(None)
 		self.text.Bind(wx.EVT_KEY_DOWN, self.onKeyPress)
 		self.panel.SetSizer(self.main_box)
 		self.panel.Layout()
@@ -643,75 +631,20 @@ class TweetGui(wx.Dialog):
 		if self.account.prefs.footer != "":
 			self.text.AppendText(" " + self.account.prefs.footer)
 		self.text.SetInsertionPoint(cursorpos)
-		self._pending_char_len = self._current_char_len()
-		self._flush_char_counter(force=True)
 
 	def maximum(self):
 		sound.play(self.account, "max_length")
 
 	def Chars(self, event):
-		# Coalesce rapid typing updates to reduce UI/AT churn and CPU usage.
-		self._pending_char_len = self._current_char_len()
-		self._pending_char_update = True
-		if self._char_update_timer is not None:
-			self._char_update_timer.Start(120, oneShot=True)
-		else:
-			self._flush_char_counter()
-
-	def _current_char_len(self):
-		try:
-			return int(self.text.GetLastPosition())
-		except Exception:
-			return len(self.text.GetValue())
-
-	def _on_char_update_timer(self, event):
-		self._flush_char_counter()
-
-	def _flush_char_counter(self, force=False):
-		if not force and not self._pending_char_update:
-			return
-		length = self._pending_char_len if self._pending_char_len >= 0 else self._current_char_len()
-		self._pending_char_update = False
+		# Simple character count for Mastodon
+		length = len(self.text.GetValue())
 		if length > 0 and self.max_length > 0:
 			percent = str(int((length / self.max_length) * 100))
 		else:
 			percent = "0"
-		over_limit = self.max_length > 0 and length > self.max_length
-		if over_limit and not self._last_char_over_limit:
+		if self.max_length > 0 and length > self.max_length:
 			self.maximum()
-		self._last_char_over_limit = over_limit
-		label = str(length) + " of " + str(self.max_length) + " characters (" + percent + " percent)"
-		if force or label != self._last_char_label:
-			self.char_counter.SetLabel(label)
-			self._last_char_label = label
-
-	def _set_sending_state(self, sending):
-		"""Enable/disable controls while a post is being sent."""
-		self.send_btn.Enable(not sending)
-		self.text.Enable(not sending)
-		self.autocomplete.Enable(not sending)
-		self.spell_btn.Enable(not sending)
-		if hasattr(self, 'poll') and self.poll is not None:
-			self.poll.Enable(not sending and self.poll_opt1 is None)
-		if hasattr(self, 'thread'):
-			self.thread.Enable(not sending)
-		if self.type == "message" and hasattr(self, 'text2'):
-			self.text2.Enable(not sending)
-		if self.visibility is not None:
-			self.visibility.Enable(not sending)
-		if self.cw_text is not None:
-			self.cw_text.Enable(not sending)
-		if self.language is not None:
-			self.language.Enable(not sending)
-		if self.media_list is not None:
-			self.media_list.Enable(not sending)
-			self.add_media_btn.Enable(not sending)
-			self.remove_media_btn.Enable(not sending and self.media_list.GetSelection() != wx.NOT_FOUND)
-		if self.schedule_checkbox is not None:
-			self.schedule_checkbox.Enable(not sending)
-			self.schedule_date.Enable(not sending)
-			self.schedule_hour.Enable(not sending)
-			self.schedule_minute.Enable(not sending)
+		self.SetLabel(self.type + " - " + str(length) + " of " + str(self.max_length) + " characters (" + percent + " Percent)")
 
 	def _upload_media(self):
 		"""Upload media attachments and return list of media IDs."""
@@ -786,223 +719,202 @@ class TweetGui(wx.Dialog):
 		return scheduled_utc
 
 	def Tweet(self, event):
-		if self._sending:
-			return
-		self._sending = True
-		self._set_sending_state(True)
-
 		snd = ""
 		status = False
-		try:
-			if self.type != "message":
-				# Get visibility (only if platform supports it)
-				visibility = 'public'  # Default
-				if self.visibility is not None:
-					vis_selection = self.visibility.GetSelection()
-					vis_map = {0: 'public', 1: 'unlisted', 2: 'private', 3: 'direct'}
-					visibility = vis_map.get(vis_selection, 'public')
+		if self.type != "message":
+			# Get visibility (only if platform supports it)
+			visibility = 'public'  # Default
+			if self.visibility is not None:
+				vis_selection = self.visibility.GetSelection()
+				vis_map = {0: 'public', 1: 'unlisted', 2: 'private', 3: 'direct'}
+				visibility = vis_map.get(vis_selection, 'public')
 
-				# Get content warning if any (only if platform supports it)
-				spoiler_text = None
-				if self.cw_text is not None and self.cw_text.GetValue().strip():
-					spoiler_text = self.cw_text.GetValue().strip()
+			# Get content warning if any (only if platform supports it)
+			spoiler_text = None
+			if self.cw_text is not None and self.cw_text.GetValue().strip():
+				spoiler_text = self.cw_text.GetValue().strip()
 
-				# Get language selection
-				language = None
-				if self.language is not None:
-					lang_index = self.language.GetSelection()
-					language = self.language_choices[lang_index][1]
+			# Get language selection
+			language = None
+			if self.language is not None:
+				lang_index = self.language.GetSelection()
+				language = self.language_choices[lang_index][1]
 
-				# Upload media attachments if any
-				media_ids = None
-				if self.media_list is not None and self.media_attachments:
-					media_ids = self._upload_media()
-					if media_ids is None:
-						# Upload failed
-						sound.play(self.account, "error")
-						return
-
-				# Get scheduled time if enabled
-				scheduled_at = self._get_scheduled_time()
-				if scheduled_at is False:
-					# Invalid scheduled time
+			# Upload media attachments if any
+			media_ids = None
+			if self.media_list is not None and self.media_attachments:
+				media_ids = self._upload_media()
+				if media_ids is None:
+					# Upload failed
+					sound.play(self.account, "error")
 					return
 
-				self.account.app.prefs.posts_sent += 1
-				try:
-					if self.status is not None:
-						if self.type == "edit":
-							# Edit existing post
-							status = self.account.edit(
-								status_id=self.status.id,
-								text=self.text.GetValue(),
-								visibility=visibility,
-								spoiler_text=spoiler_text,
-								media_ids=media_ids,
-								language=language
-							)
-						elif self.type == "quote":
-							self.account.app.prefs.quotes_sent += 1
-							status = self.account.quote(self.status, self.text.GetValue(), visibility=visibility, language=language)
-						else:
-							self.account.app.prefs.replies_sent += 1
-							# Use original status ID if available (for mentions timeline)
-							# or resolve remote status ID (for instance timelines)
-							reply_to_id = getattr(self.status, '_original_status_id', None)
-							if not reply_to_id:
-								# Check if this is from an instance timeline
-								if hasattr(self.status, '_instance_url'):
-									# Need to resolve the remote status to a local ID
-									print(f"Resolving instance timeline status for reply: {self.status._instance_url}")
-									print(f"Status URL: {getattr(self.status, 'url', 'N/A')}")
-									print(f"Status URI: {getattr(self.status, 'uri', 'N/A')}")
-									reply_to_id = self.account._platform.resolve_remote_status(self.status)
-									print(f"Resolved to local ID: {reply_to_id}")
-								else:
-									reply_to_id = self.status.id
-							status = self.account.post(
-								text=self.text.GetValue(),
-								id=reply_to_id,
-								visibility=visibility,
-								spoiler_text=spoiler_text,
-								media_ids=media_ids,
-								scheduled_at=scheduled_at,
-								language=language
-							)
+			# Get scheduled time if enabled
+			scheduled_at = self._get_scheduled_time()
+			if scheduled_at is False:
+				# Invalid scheduled time
+				return
+
+			self.account.app.prefs.posts_sent += 1
+			try:
+				if self.status is not None:
+					if self.type == "edit":
+						# Edit existing post
+						status = self.account.edit(
+							status_id=self.status.id,
+							text=self.text.GetValue(),
+							visibility=visibility,
+							spoiler_text=spoiler_text,
+							media_ids=media_ids,
+							language=language
+						)
+					elif self.type == "quote":
+						self.account.app.prefs.quotes_sent += 1
+						status = self.account.quote(self.status, self.text.GetValue(), visibility=visibility, language=language)
 					else:
-						# Check if poll is set and platform supports it
-						if self.poll_opt1 is not None and self.poll_opt1 != "" and self._platform_supports('polls'):
-							opts = []
-							if self.poll_opt1 != "" and self.poll_opt1 is not None:
-								opts.append(self.poll_opt1)
-							if self.poll_opt2 != "" and self.poll_opt2 is not None:
-								opts.append(self.poll_opt2)
-							if self.poll_opt3 != "" and self.poll_opt3 is not None:
-								opts.append(self.poll_opt3)
-							if self.poll_opt4 != "" and self.poll_opt4 is not None:
-								opts.append(self.poll_opt4)
-							# Post with poll (Mastodon only)
-							poll_obj = self.account.api.make_poll(
-								options=opts,
-								expires_in=self.poll_expires_in,
-								multiple=self.poll_multiple,
-								hide_totals=self.poll_hide_totals
-							)
-							status = self.account.api.status_post(
-								status=self.text.GetValue(),
-								visibility=visibility,
-								spoiler_text=spoiler_text,
-								poll=poll_obj,
-								media_ids=media_ids,
-								scheduled_at=scheduled_at,
-								language=language
-							)
-						else:
-							status = self.account.post(
-								self.text.GetValue(),
-								visibility=visibility,
-								spoiler_text=spoiler_text,
-								media_ids=media_ids,
-								scheduled_at=scheduled_at,
-								language=language
-							)
-					self.account.app.prefs.chars_sent += len(self.text.GetValue())
+						self.account.app.prefs.replies_sent += 1
+						# Use original status ID if available (for mentions timeline)
+						# or resolve remote status ID (for instance timelines)
+						reply_to_id = getattr(self.status, '_original_status_id', None)
+						if not reply_to_id:
+							# Check if this is from an instance timeline
+							if hasattr(self.status, '_instance_url'):
+								# Need to resolve the remote status to a local ID
+								print(f"Resolving instance timeline status for reply: {self.status._instance_url}")
+								print(f"Status URL: {getattr(self.status, 'url', 'N/A')}")
+								print(f"Status URI: {getattr(self.status, 'uri', 'N/A')}")
+								reply_to_id = self.account._platform.resolve_remote_status(self.status)
+								print(f"Resolved to local ID: {reply_to_id}")
+							else:
+								reply_to_id = self.status.id
+						status = self.account.post(
+							text=self.text.GetValue(),
+							id=reply_to_id,
+							visibility=visibility,
+							spoiler_text=spoiler_text,
+							media_ids=media_ids,
+							scheduled_at=scheduled_at,
+							language=language
+						)
+				else:
+					# Check if poll is set and platform supports it
+					if self.poll_opt1 is not None and self.poll_opt1 != "" and self._platform_supports('polls'):
+						opts = []
+						if self.poll_opt1 != "" and self.poll_opt1 is not None:
+							opts.append(self.poll_opt1)
+						if self.poll_opt2 != "" and self.poll_opt2 is not None:
+							opts.append(self.poll_opt2)
+						if self.poll_opt3 != "" and self.poll_opt3 is not None:
+							opts.append(self.poll_opt3)
+						if self.poll_opt4 != "" and self.poll_opt4 is not None:
+							opts.append(self.poll_opt4)
+						# Post with poll (Mastodon only)
+						poll_obj = self.account.api.make_poll(
+							options=opts,
+							expires_in=self.poll_expires_in,
+							multiple=self.poll_multiple,
+							hide_totals=self.poll_hide_totals
+						)
+						status = self.account.api.status_post(
+							status=self.text.GetValue(),
+							visibility=visibility,
+							spoiler_text=spoiler_text,
+							poll=poll_obj,
+							media_ids=media_ids,
+							scheduled_at=scheduled_at,
+							language=language
+						)
+					else:
+						status = self.account.post(
+							self.text.GetValue(),
+							visibility=visibility,
+							spoiler_text=spoiler_text,
+							media_ids=media_ids,
+							scheduled_at=scheduled_at,
+							language=language
+						)
+				self.account.app.prefs.chars_sent += len(self.text.GetValue())
+			except Exception as error:
+				sound.play(self.account, "error")
+				speak.speak(str(error))
+				status = False
+			except Exception as error:
+				# Generic exception handler for other platform errors
+				sound.play(self.account, "error")
+				speak.speak("Error: " + str(error))
+				status = False
+		else:
+			# Direct message - check if platform supports it
+			if not self._platform_supports('direct_messages'):
+				sound.play(self.account, "error")
+				speak.speak("Direct messages are not supported on this platform")
+				return
+			user = self.account.app.lookup_user_name(self.account, self.text2.GetValue())
+			if user != -1:
+				try:
+					# Mention the user and use direct visibility
+					text = "@" + user.acct + " " + self.text.GetValue()
+					status = self.account.api.status_post(
+						status=text,
+						visibility='direct'
+					)
 				except Exception as error:
 					sound.play(self.account, "error")
 					speak.speak(str(error))
 					status = False
 				except Exception as error:
-					# Generic exception handler for other platform errors
 					sound.play(self.account, "error")
 					speak.speak("Error: " + str(error))
 					status = False
-			else:
-				# Direct message - check if platform supports it
-				if not self._platform_supports('direct_messages'):
-					sound.play(self.account, "error")
-					speak.speak("Direct messages are not supported on this platform")
-					return
-				user = self.account.app.lookup_user_name(self.account, self.text2.GetValue())
-				if user != -1:
-					try:
-						# Mention the user and use direct visibility
-						text = "@" + user.acct + " " + self.text.GetValue()
-						status = self.account.api.status_post(
-							status=text,
-							visibility='direct'
-						)
-					except Exception as error:
-						sound.play(self.account, "error")
-						speak.speak(str(error))
-						status = False
-					except Exception as error:
-						sound.play(self.account, "error")
-						speak.speak("Error: " + str(error))
-						status = False
 
-			if self.type == "message":
+		if self.type == "message":
+			snd = "send_message"
+		elif self.type == "reply" or self.type == "quote":
+			# Check if this is a direct message reply (visibility='direct')
+			if self.visibility is not None and self.visibility.GetSelection() == 3:
 				snd = "send_message"
-			elif self.type == "reply" or self.type == "quote":
-				# Check if this is a direct message reply (visibility='direct')
-				if self.visibility is not None and self.visibility.GetSelection() == 3:
-					snd = "send_message"
-				else:
-					snd = "send_reply"
-			elif self.type == "post" or self.type == "edit":
-				# Check if this is a direct message (visibility='direct')
-				if self.visibility is not None and self.visibility.GetSelection() == 3:
-					snd = "send_message"
-				else:
-					snd = "send_post"
-			if status:
-				sound.play(self.account, snd)
-				if self.type == "message":
-					speak.speak("Message sent")
-				else:
-					speak.speak("Post sent")
-				# Check if this was a scheduled post (only for non-message types)
-				if self.type != "message" and scheduled_at:
-					# Add to scheduled timeline if it exists
-					for tl in self.account.timelines:
-						if tl.type == "scheduled":
-							tl.load(items=[status])
-							break
-				else:
-					# Add the posted status to the Sent timeline immediately
-					# (streaming only works on Mastodon, so Bluesky needs this)
-					for tl in self.account.timelines:
-						if tl.type == "user" and tl.name == "Sent":
-							# Use load() to properly add and deduplicate
-							tl.load(items=[status])
-							break
-				should_close = (not hasattr(self, "thread")) or (hasattr(self, "thread") and not self.thread.GetValue())
-				if should_close:
-					self._close_after_send = True
-					# Hide immediately so Enter presses cannot trigger a second send,
-					# then destroy safely on the wx loop.
-					self.Hide()
-					wx.CallAfter(self.Destroy)
-				else:
-					self.status = status
-					self.next_thread()
 			else:
-				sound.play(self.account, "error")
-				speak.speak("Failed to send post")
-				# Re-enable poll button on error so user can modify poll options
-				if hasattr(self, 'poll') and self.poll is not None:
-					self.poll.Enable(True)
-		finally:
-			if not self._close_after_send and not self.IsBeingDeleted():
-				self._sending = False
-				self._set_sending_state(False)
+				snd = "send_reply"
+		elif self.type == "post" or self.type == "edit":
+			# Check if this is a direct message (visibility='direct')
+			if self.visibility is not None and self.visibility.GetSelection() == 3:
+				snd = "send_message"
+			else:
+				snd = "send_post"
+		if status:
+			sound.play(self.account, snd)
+			# Check if this was a scheduled post (only for non-message types)
+			if self.type != "message" and scheduled_at:
+				# Add to scheduled timeline if it exists
+				for tl in self.account.timelines:
+					if tl.type == "scheduled":
+						tl.load(items=[status])
+						break
+			else:
+				# Add the posted status to the Sent timeline immediately
+				# (streaming only works on Mastodon, so Bluesky needs this)
+				for tl in self.account.timelines:
+					if tl.type == "user" and tl.name == "Sent":
+						# Use load() to properly add and deduplicate
+						tl.load(items=[status])
+						break
+			if hasattr(self, "thread") and not self.thread.GetValue() or not hasattr(self, "thread"):
+				self.Destroy()
+			else:
+				self.status = status
+				self.next_thread()
+		else:
+			sound.play(self.account, "error")
+			speak.speak("Failed to send post")
+			# Re-enable poll button on error so user can modify poll options
+			if hasattr(self, 'poll') and self.poll is not None:
+				self.poll.Enable(True)
 
 	def OnClose(self, event):
 		# Unregister from main window focus tracking
 		from . import main
 		if hasattr(main, 'window') and main.window:
 			main.window.unregister_dialog(self)
-		if self._char_update_timer is not None and self._char_update_timer.IsRunning():
-			self._char_update_timer.Stop()
 		# On Mac, explicitly reactivate main window to fix menu state
 		if platform.system() == "Darwin":
 			def do_raise():
