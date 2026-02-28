@@ -807,6 +807,11 @@ class advanced(wx.Panel, wx.Dialog):
 		self.dark_mode.SetSelection(dark_mode_map.get(get_app().prefs.dark_mode, 0))
 		self.main_box.Add(self.dark_mode, 0, wx.ALL, 10)
 
+		# Debug logging setting
+		self.debug_logging=wx.CheckBox(self, -1, "Enable debug logging (writes detailed logs to fastsm.log)")
+		self.main_box.Add(self.debug_logging, 0, wx.ALL, 10)
+		self.debug_logging.SetValue(get_app().prefs.debug_logging)
+
 		self.SetSizer(self.main_box)
 
 
@@ -1037,6 +1042,15 @@ class OptionsGui(wx.Dialog):
 		# Dark mode setting
 		dark_mode_values = ['off', 'on', 'auto']
 		get_app().prefs.dark_mode = dark_mode_values[self.advanced.dark_mode.GetSelection()]
+		# Debug logging setting
+		old_debug_logging = get_app().prefs.debug_logging
+		get_app().prefs.debug_logging = self.advanced.debug_logging.GetValue()
+		if get_app().prefs.debug_logging != old_debug_logging:
+			try:
+				from logging_config import set_debug_mode
+				set_debug_mode(get_app().prefs.debug_logging)
+			except Exception:
+				pass
 		get_app().prefs.earcon_audio=self.audio_tab.earcon_audio.GetValue()
 		get_app().prefs.earcon_top=self.audio_tab.earcon_top.GetValue()
 		get_app().prefs.earcon_mention=self.audio_tab.earcon_mention.GetValue()

@@ -16,6 +16,33 @@ from .serialization import (
 )
 from models import UniversalUser, UniversalStatus, UniversalNotification
 
+# Get logger for cache operations
+try:
+    from logging_config import get_logger
+    _logger = get_logger('cache')
+except ImportError:
+    _logger = None
+
+def _log_error(msg: str):
+    """Log an error message."""
+    if _logger:
+        _logger.error(msg)
+
+def _log_warning(msg: str):
+    """Log a warning message."""
+    if _logger:
+        _logger.warning(msg)
+
+def _log_info(msg: str):
+    """Log an info message."""
+    if _logger:
+        _logger.info(msg)
+
+def _log_debug(msg: str):
+    """Log a debug message."""
+    if _logger:
+        _logger.debug(msg)
+
 
 class TimelineCache:
     """SQLite-based timeline cache for one account.
@@ -58,7 +85,7 @@ class TimelineCache:
                 self._create_tables()
                 self._initialized = True
             except Exception as e:
-                print(f"Timeline cache init error: {e}")
+                _log_error(f"Timeline cache init error: {e}")
                 self._initialized = False
 
     def _create_tables(self):
@@ -231,7 +258,7 @@ class TimelineCache:
                       row['url'], row['bot'], row['locked'], row['platform'], row['cached_at']))
                 self._conn.commit()
             except Exception as e:
-                print(f"Cache save_user error: {e}")
+                _log_error(f"Cache save_user error: {e}")
 
     def get_user(self, user_id: str) -> Optional[UniversalUser]:
         """Get a user from the cache by ID."""
@@ -245,7 +272,7 @@ class TimelineCache:
                 if row:
                     return row_to_user(dict(row))
             except Exception as e:
-                print(f"Cache get_user error: {e}")
+                _log_error(f"Cache get_user error: {e}")
         return None
 
     def save_users_batch(self, users: List[UniversalUser]):
@@ -273,7 +300,7 @@ class TimelineCache:
                           row['url'], row['bot'], row['locked'], row['platform'], row['cached_at']))
                 self._conn.commit()
             except Exception as e:
-                print(f"Cache save_users_batch error: {e}")
+                _log_error(f"Cache save_users_batch error: {e}")
 
     # ============ Status Operations ============
 
@@ -313,7 +340,7 @@ class TimelineCache:
                       row['cached_at']))
                 self._conn.commit()
             except Exception as e:
-                print(f"Cache save_status error: {e}")
+                _log_error(f"Cache save_status error: {e}")
 
     def get_status(self, status_id: str, depth: int = 0) -> Optional[UniversalStatus]:
         """Get a status from the cache by ID."""
@@ -335,7 +362,7 @@ class TimelineCache:
 
                     return row_to_status(row_dict, user_lookup, status_lookup)
             except Exception as e:
-                print(f"Cache get_status error: {e}")
+                _log_error(f"Cache get_status error: {e}")
         return None
 
     def save_statuses_batch(self, statuses: List[UniversalStatus]):
@@ -380,7 +407,7 @@ class TimelineCache:
                     self._insert_status_row(cursor, row)
                 self._conn.commit()
             except Exception as e:
-                print(f"Cache save_statuses_batch error: {e}")
+                _log_error(f"Cache save_statuses_batch error: {e}")
 
     def _insert_status_row(self, cursor, row: Dict[str, Any]):
         """Insert a status row."""
@@ -426,7 +453,7 @@ class TimelineCache:
                       row['status_id'], row['platform'], row['cached_at']))
                 self._conn.commit()
             except Exception as e:
-                print(f"Cache save_notification error: {e}")
+                _log_error(f"Cache save_notification error: {e}")
 
     def get_notification(self, notification_id: str) -> Optional[UniversalNotification]:
         """Get a notification from the cache by ID."""
@@ -448,7 +475,7 @@ class TimelineCache:
 
                     return row_to_notification(row_dict, user_lookup, status_lookup)
             except Exception as e:
-                print(f"Cache get_notification error: {e}")
+                _log_error(f"Cache get_notification error: {e}")
         return None
 
     def save_notifications_batch(self, notifications: List[UniversalNotification]):
@@ -490,7 +517,7 @@ class TimelineCache:
                           row['status_id'], row['platform'], row['cached_at']))
                 self._conn.commit()
             except Exception as e:
-                print(f"Cache save_notifications_batch error: {e}")
+                _log_error(f"Cache save_notifications_batch error: {e}")
 
     # ============ Timeline Operations ============
 
@@ -567,7 +594,7 @@ class TimelineCache:
 
                 self._conn.commit()
             except Exception as e:
-                print(f"Cache save_timeline error: {e}")
+                _log_error(f"Cache save_timeline error: {e}")
 
     def load_timeline(self, timeline_type: str, timeline_name: str, timeline_data: Any,
                       item_type: str) -> Tuple[List, Dict[str, Any]]:
@@ -638,7 +665,7 @@ class TimelineCache:
                 return items, metadata
 
             except Exception as e:
-                print(f"Cache load_timeline error: {e}")
+                _log_error(f"Cache load_timeline error: {e}")
                 return [], {}
 
     def has_timeline_cache(self, timeline_type: str, timeline_name: str, timeline_data: Any) -> bool:
@@ -657,7 +684,7 @@ class TimelineCache:
                 row = cursor.fetchone()
                 return row is not None and row['item_count'] > 0
             except Exception as e:
-                print(f"Cache has_timeline_cache error: {e}")
+                _log_error(f"Cache has_timeline_cache error: {e}")
                 return False
 
     def clear_timeline(self, timeline_type: str, timeline_name: str, timeline_data: Any):
@@ -679,7 +706,7 @@ class TimelineCache:
                 ''', (timeline_type, timeline_name, data_key))
                 self._conn.commit()
             except Exception as e:
-                print(f"Cache clear_timeline error: {e}")
+                _log_error(f"Cache clear_timeline error: {e}")
 
     def clear_all(self):
         """Clear all cached data."""
@@ -699,7 +726,7 @@ class TimelineCache:
                 # Also VACUUM to reclaim space
                 cursor.execute('VACUUM')
             except Exception as e:
-                print(f"Cache clear_all error: {e}")
+                _log_error(f"Cache clear_all error: {e}")
 
     def cleanup_orphaned_data(self, active_timeline_keys: List[tuple]):
         """Remove cached data for timelines that no longer exist.
@@ -739,13 +766,13 @@ class TimelineCache:
                         ''', (tl_type, tl_name, tl_data))
 
                     self._conn.commit()
-                    print(f"Cache cleanup: removed {len(orphaned_keys)} orphaned timeline(s)")
+                    _log_info(f"Cache cleanup: removed {len(orphaned_keys)} orphaned timeline(s)")
 
                     # Clean up orphaned statuses and notifications
                     self._cleanup_orphaned_items(cursor)
 
             except Exception as e:
-                print(f"Cache cleanup_orphaned_data error: {e}")
+                _log_error(f"Cache cleanup_orphaned_data error: {e}")
 
     def _cleanup_orphaned_items(self, cursor):
         """Remove statuses and notifications not referenced by any timeline."""
@@ -770,10 +797,10 @@ class TimelineCache:
 
             if deleted_statuses > 0 or deleted_notifications > 0:
                 self._conn.commit()
-                print(f"Cache cleanup: removed {deleted_statuses} orphaned statuses, {deleted_notifications} orphaned notifications")
+                _log_info(f"Cache cleanup: removed {deleted_statuses} orphaned statuses, {deleted_notifications} orphaned notifications")
 
         except Exception as e:
-            print(f"Cache _cleanup_orphaned_items error: {e}")
+            _log_error(f"Cache _cleanup_orphaned_items error: {e}")
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics."""
@@ -803,5 +830,5 @@ class TimelineCache:
 
                 return stats
             except Exception as e:
-                print(f"Cache get_cache_stats error: {e}")
+                _log_error(f"Cache get_cache_stats error: {e}")
                 return {}

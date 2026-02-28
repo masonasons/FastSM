@@ -19,6 +19,13 @@ import wx
 from models import UserCache
 from platforms.mastodon import MastodonAccount
 
+# Get logger for API operations
+try:
+	from logging_config import get_logger
+	_logger = get_logger('api')
+except ImportError:
+	_logger = None
+
 
 class AccountSetupCancelled(Exception):
 	"""Raised when user cancels account setup."""

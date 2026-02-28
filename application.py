@@ -184,6 +184,8 @@ class Application:
 		self.prefs.sync_timeline_position = self.prefs.get("sync_timeline_position", False)
 		# Dark mode: 'off', 'on', or 'auto' (follow system)
 		self.prefs.dark_mode = self.prefs.get("dark_mode", "off")
+		# Debug logging: write verbose logs to fastsm.log
+		self.prefs.debug_logging = self.prefs.get("debug_logging", False)
 		# Confirmation settings for menu/hotkey actions
 		self.prefs.confirm_boost = self.prefs.get("confirm_boost", False)
 		self.prefs.confirm_unboost = self.prefs.get("confirm_unboost", False)
@@ -1682,6 +1684,13 @@ class Application:
 		"""Handle API errors from Mastodon or Bluesky"""
 		import speak
 		import sound
+		# Log the error
+		try:
+			from logging_config import get_logger
+			logger = get_logger('api')
+			logger.error(f"API error in {name}: {error}", exc_info=True)
+		except ImportError:
+			pass
 		# Try to extract a meaningful error message
 		error_msg = str(error)
 		# If empty or unhelpful, try other sources

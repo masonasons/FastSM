@@ -76,33 +76,46 @@ if platform.system() != "Darwin" and _has_bluesky_accounts():
 import application
 from application import get_app
 import os
-# Redirect stderr to errors.log in config directory (not app directory)
-# This is important for installed versions where app directory may be write-protected
-if platform.system() != "Darwin":
-	def _get_config_dir():
-		"""Get the config directory for error logging."""
-		# Check for portable mode (userdata folder next to executable or in cwd)
-		if getattr(sys, 'frozen', False):
-			exe_dir = os.path.dirname(sys.executable)
-			userdata_path = os.path.join(exe_dir, "userdata")
-			if os.path.isdir(userdata_path):
-				return userdata_path
-		else:
-			# Running from source - check cwd
-			userdata_path = os.path.join(os.getcwd(), "userdata")
-			if os.path.isdir(userdata_path):
-				return userdata_path
-		# Standard config location
-		return os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "FastSM")
 
-	try:
-		config_dir = _get_config_dir()
-		if not os.path.exists(config_dir):
-			os.makedirs(config_dir)
-		f = open(os.path.join(config_dir, "errors.log"), "a")
-		sys.stderr = f
-	except Exception:
-		pass  # If we can't set up logging, continue anyway
+def _get_config_dir():
+	"""Get the config directory for logging."""
+	# Check for portable mode (userdata folder next to executable or in cwd)
+	if getattr(sys, 'frozen', False):
+		exe_dir = os.path.dirname(sys.executable)
+		userdata_path = os.path.join(exe_dir, "userdata")
+		if os.path.isdir(userdata_path):
+			return userdata_path
+	else:
+		# Running from source - check cwd
+		userdata_path = os.path.join(os.getcwd(), "userdata")
+		if os.path.isdir(userdata_path):
+			return userdata_path
+	# Standard config location
+	if platform.system() == "Windows":
+		return os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "FastSM")
+	elif platform.system() == "Darwin":
+		return os.path.expanduser("~/Library/Application Support/FastSM")
+	else:
+		return os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "FastSM")
+
+# Initialize logging
+_config_dir = _get_config_dir()
+try:
+	from logging_config import setup_logging, get_logger
+	# Debug mode will be set later after prefs are loaded
+	setup_logging(_config_dir, debug=False)
+	_logger = get_logger()
+except Exception as e:
+	# Fallback: redirect stderr to errors.log if logging setup fails
+	_logger = None
+	if platform.system() != "Darwin":
+		try:
+			if not os.path.exists(_config_dir):
+				os.makedirs(_config_dir)
+			f = open(os.path.join(_config_dir, "errors.log"), "a")
+			sys.stderr = f
+		except Exception:
+			pass
 import shutil
 if os.path.exists(os.path.expandvars(r"%temp%\gen_py")):
 	shutil.rmtree(os.path.expandvars(r"%temp%\gen_py"))
@@ -130,8 +143,14 @@ try:
 	from GUI import main, theme
 	fastsm_app = get_app()
 	fastsm_app.load()
+	# Apply debug logging preference after prefs are loaded
+	if _logger and hasattr(fastsm_app.prefs, 'debug_logging') and fastsm_app.prefs.debug_logging:
+		from logging_config import set_debug_mode
+		set_debug_mode(True)
 	# Apply theme after prefs are loaded
 	theme.apply_theme(main.window)
+	if _logger:
+		_logger.info("FastSM started successfully")
 	if fastsm_app.prefs.window_shown:
 		main.window.Show()
 	else:
@@ -140,7 +159,10 @@ try:
 except Exception as e:
 	import traceback
 	error_msg = f"FastSM failed to start:\n\n{type(e).__name__}: {e}\n\n{traceback.format_exc()}"
-	print(error_msg, file=sys.stderr)
+	if _logger:
+		_logger.critical(error_msg)
+	else:
+		print(error_msg, file=sys.stderr)
 	try:
 		wx.MessageBox(error_msg, "FastSM Startup Error", wx.OK | wx.ICON_ERROR)
 	except:
