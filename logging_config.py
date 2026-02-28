@@ -48,9 +48,9 @@ def setup_logging(config_dir: str, debug: bool = False) -> logging.Logger:
         )
         file_handler.setLevel(logging.DEBUG if debug else logging.INFO)
 
-        # Detailed format for file
+        # Detailed format for file (timestamp at end for easier reading)
         file_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(module)s:%(lineno)d - %(message)s',
+            '%(name)s - %(levelname)s - %(module)s:%(lineno)d - %(message)s - %(asctime)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         file_handler.setFormatter(file_formatter)
