@@ -107,20 +107,6 @@ class Application:
 		else:
 			self.confpath = self.prefs._user_config_home + "/FastSM"
 
-		# Redirect stderr to errors.log in config directory (not app directory)
-		# This is especially important for installed versions where the app directory
-		# (Program Files) is write-protected
-		if getattr(sys, 'frozen', False):
-			try:
-				# Ensure config directory exists before writing errors.log
-				if not os.path.exists(self.confpath):
-					os.makedirs(self.confpath)
-				f = open(self.confpath + "/errors.log", "a")
-				sys.stderr = f
-			except Exception as e:
-				# Log to console if we can't set up error logging
-				print(f"Warning: Could not set up error logging: {e}", file=sys.__stderr__)
-
 		# Load preferences with defaults
 		self.prefs.timelinecache_version = self.prefs.get("timelinecache_version", 1)
 		if self.prefs.timelinecache_version == 1:

@@ -1,4 +1,4 @@
-"""PyInstaller runtime hook to redirect stderr to config directory early."""
+"""PyInstaller runtime hook for early initialization."""
 import sys
 import os
 import platform
@@ -22,19 +22,16 @@ def _get_config_dir():
         base = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
         return os.path.join(base, "FastSM")
 
-def _setup_error_logging():
-    """Redirect stderr to config directory."""
+def _setup_early_logging():
+    """Initialize logging early for frozen builds."""
     if not getattr(sys, 'frozen', False):
         return
 
     try:
+        from logging_config import setup_logging
         config_dir = _get_config_dir()
-        if not os.path.exists(config_dir):
-            os.makedirs(config_dir)
-
-        error_log_path = os.path.join(config_dir, "errors.log")
-        sys.stderr = open(error_log_path, "a")
+        setup_logging(config_dir, debug=False)
     except Exception:
-        pass  # If we can't set up logging, just continue
+        pass  # Logging will be set up later in FastSM.pyw
 
-_setup_error_logging()
+_setup_early_logging()

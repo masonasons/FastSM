@@ -105,17 +105,8 @@ try:
 	# Debug mode will be set later after prefs are loaded
 	setup_logging(_config_dir, debug=False)
 	_logger = get_logger()
-except Exception as e:
-	# Fallback: redirect stderr to errors.log if logging setup fails
+except Exception:
 	_logger = None
-	if platform.system() != "Darwin":
-		try:
-			if not os.path.exists(_config_dir):
-				os.makedirs(_config_dir)
-			f = open(os.path.join(_config_dir, "errors.log"), "a")
-			sys.stderr = f
-		except Exception:
-			pass
 import shutil
 if os.path.exists(os.path.expandvars(r"%temp%\gen_py")):
 	shutil.rmtree(os.path.expandvars(r"%temp%\gen_py"))
