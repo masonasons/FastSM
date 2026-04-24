@@ -5,8 +5,7 @@ pyperclip
 requests
 wxpython
 Pillow
-prismatoid
-jeepney ; sys_platform == 'linux'
+prismatoid>=0.12
 git+https://github.com/accessibleapps/keyboard_handler
 git+https://github.com/accessibleapps/sound_lib
 # Windows only

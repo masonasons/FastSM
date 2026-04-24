@@ -354,7 +354,6 @@ def build_linux(script_dir: Path, output_dir: Path) -> tuple:
     cmd.extend(["--collect-all", "sound_lib"])
     cmd.extend(["--collect-all", "keyboard_handler"])
     cmd.extend(["--collect-all", "prism"])
-    cmd.extend(["--collect-all", "jeepney"])
 
     rthook = script_dir / "hooks" / "rthook-platform_utils.py"
     if rthook.exists():
