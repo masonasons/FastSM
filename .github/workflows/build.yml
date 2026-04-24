@@ -107,8 +107,58 @@ jobs:
           name: macos-build
           path: ${{ steps.artifact.outputs.path }}
 
+  build-linux:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-0 \
+            libgtk-3-dev \
+            libnotify-dev \
+            libsdl2-2.0-0 \
+            libsdl2-dev \
+            libwebkit2gtk-4.0-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libasound2-dev \
+            libpulse-dev \
+            libdbus-1-dev
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --extra-index-url https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04 -r requirements.txt
+
+      - name: Build executable
+        run: python build.py
+
+      - name: Find build artifact
+        id: artifact
+        run: |
+          TAR=$(ls FastSM-Linux-Portable.tar.gz 2>/dev/null | head -1)
+          echo "path=$TAR" >> $GITHUB_OUTPUT
+          echo "name=$TAR" >> $GITHUB_OUTPUT
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: ${{ steps.artifact.outputs.path }}
+
   release:
-    needs: [build-windows, build-macos]
+    needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
 
     steps:
@@ -139,6 +189,12 @@ jobs:
           name: macos-build
           path: artifacts/
 
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-build
+          path: artifacts/
+
       - name: List artifacts
         run: ls -la artifacts/
 
@@ -165,6 +221,7 @@ jobs:
             - **Windows Installer:** FastSMInstaller.exe (Recommended)
             - **Windows Portable:** FastSM-Windows-Portable.zip
             - **macOS:** FastSM-${{ steps.version.outputs.version }}.dmg
+            - **Linux Portable:** FastSM-Linux-Portable.tar.gz
           files: artifacts/*
           prerelease: true
           make_latest: false
