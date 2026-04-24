@@ -402,6 +402,14 @@ _LINUX_SYSTEM_LIB_PATTERNS = (
     "libgobject-2.0.so*",
     "libgmodule-2.0.so*",
     "libgthread-2.0.so*",
+    # Once the system libgio loads, it needs its own (newer) transitive deps —
+    # util-linux (MOUNT_2_40+), selinux, pcre2. Bundled copies from the CI
+    # runner lack newer symbols, so fall through to system for these too.
+    "libmount.so*",
+    "libblkid.so*",
+    "libuuid.so*",
+    "libselinux.so*",
+    "libpcre2-8.so*",
 )
 
 
