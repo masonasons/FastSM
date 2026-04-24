@@ -381,8 +381,31 @@ def build_linux(script_dir: Path, output_dir: Path) -> tuple:
 
     copy_data_files(script_dir, app_dir)
 
+    _strip_bundled_system_libs(app_dir / "_internal")
+
     tar_path = create_linux_tarball(output_dir, app_dir)
     return True, tar_path
+
+
+# Audio/system libs that PyInstaller pulls in from the build runner but which
+# must come from the user's system instead. The CI runner is older than many
+# user distros, and a stale bundled libasound/libpulse silently breaks BASS
+# playback when its plugins ABI-mismatch the system's PipeWire/PulseAudio.
+_LINUX_SYSTEM_LIB_PATTERNS = (
+    "libasound.so*",
+    "libpulse.so*",
+    "libpulsecommon-*.so*",
+)
+
+
+def _strip_bundled_system_libs(internal_dir: Path):
+    """Remove audio libs that should resolve from the user's system, not the bundle."""
+    if not internal_dir.exists():
+        return
+    for pattern in _LINUX_SYSTEM_LIB_PATTERNS:
+        for path in internal_dir.glob(pattern):
+            print(f"Removing bundled system lib: {path.name}")
+            path.unlink()
 
 
 def create_linux_tarball(output_dir: Path, app_dir: Path) -> Path:
