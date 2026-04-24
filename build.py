@@ -394,6 +394,14 @@ _LINUX_SYSTEM_LIB_PATTERNS = (
     "libasound.so*",
     "libpulse.so*",
     "libpulsecommon-*.so*",
+    # Two copies of GLib loaded at once (bundled + system, pulled in via system
+    # libs like dbus) trigger "cannot register existing type 'GSeekable'" and
+    # g_once_init_leave assertion failures. Force single-copy via the system.
+    "libglib-2.0.so*",
+    "libgio-2.0.so*",
+    "libgobject-2.0.so*",
+    "libgmodule-2.0.so*",
+    "libgthread-2.0.so*",
 )
 
 
