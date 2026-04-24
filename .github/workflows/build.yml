@@ -140,6 +140,8 @@ jobs:
           # --extra-index-url. Pin 4.2.2 since that's the newest wheel there.
           pip install -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04 wxpython==4.2.2
           pip install -r requirements.txt
+          # Needed by build.py's post-build libprism rewrite.
+          pip install patchelf
 
       - name: Build executable
         run: python build.py

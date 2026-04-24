@@ -2,6 +2,7 @@
 """Build script for FastSM using PyInstaller - supports Windows and macOS."""
 
 import os
+import re
 import subprocess
 import sys
 import shutil
@@ -380,6 +381,7 @@ def build_linux(script_dir: Path, output_dir: Path) -> tuple:
 
     copy_data_files(script_dir, app_dir)
 
+    _patch_prism_libgio(app_dir / "_internal")
     _strip_bundled_system_libs(app_dir / "_internal")
 
     tar_path = create_linux_tarball(output_dir, app_dir)
@@ -410,6 +412,16 @@ _LINUX_SYSTEM_LIB_PATTERNS = (
     "libuuid.so*",
     "libselinux.so*",
     "libpcre2-8.so*",
+    # prismatoid's auditwheel-hashed copies of the same libs, which PyInstaller
+    # also propagates up to _internal/. Without removing these, libprism's RPATH
+    # finds its own libgio and GLib ends up registered twice. Safe to drop once
+    # libprism has been patchelf'd to use the bare libgio soname.
+    "libgio-2-*.so*",
+    "libgmodule-2-*.so*",
+    "libmount-*.so*",
+    "libblkid-*.so*",
+    "libselinux-*.so*",
+    "libpcre2-8-*.so*",
 )
 
 
@@ -421,6 +433,40 @@ def _strip_bundled_system_libs(internal_dir: Path):
         for path in internal_dir.glob(pattern):
             print(f"Removing bundled system lib: {path.name}")
             path.unlink()
+
+
+_HASHED_LIBGIO_RE = re.compile(r"^libgio-2-[0-9a-f]+\.0\.so\.0\..+$")
+
+
+def _patch_prism_libgio(internal_dir: Path):
+    """Rewrite libprism's NEEDED libgio from prismatoid's auditwheel-hashed
+    soname back to the bare ``libgio-2.0.so.0``.
+
+    Prism ships libprism linked against its own hashed libgio copy (e.g.
+    ``libgio-2-867cbb79.0.so.0.6800.4``) while wxPython/GTK loads the system
+    libgio-2.0.so.0. Having both in one process makes GLib try to register
+    GSeekable/GPollableInputStream twice, which aborts initialization. Forcing
+    libprism onto the bare soname means one libgio serves the whole app.
+    """
+    libprism = internal_dir / "prism" / "_native" / "libprism.so"
+    if not libprism.exists():
+        return
+    try:
+        needed = subprocess.run(
+            ["patchelf", "--print-needed", str(libprism)],
+            capture_output=True, text=True, check=True,
+        ).stdout.splitlines()
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        print(f"Warning: could not inspect libprism.so ({e}); skipping libgio rewrite")
+        return
+    for entry in (line.strip() for line in needed):
+        if _HASHED_LIBGIO_RE.match(entry):
+            subprocess.run(
+                ["patchelf", "--replace-needed", entry, "libgio-2.0.so.0", str(libprism)],
+                check=True,
+            )
+            print(f"Patched libprism.so: NEEDED {entry} -> libgio-2.0.so.0")
+            return
 
 
 def create_linux_tarball(output_dir: Path, app_dir: Path) -> Path:
