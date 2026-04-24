@@ -6,6 +6,22 @@ from sound_lib import output as o
 import speak
 import re
 
+# sound_lib.stream.URLStream encodes paths as filesystem bytes on Linux/Darwin,
+# but FileStream only does it on Darwin — on Linux it sends a UTF-16 path BASS
+# cannot open, making every file load fail with BASS_ERROR_FILEFORM (41).
+# Patch __init__ in place (rebinding the class breaks sound_lib's internal
+# super(FileStream, self) reference and causes MRO recursion).
+if sys.platform.startswith('linux'):
+	_orig_FileStream_init = stream.FileStream.__init__
+	def _linux_FileStream_init(self, mem=False, file=None, offset=0, length=0, flags=0,
+	                           three_d=False, mono=False, autofree=False, decode=False, unicode=True):
+		if file and not mem and isinstance(file, str):
+			file = file.encode(sys.getfilesystemencoding())
+			unicode = False
+		_orig_FileStream_init(self, mem=mem, file=file, offset=offset, length=length, flags=flags,
+		                      three_d=three_d, mono=mono, autofree=autofree, decode=decode, unicode=unicode)
+	stream.FileStream.__init__ = _linux_FileStream_init
+
 def _setup_vlc_path():
 	"""Set up VLC library path for bundled or system VLC."""
 	def _configure_vlc_env(vlc_path):
@@ -207,9 +223,11 @@ def init_audio_output(device_index=1):
 	try:
 		out = o.Output(device=device_index)
 	except Exception as e:
-		# Fall back to device 1 (default) if device selection fails
+		# Fall back to BASS default device (-1) if device selection fails.
+		# On Linux, device=1 is often not a valid device (real devices start at 2),
+		# so the Windows-style "device 1 = default" assumption fails there.
 		try:
-			out = o.Output(device=1)
+			out = o.Output(device=-1)
 		except:
 			pass
 

@@ -1,24 +1,44 @@
 #!/bin/bash
-# Build script for FastSM using Nuitka
+# Build script for FastSM using PyInstaller.
+#
+# Works on Linux and macOS. On Linux we prefer python3.13 because that's the
+# version wxPython publishes Linux wheels for; fall through to python3 if 3.13
+# isn't installed.
+
+set -e
+
+PY=""
+for candidate in python3.13 python3.12 python3.11 python3; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        PY="$candidate"
+        break
+    fi
+done
+
+if [ -z "$PY" ]; then
+    echo "No Python 3 interpreter found on PATH." >&2
+    exit 1
+fi
 
 echo "========================================"
-echo "Building FastSM with Nuitka"
+echo "Building FastSM with PyInstaller ($PY)"
 echo "========================================"
 echo
 
-# Check if Nuitka is installed
-if ! python3.11 -m nuitka --version > /dev/null 2>&1; then
-    echo "Nuitka is not installed. Installing..."
-    pip3.11 install nuitka
-    if [ $? -ne 0 ]; then
-        echo "Failed to install Nuitka"
+if ! "$PY" -c "import PyInstaller" >/dev/null 2>&1; then
+    echo "PyInstaller is not installed. Installing..."
+    PIP_ARGS=""
+    # Linux system pythons are usually PEP 668 managed.
+    if [ "$(uname -s)" = "Linux" ]; then
+        PIP_ARGS="--break-system-packages"
+    fi
+    if ! "$PY" -m pip install $PIP_ARGS pyinstaller; then
+        echo "Failed to install PyInstaller" >&2
         exit 1
     fi
 fi
 
-# Run the build script
-python3.11 build.py
+"$PY" build.py
 
 echo
-echo "Build complete. Press Enter to exit..."
-read
+echo "Build complete."

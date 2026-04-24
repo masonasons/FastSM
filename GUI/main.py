@@ -46,8 +46,22 @@ class MainGui(wx.Frame):
 		wx.Frame.__init__(self, None, title=title,size=(800,600))
 		self.Center()
 		if platform.system()!="Darwin":
-			self.trayicon=tray.TaskBarIcon(self)
-		self.handler=WXKeyboardHandler(self)
+			try:
+				self.trayicon=tray.TaskBarIcon(self)
+			except Exception:
+				self.trayicon=None
+		if platform.system() == "Linux":
+			# WXKeyboardHandler's wx.Window.RegisterHotKey is a no-op on wxGTK.
+			# Read /dev/input/event* directly — works on Wayland without needing
+			# the privileged AT slot that's reserved for Orca.
+			try:
+				from . import linux_shortcuts
+				self.handler = linux_shortcuts.LinuxGlobalShortcuts(self)
+			except Exception:
+				import traceback; traceback.print_exc()
+				self.handler = WXKeyboardHandler(self)
+		else:
+			self.handler=WXKeyboardHandler(self)
 		# Global hotkeys only on Windows/Linux - not supported properly on Mac
 		if platform.system() != "Darwin":
 			self.handler.register_key("control+win+shift+t",self.ToggleWindow)
@@ -332,14 +346,35 @@ class MainGui(wx.Frame):
 		self.SetMenuBar(self.menuBar)
 
 		# Add accelerator table for keyboard shortcuts
-		if platform.system() != "Darwin":
-			# Windows/Linux: Add Alt+M for context menu
+		if platform.system() == "Windows":
+			# Windows: Add Alt+M for context menu. On wxMSW menu-item accelerators
+			# (from "\tCtrl+N" labels) fire without the frame's accelerator table,
+			# so setting this one doesn't clobber them.
 			self.context_menu_id = wx.NewIdRef()
 			self.Bind(wx.EVT_MENU, self.OnPostContextMenu, id=self.context_menu_id)
 			accel = wx.AcceleratorTable([
 				(wx.ACCEL_ALT, ord('M'), self.context_menu_id),
 			])
 			self.SetAcceleratorTable(accel)
+		elif platform.system() == "Linux":
+			# wxGTK does not fire menu-item accelerators from "\tCtrl+N" labels
+			# unless they're also present in the frame's AcceleratorTable. Walk
+			# the menu bar and build it explicitly, plus Alt+M for context menu.
+			self.context_menu_id = wx.NewIdRef()
+			self.Bind(wx.EVT_MENU, self.OnPostContextMenu, id=self.context_menu_id)
+			entries = [wx.AcceleratorEntry(wx.ACCEL_ALT, ord('M'), self.context_menu_id)]
+			def _collect(menu):
+				for item in menu.GetMenuItems():
+					sub = item.GetSubMenu()
+					if sub is not None:
+						_collect(sub)
+						continue
+					accel = item.GetAccel()
+					if accel is not None:
+						entries.append(wx.AcceleratorEntry(accel.GetFlags(), accel.GetKeyCode(), item.GetId()))
+			for i in range(self.menuBar.GetMenuCount()):
+				_collect(self.menuBar.GetMenu(i))
+			self.SetAcceleratorTable(wx.AcceleratorTable(entries))
 		else:
 			# macOS: Add arrow key combos to accelerator table (only fires when main window focused)
 			# This prevents these shortcuts from firing in dialogs like New Post
@@ -788,7 +823,7 @@ class MainGui(wx.Frame):
 						cache.cleanup_orphaned_data(active_keys)
 					except Exception as e:
 						print(f"Error cleaning up cache: {e}")
-		if platform.system()!="Darwin":
+		if platform.system()!="Darwin" and self.trayicon is not None:
 			self.trayicon.on_exit(event,False)
 		# Clean up account resources (close timeline caches)
 		for account in get_app().accounts:

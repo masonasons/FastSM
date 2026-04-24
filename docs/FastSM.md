@@ -4,7 +4,7 @@ Welcome to FastSM!
 
 ## What is FastSM?
 
-FastSM is a fully accessible, easy-to-use, lightweight social media client that supports both Mastodon and Bluesky. Based on the Quinter App created back in 2021, it works on both Windows and Mac, and is open source, allowing anyone to contribute!
+FastSM is a fully accessible, easy-to-use, lightweight social media client that supports both Mastodon and Bluesky. Based on the Quinter App created back in 2021, it works on Windows, Mac, and Linux, and is open source, allowing anyone to contribute!
 
 ## Supported Platforms
 
@@ -18,8 +18,32 @@ FastSM has two interfaces:
 ### GUI Interface
 Control FastSM like any other application with buttons, lists, menus, and standard keyboard shortcuts.
 
-### Invisible Interface (Windows only)
+### Invisible Interface (Windows and Linux)
 Control FastSM from anywhere on your computer using global hotkeys. This is disabled by default but can be enabled in the Advanced settings. Multiple keymaps are available, including a Windows 11-optimized keymap.
+
+On Linux, the invisible interface reads keyboard events directly from `/dev/input/event*` (see the Linux setup section below for the one-time setup required).
+
+## Linux Setup
+
+### Speech
+
+FastSM speaks through Orca on Linux. Enable the screen reader in GNOME accessibility settings and FastSM will deliver speech directly to it. If Orca isn't running, FastSM falls back to Speech Dispatcher automatically.
+
+### Global hotkeys (invisible interface)
+
+Wayland's security model only grants key-grabbing rights to the designated screen reader, so on Linux FastSM reads keyboard events directly from `/dev/input/event*`. To allow that, add yourself to the `input` group once and log out + back in:
+
+```
+sudo gpasswd -a $USER input
+```
+
+After logging back in, enable the invisible interface in **Application → Options → Advanced**. FastSM finds connected keyboards automatically.
+
+Notes:
+
+- Shortcuts use physical key positions (QWERTY-style), not the layout-mapped character. On Dvorak/AZERTY/etc., a shortcut written as `alt+win+t` fires on the physical T-key position.
+- Events are observed, not intercepted — a shortcut press fires FastSM's action AND still reaches whichever window is focused. Pick combinations unlikely to collide with other apps' bindings.
+- If the invisible interface silently does nothing, you aren't in the `input` group yet (check with `groups | grep input`). The membership change only applies to new login sessions.
 
 ## Main Window
 
@@ -62,7 +86,7 @@ All menu items show their keyboard shortcuts. Common shortcuts include:
 - **Ctrl+Enter**: Play media
 - **Ctrl+Shift+Enter**: Stop audio
 
-### Invisible Interface Keys (Windows only)
+### Invisible Interface Keys (Windows and Linux)
 
 Default keymap (can be customized via keymap files):
 

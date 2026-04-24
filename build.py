@@ -102,10 +102,10 @@ def get_hidden_imports():
         # keyboard_handler
         "keyboard_handler",
         "keyboard_handler.wx_handler",
-        # Windows-specific
-        "accessible_output2",
-        "accessible_output2.outputs",
-        "accessible_output2.outputs.auto",
+        # speech backend (replaces accessible_output2)
+        "prism",
+        "prism.core",
+        "prism.lib",
         "sound_lib",
         "sound_lib.stream",
         "sound_lib.output",
@@ -182,17 +182,6 @@ def get_binaries():
     binaries = []
 
     if sys.platform == "win32":
-        # Include accessible_output2 lib folder
-        try:
-            import accessible_output2
-            ao2_path = Path(accessible_output2.__file__).parent
-            ao2_lib = ao2_path / "lib"
-            if ao2_lib.exists():
-                for dll in ao2_lib.glob("*.dll"):
-                    binaries.append((str(dll), "accessible_output2/lib"))
-        except ImportError:
-            pass
-
         # Include sound_lib DLLs
         try:
             import sound_lib
@@ -254,7 +243,7 @@ def build_windows(script_dir: Path, output_dir: Path) -> tuple:
         cmd.extend(["--add-binary", f"{src}{os.pathsep}{dst}"])
 
     # Collect all submodules for key packages
-    cmd.extend(["--collect-all", "accessible_output2"])
+    cmd.extend(["--collect-all", "prism"])
     cmd.extend(["--collect-all", "sound_lib"])
     cmd.extend(["--collect-all", "keyboard_handler"])
     # Enchant is imported inside try/except so PyInstaller can't trace it
@@ -322,6 +311,102 @@ def create_windows_zip(output_dir: Path, app_dir: Path) -> Path:
     return zip_path
 
 
+def build_linux(script_dir: Path, output_dir: Path) -> tuple:
+    """Build for Linux using PyInstaller.
+
+    Produces a directory distribution under dist_dir and a .tar.gz beside it.
+
+    Returns:
+        Tuple of (success: bool, artifact_path: Path or None)
+    """
+    dist_dir = output_dir / "dist"
+    build_dir = output_dir / "build"
+
+    for d in [dist_dir, build_dir]:
+        if d.exists():
+            print(f"Cleaning {d}...")
+            shutil.rmtree(d)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    create_build_info_file(script_dir)
+
+    main_script = script_dir / "FastSM.pyw"
+
+    cmd = [
+        sys.executable, "-m", "PyInstaller",
+        "--name", APP_NAME,
+        "--windowed",
+        "--noconfirm",
+        f"--distpath={dist_dir}",
+        f"--workpath={build_dir}",
+        f"--specpath={output_dir}",
+        f"--additional-hooks-dir={script_dir / 'hooks'}",
+    ]
+
+    for imp in get_hidden_imports():
+        cmd.extend(["--hidden-import", imp])
+
+    for src, dst in get_data_files(script_dir):
+        cmd.extend(["--add-data", f"{src}{os.pathsep}{dst}"])
+
+    # Collect native-backed packages so PyInstaller bundles their .so files.
+    cmd.extend(["--collect-all", "sound_lib"])
+    cmd.extend(["--collect-all", "keyboard_handler"])
+    cmd.extend(["--collect-all", "prism"])
+    cmd.extend(["--collect-all", "jeepney"])
+
+    rthook = script_dir / "hooks" / "rthook-platform_utils.py"
+    if rthook.exists():
+        cmd.extend(["--runtime-hook", str(rthook)])
+
+    cmd.append(str(main_script))
+
+    print(f"Building {APP_NAME} v{APP_VERSION} for Linux...")
+    print(f"Output: {output_dir}")
+    print()
+
+    try:
+        result = subprocess.run(cmd, cwd=script_dir)
+    finally:
+        cleanup_build_info_file(script_dir)
+
+    if result.returncode != 0:
+        return False, None
+
+    app_dir = dist_dir / APP_NAME
+    if not app_dir.exists():
+        print("Error: Build output not found")
+        return False, None
+
+    copy_data_files(script_dir, app_dir)
+
+    tar_path = create_linux_tarball(output_dir, app_dir)
+    return True, tar_path
+
+
+def create_linux_tarball(output_dir: Path, app_dir: Path) -> Path:
+    """Create a .tar.gz of the Linux build for distribution."""
+    import tarfile
+
+    tar_name = f"{APP_NAME}-Linux-Portable.tar.gz"
+    tar_path = output_dir / tar_name
+
+    if tar_path.exists():
+        tar_path.unlink()
+
+    print(f"Creating tarball: {tar_name}...")
+
+    with tarfile.open(tar_path, 'w:gz') as tar:
+        tar.add(app_dir, arcname=APP_NAME)
+
+    size_mb = tar_path.stat().st_size / (1024 * 1024)
+    print(f"Tarball created: {tar_path}")
+    print(f"Tarball size: {size_mb:.1f} MB")
+
+    return tar_path
+
+
 def build_macos(script_dir: Path, output_dir: Path) -> tuple:
     """Build for macOS using PyInstaller.
 
@@ -377,8 +462,9 @@ def build_macos(script_dir: Path, output_dir: Path) -> tuple:
     if rthook.exists():
         cmd.extend(["--runtime-hook", str(rthook)])
 
-    # Collect keyboard_handler
+    # Collect keyboard_handler and the speech backend
     cmd.extend(["--collect-all", "keyboard_handler"])
+    cmd.extend(["--collect-all", "prism"])
 
     # Add main script
     cmd.append(str(main_script))
@@ -583,6 +669,8 @@ def main():
         success, artifact_path = build_windows(script_dir, output_dir)
     elif platform == "macos":
         success, artifact_path = build_macos(script_dir, output_dir)
+    elif platform == "linux":
+        success, artifact_path = build_linux(script_dir, output_dir)
     else:
         print(f"Unsupported platform: {platform}")
         sys.exit(1)

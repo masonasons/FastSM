@@ -47,6 +47,8 @@ errors.log
 *.dll
 *.pyd
 *.zip
+*.tar
+*.tar.gz
 FastSM.build/
 FastSM.dist/
 FastSM.onefile-build/
@@ -64,3 +66,5 @@ vlc/
 
 # yt-dlp executable (download from https://github.com/yt-dlp/yt-dlp/releases)
 yt-dlp.exe
+
+todo.txt
