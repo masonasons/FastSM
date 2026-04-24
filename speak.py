@@ -1,12 +1,10 @@
 """Speech output via prism.
 
-Routes speech through the active screen reader where possible, so FastSM
-sounds like the rest of the user's desktop instead of a separate TTS voice:
-  - Windows: UIA (speaks through whatever AT is focused) -> SAPI/OneCore/JAWS/NVDA
-  - macOS:   VoiceOver -> AV Speech
-  - Linux:   Orca -> Speech Dispatcher (handled entirely by prism's ranking)
+On macOS, prefer VoiceOver so FastSM speaks through the active screen reader
+instead of firing up AV Speech as a separate TTS voice. Windows and Linux use
+prism's own ranking (which picks the active screen reader when one is running).
 
-On macOS, AV Speech must be driven from the main thread, so off-thread callers
+AV Speech on macOS must be driven from the main thread, so off-thread callers
 are marshalled via wx.CallAfter.
 """
 
@@ -21,26 +19,16 @@ _context = prism.Context()
 _prism_backend = None
 
 
-# Backends to try before prism's own ranking, in preference order per platform.
-# The intent is "route through the active assistive tech if it's running,
-# otherwise let prism pick."
-_PREFERRED_BACKENDS = {
-	'win32': (prism.BackendId.UIA,),
-	'darwin': (prism.BackendId.VOICE_OVER,),
-}
-
-
 def _get_prism_backend():
 	global _prism_backend
 	if _prism_backend is not None:
 		return _prism_backend
-	for backend_id in _PREFERRED_BACKENDS.get(sys.platform, ()):
-		if _context.exists(backend_id):
-			try:
-				_prism_backend = _context.create(backend_id)
-				return _prism_backend
-			except prism.PrismError:
-				continue
+	if sys.platform == 'darwin' and _context.exists(prism.BackendId.VOICE_OVER):
+		try:
+			_prism_backend = _context.create(prism.BackendId.VOICE_OVER)
+			return _prism_backend
+		except prism.PrismError:
+			pass
 	_prism_backend = _context.create_best()
 	return _prism_backend
 
