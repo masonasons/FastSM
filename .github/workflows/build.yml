@@ -227,5 +227,8 @@ jobs:
           files: artifacts/*
           prerelease: true
           make_latest: false
+          # Keep the release published — drafts make releases/download/<tag>/<file>
+          # URLs return 404 for unauthenticated users.
+          draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
