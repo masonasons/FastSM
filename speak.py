@@ -43,6 +43,10 @@ def _do_speak(text, interrupt):
 
 
 def speak(text, interrupt=False):
+	# Backend creation is deferred to first speak() because prism's macOS
+	# VoiceOver backend needs an NSWindow to exist when create() is called —
+	# warming up at import time runs before GUI.main has built the wxFrame,
+	# so VOICE_OVER returns BackendNotAvailable and we'd get stuck on AV Speech.
 	if sys.platform == 'darwin' and threading.current_thread().ident != _main_thread_id:
 		try:
 			import wx
@@ -51,7 +55,3 @@ def speak(text, interrupt=False):
 			_do_speak(text, interrupt)
 	else:
 		_do_speak(text, interrupt)
-
-
-# Warm up prism at import time so the first speak() call doesn't pay init cost.
-_get_prism_backend()
