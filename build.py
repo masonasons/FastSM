@@ -412,6 +412,10 @@ _LINUX_SYSTEM_LIB_PATTERNS = (
     "libuuid.so*",
     "libselinux.so*",
     "libpcre2-8.so*",
+    # libsystemd from the CI runner ships with newer ABI symbols than older user
+    # systemds expose — bundling .so.0 statically (rather than letting the
+    # dynamic loader resolve to the system copy) breaks on those distros.
+    "libsystemd.so*",
     # prismatoid's auditwheel-hashed copies of the same libs, which PyInstaller
     # also propagates up to _internal/. Without removing these, libprism's RPATH
     # finds its own libgio and GLib ends up registered twice. Safe to drop once
@@ -422,6 +426,7 @@ _LINUX_SYSTEM_LIB_PATTERNS = (
     "libblkid-*.so*",
     "libselinux-*.so*",
     "libpcre2-8-*.so*",
+    "libsystemd-*.so*",
 )
 
 
