@@ -628,11 +628,27 @@ class BlueskyAccount(PlatformAccount):
             status_uri = status.id if hasattr(status, 'id') else status
             status_cid = getattr(status, 'cid', None)
 
+            # Repost wrappers carry the underlying post's URI suffixed with
+            # ":repost" and don't expose its cid. Strip the suffix so the quote
+            # references the post the user is actually looking at, not the
+            # repost record (which can't be embedded and would also fail
+            # pydantic validation when cid resolves to None).
+            if isinstance(status_uri, str) and status_uri.endswith(":repost"):
+                status_uri = status_uri[: -len(":repost")]
+                status_cid = None
+
             # If we don't have the CID, fetch the post
             if not status_cid:
                 post_response = self.client.get_posts([status_uri])
                 if post_response.posts:
-                    status_cid = getattr(post_response.posts[0], 'cid', '')
+                    status_cid = getattr(post_response.posts[0], 'cid', None)
+
+            if not status_cid:
+                self.app.handle_error(
+                    ValueError(f"Could not resolve cid for {status_uri}"),
+                    "quote",
+                )
+                return None
 
             from atproto import models
             embed = models.AppBskyEmbedRecord.Main(
