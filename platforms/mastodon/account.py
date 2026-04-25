@@ -583,8 +583,11 @@ class MastodonAccount(PlatformAccount):
 
     def search_statuses(self, query: str, limit: int = 40, **kwargs) -> List[UniversalStatus]:
         """Search for statuses."""
-        # Build search kwargs - some older Mastodon.py versions don't support limit
-        search_kwargs = {'q': query, 'result_type': 'statuses'}
+        # resolve=True asks the user's instance to fetch matching remote
+        # statuses it hasn't seen before — without it, results are limited to
+        # whatever the instance happens to have cached, which is usually
+        # nothing for a fresh search.
+        search_kwargs = {'q': query, 'result_type': 'statuses', 'resolve': True}
         if kwargs.get('max_id'):
             search_kwargs['max_id'] = kwargs['max_id']
 
@@ -824,7 +827,14 @@ class MastodonAccount(PlatformAccount):
 
     def search_users(self, query: str, limit: int = 10) -> List[UniversalUser]:
         """Search for users."""
-        results = self.api.account_search(q=query, limit=limit)
+        # resolve=True makes the instance fetch matching remote accounts it
+        # doesn't already know about, which is the difference between "found
+        # the user" and "got nothing back" for any non-local search.
+        try:
+            results = self.api.account_search(q=query, limit=limit, resolve=True)
+        except TypeError:
+            # Older Mastodon.py builds didn't accept resolve as a kwarg.
+            results = self.api.account_search(q=query, limit=limit)
         users = self._convert_users(results)
         for user in users:
             self.user_cache.add_user(user)

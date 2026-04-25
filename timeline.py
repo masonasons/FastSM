@@ -257,8 +257,11 @@ class timeline(object):
 				return self.account._platform.search_statuses(self.data, limit=limit, max_id=max_id)
 			return self.account._platform.search_statuses(self.data, limit=limit)
 
-		# Fallback to Mastodon API - handle versions that don't support limit
-		search_kwargs = {'q': self.data, 'result_type': 'statuses'}
+		# Fallback to Mastodon API - handle versions that don't support limit.
+		# resolve=True asks the instance to fetch matching remote statuses it
+		# hasn't already cached, which is the only way most searches return
+		# anything at all.
+		search_kwargs = {'q': self.data, 'result_type': 'statuses', 'resolve': True}
 		if max_id:
 			search_kwargs['max_id'] = max_id
 		try:
