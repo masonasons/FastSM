@@ -1831,9 +1831,23 @@ class Application:
 				ps_zip_path = final_zip_path.replace("'", "''")
 				ps_extract_dir = extract_dir.replace("'", "''")
 
+				# Wait on our own PID instead of a fixed sleep — OnClose can take
+				# several seconds (timeline position sync, cache writes,
+				# streaming thread teardown). If we proceed before FastSM is
+				# fully gone, xcopy fails to overwrite the locked exe and the
+				# new launch trips the SingleInstanceChecker.
+				parent_pid = os.getpid()
 				batch_content = f'''@echo off
 echo Waiting for FastSM to close...
-timeout /t 2 /nobreak >nul
+set /a tries=0
+:waitloop
+tasklist /FI "PID eq {parent_pid}" /NH 2>nul | find "{parent_pid}" >nul
+if errorlevel 1 goto closed
+set /a tries+=1
+if %tries% GEQ 60 goto closed
+timeout /t 1 /nobreak >nul
+goto waitloop
+:closed
 
 echo Extracting update...
 powershell -Command "Expand-Archive -Path '{ps_zip_path}' -DestinationPath '{ps_extract_dir}' -Force"
