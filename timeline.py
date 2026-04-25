@@ -1484,48 +1484,6 @@ class timeline(object):
 						self.account._on_timeline_initial_load_complete()
 					# Start streaming for this timeline if supported
 					self.start_stream()
-				if self.removable:
-					if self.type == "user":
-						# Handle both string and dict data for user timelines
-						if isinstance(self.data, dict):
-							self.account.prefs.user_timelines = [
-								ut for ut in self.account.prefs.user_timelines
-								if not (isinstance(ut, dict) and ut.get('username') == self.data.get('username') and ut.get('filter') == self.data.get('filter'))
-							]
-						elif self.data in self.account.prefs.user_timelines:
-							self.account.prefs.user_timelines.remove(self.data)
-					if self.type == "list":
-						self.account.prefs.list_timelines = [
-							item for item in self.account.prefs.list_timelines
-							if item.get('id') != self.data
-						]
-					if self.type == "search" and self.data in self.account.prefs.search_timelines:
-						self.account.prefs.search_timelines.remove(self.data)
-					if self.type == "instance":
-						self.account.prefs.instance_timelines = [
-							item for item in self.account.prefs.instance_timelines
-							if item.get('url') != self.data
-						]
-					if self.type == "remote_user":
-						inst_url = self.data.get('url', '') if isinstance(self.data, dict) else ''
-						username = self.data.get('username', '') if isinstance(self.data, dict) else ''
-						tl_filter = self.data.get('filter') if isinstance(self.data, dict) else None
-						self.account.prefs.remote_user_timelines = [
-							item for item in self.account.prefs.remote_user_timelines
-							if not (item.get('url') == inst_url and item.get('username') == username and item.get('filter') == tl_filter)
-						]
-					# Stop streaming before removing timeline
-					self.stop_stream()
-					self.account.timelines.remove(self)
-					if self.account == self.app.currentAccount:
-						# Use wx.CallAfter for thread safety (this runs in background thread)
-						def update_ui_after_remove():
-							main.window.refreshTimelines()
-							if self.account.currentTimeline == self:
-								main.window.list.SetSelection(0)
-								self.account.currentIndex = 0
-								main.window.on_list_change(None)
-						wx.CallAfter(update_ui_after_remove)
 				return
 		else:
 			tl = items
