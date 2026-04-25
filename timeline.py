@@ -727,6 +727,12 @@ class timeline(object):
 			if self.account == self.app.currentAccount and self.account.currentTimeline == self:
 				wx.CallAfter(main.window.refreshList)
 
+			# Resolve any quote-posts whose quoted target wasn't in the cache.
+			# Without this the cached status renders the raw "RE: <url>" instead
+			# of the formatted "Quoting <user>: ..." block that the user saw
+			# live (issue #27 / #37).
+			self._resolve_unresolved_quotes()
+
 			return True
 
 		except Exception as e:
@@ -734,6 +740,48 @@ class timeline(object):
 			print(f"Cache load error for {self.name}: {e}")
 			traceback.print_exc()
 			return False
+
+	def _resolve_unresolved_quotes(self):
+		"""Fetch quoted posts that the cache couldn't satisfy."""
+		pending = [s for s in self.statuses
+		           if getattr(s, '_unresolved_quote_id', None) and not getattr(s, 'quote', None)]
+		if not pending:
+			return
+
+		def resolve():
+			for s in pending:
+				quote_id = getattr(s, '_unresolved_quote_id', None)
+				if not quote_id:
+					continue
+				try:
+					fetched = self.account.get_status(quote_id)
+				except Exception:
+					fetched = None
+				if not fetched:
+					continue
+				s.quote = fetched
+				try:
+					del s._unresolved_quote_id
+				except AttributeError:
+					pass
+				# Cache for next reload + drop the stale render so the next
+				# read of this row picks up the new quote.
+				cache = self._get_cache()
+				if cache:
+					try:
+						cache.save_status(fetched)
+						cache.save_status(s)
+					except Exception:
+						pass
+				try:
+					del s._display_cache
+				except AttributeError:
+					pass
+			self.invalidate_display_cache()
+			if self.account == self.app.currentAccount and self.account.currentTimeline == self:
+				wx.CallAfter(main.window.refreshList)
+
+		threading.Thread(target=resolve, daemon=True).start()
 
 	def _refresh_after_cache(self):
 		"""Background refresh after loading from cache."""

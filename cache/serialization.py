@@ -345,6 +345,12 @@ def row_to_status(row: Dict[str, Any], user_lookup: callable = None,
     if row.get('_original_status_id'):
         status._original_status_id = row['_original_status_id']
 
+    # If the row references a quote we couldn't satisfy from the cache (e.g.
+    # the quoted post was streamed in after the last cache write), record the
+    # ID so the timeline loader can resolve it from the API in the background.
+    if row.get('quote_id') and quote is None:
+        status._unresolved_quote_id = str(row['quote_id'])
+
     return status
 
 
