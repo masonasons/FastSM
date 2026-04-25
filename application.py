@@ -1836,6 +1836,13 @@ class Application:
 				# streaming thread teardown). If we proceed before FastSM is
 				# fully gone, xcopy fails to overwrite the locked exe and the
 				# new launch trips the SingleInstanceChecker.
+				#
+				# Some shutdowns hang (non-daemon native threads in atproto
+				# websocket teardown, COM finalizers from screen-reader IPC,
+				# wedged sound subsystem). After a short grace period we
+				# taskkill /F so the SingleInstanceChecker mutex is released
+				# rather than letting the wait loop time out and start a
+				# second FastSM into the lock the first never gave up.
 				parent_pid = os.getpid()
 				batch_content = f'''@echo off
 echo Waiting for FastSM to close...
@@ -1844,9 +1851,13 @@ set /a tries=0
 tasklist /FI "PID eq {parent_pid}" /NH 2>nul | find "{parent_pid}" >nul
 if errorlevel 1 goto closed
 set /a tries+=1
-if %tries% GEQ 60 goto closed
+if %tries% GEQ 10 goto forcekill
 timeout /t 1 /nobreak >nul
 goto waitloop
+:forcekill
+echo FastSM did not exit cleanly, terminating...
+taskkill /F /PID {parent_pid} /T >nul 2>&1
+timeout /t 2 /nobreak >nul
 :closed
 
 echo Extracting update...
@@ -1874,6 +1885,16 @@ del "%~f0"
 				os.startfile(batch_path)
 				from GUI import main
 				wx.CallAfter(main.window.OnClose)
+				# Belt-and-suspenders: OnClose ends in sys.exit(), but if a
+				# rogue non-daemon thread (atproto websocket, sound backend,
+				# COM finalizer) keeps the process alive, the batch's wait
+				# loop hangs. Force-terminate after a grace window so cache
+				# writes have time to flush but a stuck shutdown doesn't
+				# wedge the update.
+				def _force_quit_after(delay):
+					time.sleep(delay)
+					os._exit(0)
+				threading.Thread(target=_force_quit_after, args=(8,), daemon=True).start()
 
 			except Exception as e:
 				wx.CallAfter(close_progress_dialog)
