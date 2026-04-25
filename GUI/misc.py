@@ -570,6 +570,34 @@ def user_search(account, q):
 		account.app.handle_error(error, "User search")
 
 
+def hashtag_search(account, q):
+	"""Search for hashtags and open a results dialog."""
+	# Mastodon-only API. Bluesky doesn't expose hashtag follow/discovery.
+	platform_type = getattr(account.prefs, 'platform_type', 'mastodon')
+	if platform_type != 'mastodon':
+		speak.speak("Hashtag search is only available on Mastodon")
+		return
+	try:
+		if hasattr(account, '_platform') and account._platform and hasattr(account._platform, 'search_hashtags'):
+			tags = account._platform.search_hashtags(q, limit=40)
+		else:
+			tags = []
+	except Exception as error:
+		account.app.handle_error(error, "Hashtag search")
+		return
+	if not tags:
+		account.app.alert("No hashtags found", "Hashtag search")
+		return
+	from . import hashtag_dialog
+	d = hashtag_dialog.HashtagSearchResultsDialog(account, tags, "Hashtag search for " + q)
+	d.Show()
+	try:
+		d.Raise()
+		d.RequestUserAttention()
+	except Exception:
+		pass
+
+
 def list_timeline(account, n, q, focus=True):
 	# Check if list already open
 	for item in account.prefs.list_timelines:

@@ -5,6 +5,7 @@ from . import misc, theme
 _SEARCH_TYPES = [
 	("Posts", "posts"),
 	("Users", "users"),
+	("Hashtags", "hashtags"),
 ]
 
 
@@ -60,6 +61,8 @@ class SearchGui(wx.Dialog):
 		self.Destroy()
 		if key == "users":
 			wx.CallAfter(misc.user_search, account, query)
+		elif key == "hashtags":
+			wx.CallAfter(misc.hashtag_search, account, query)
 		else:
 			wx.CallAfter(misc.search, account, query)
 

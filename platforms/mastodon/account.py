@@ -1259,6 +1259,28 @@ class MastodonAccount(PlatformAccount):
         except MastodonError:
             return []
 
+    def search_hashtags(self, query: str, limit: int = 40) -> List[dict]:
+        """Search for hashtags. Returns list of dicts with name/url/following."""
+        search_kwargs = {'q': query, 'result_type': 'hashtags', 'resolve': True}
+        try:
+            try:
+                result = self.api.search_v2(limit=limit, **search_kwargs)
+            except TypeError:
+                # Older Mastodon.py builds didn't accept limit/resolve kwargs.
+                search_kwargs.pop('resolve', None)
+                result = self.api.search_v2(**search_kwargs)
+        except MastodonError:
+            return []
+        tags = result.hashtags if hasattr(result, 'hashtags') else result.get('hashtags', [])
+        out = []
+        for tag in tags or []:
+            out.append({
+                'name': getattr(tag, 'name', '') or (tag.get('name', '') if isinstance(tag, dict) else ''),
+                'url': getattr(tag, 'url', '') or (tag.get('url', '') if isinstance(tag, dict) else ''),
+                'following': bool(getattr(tag, 'following', False) or (tag.get('following', False) if isinstance(tag, dict) else False)),
+            })
+        return out
+
     def get_hashtag_info(self, hashtag: str) -> Optional[dict]:
         """Get information about a hashtag including whether user follows it.
 
