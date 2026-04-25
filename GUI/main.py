@@ -2151,7 +2151,8 @@ class MainGui(wx.Frame):
 		speak.speak(f"Exported {tl.name}")
 
 	def OnExportAllBuffers(self, event=None):
-		buffers = [(acct, tl) for acct in get_app().accounts for tl in acct.timelines]
+		account = get_app().currentAccount
+		buffers = list(account.timelines) if account else []
 		if not buffers:
 			speak.speak("No buffers to export")
 			return
@@ -2162,15 +2163,10 @@ class MainGui(wx.Frame):
 			if dlg.ShowModal() != wx.ID_OK:
 				return
 			folder = dlg.GetPath()
-		multi_account = len({acct.me.id for acct, _ in buffers}) > 1
 		exported = 0
 		errors = []
-		for acct, tl in buffers:
-			parts = []
-			if multi_account:
-				parts.append(_safe_filename(getattr(acct.me, "acct", "") or "account"))
-			parts.append(_safe_filename(tl.name))
-			path = os.path.join(folder, "__".join(parts) + ".txt")
+		for tl in buffers:
+			path = os.path.join(folder, _safe_filename(tl.name) + ".txt")
 			try:
 				_write_buffer_lines(tl, path)
 				exported += 1
