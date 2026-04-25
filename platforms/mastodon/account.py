@@ -323,6 +323,7 @@ class MastodonAccount(PlatformAccount):
             {'type': 'federated', 'id': 'federated', 'name': 'Federated Timeline', 'description': 'Posts from all known instances'},
             {'type': 'instance', 'id': 'instance', 'name': 'Instance Timeline', 'description': 'Local timeline from another instance'},
             {'type': 'remote_user', 'id': 'remote_user', 'name': 'Remote User Timeline', 'description': 'User timeline from another instance'},
+            {'type': 'followed_hashtags', 'id': 'followed_hashtags', 'name': 'Followed Hashtags', 'description': 'Browse and manage hashtags you follow'},
         ]
 
     # ============ Instance Timeline Methods ============
