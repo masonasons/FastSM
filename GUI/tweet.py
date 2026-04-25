@@ -107,6 +107,11 @@ class TweetGui(wx.Dialog):
 					default_vis = getattr(self.account, 'default_visibility', 'public')
 					vis_map = {'public': 0, 'unlisted': 1, 'private': 2, 'direct': 3}
 					self.visibility.SetSelection(vis_map.get(default_vis, 0))
+				# Mastodon's status_update API doesn't allow visibility changes —
+				# show the original visibility but keep it read-only so screen
+				# readers announce the field as unavailable.
+				if self.type == "edit":
+					self.visibility.Disable()
 				self.main_box.Add(self.visibility, 0, wx.ALL, 10)
 
 			# Content warning / Spoiler text - only show if platform supports it
@@ -178,6 +183,11 @@ class TweetGui(wx.Dialog):
 					lang_index = i
 					break
 			self.language.SetSelection(lang_index)
+			# Mastodon's status_update API silently discards language changes,
+			# so make it read-only when editing rather than letting users think
+			# they can edit it.
+			if self.type == "edit":
+				self.language.Disable()
 			self.main_box.Add(self.language, 0, wx.ALL, 10)
 
 			# Media attachments - only show if platform supports it
@@ -258,6 +268,15 @@ class TweetGui(wx.Dialog):
 		self.main_box.Add(self.close, 0, wx.ALL, 10)
 		self.Chars(None)
 		self.text.Bind(wx.EVT_KEY_DOWN, self.onKeyPress)
+		# Track which text control the user was last in so Autocomplete can
+		# operate on the right field (clicking the button itself steals focus,
+		# so FindFocus() at click time always returns the button).
+		self._last_text_focus = self.text
+		self.text.Bind(wx.EVT_SET_FOCUS, self._track_text_focus)
+		# Only track text2 when it's a writable target — reply/quote use it as
+		# a read-only "original post" view, not somewhere to autocomplete into.
+		if self.type == "message" and hasattr(self, 'text2'):
+			self.text2.Bind(wx.EVT_SET_FOCUS, self._track_text_focus)
 		self.panel.SetSizer(self.main_box)
 		self.panel.Layout()
 
@@ -502,12 +521,15 @@ class TweetGui(wx.Dialog):
 					return
 		event.Skip()
 
+	def _track_text_focus(self, event):
+		self._last_text_focus = event.GetEventObject()
+		event.Skip()
+
 	def Autocomplete(self, event):
-		# Get the text control and current content
-		if self.type == "message":
-			text_ctrl = self.text2
-		else:
-			text_ctrl = self.text
+		# Operate on whichever text control the user was last typing in. In
+		# DM mode that may be the message body or the recipient field; in
+		# every other mode it's just the post body.
+		text_ctrl = getattr(self, '_last_text_focus', None) or self.text
 
 		full_text = text_ctrl.GetValue()
 		cursor_pos = text_ctrl.GetInsertionPoint()
@@ -582,15 +604,13 @@ class TweetGui(wx.Dialog):
 
 	def OnAutocompleteUser(self, event, acct):
 		"""Handle autocomplete user selection."""
-		if self.type == "message":
-			text_ctrl = self.text2
-		else:
-			text_ctrl = self.text
+		text_ctrl = getattr(self, '_last_text_focus', None) or self.text
 
 		full_text = text_ctrl.GetValue()
 
-		# Build replacement: add @ for non-message posts
-		if self.type == "message":
+		# The DM recipient field expects a bare handle; everything else (post
+		# bodies, reply bodies, message bodies) wants a real @mention.
+		if self.type == "message" and text_ctrl is getattr(self, 'text2', None):
 			replacement = acct
 		else:
 			replacement = "@" + acct
