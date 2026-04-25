@@ -385,15 +385,6 @@ class CustomTimelinesDialog(wx.Dialog):
         tl = self.timelines[selection]
         tl_type = tl.get('type', 'feed')
 
-        # Followed hashtags isn't a timeline — picking it just launches the
-        # follow management dialog. Kept here so the entry point is
-        # discoverable alongside the other Mastodon-only timeline options.
-        if tl_type == 'followed_hashtags':
-            from . import misc
-            misc.show_followed_hashtags(self.account)
-            self.Destroy()
-            return
-
         # Handle instance timeline specially - prompt for instance URL
         if tl_type == 'instance':
             default_instance, _ = self._get_suggested_values()
