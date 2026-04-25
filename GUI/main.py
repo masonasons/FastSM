@@ -1,4 +1,5 @@
 import os
+import re
 import webbrowser
 import platform
 import pyperclip
@@ -12,6 +13,24 @@ from . import account_options, accounts, chooser, custom_timelines, explore_dial
 import sound
 import timeline
 import threading
+
+
+_FILENAME_UNSAFE_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _safe_filename(name):
+	"""Sanitize a buffer or account name for use as a filesystem filename."""
+	cleaned = _FILENAME_UNSAFE_RE.sub("_", name or "")
+	cleaned = cleaned.strip().rstrip(".")
+	return cleaned or "buffer"
+
+
+def _write_buffer_lines(timeline, path):
+	"""Write a timeline's rendered display strings to a UTF-8 text file."""
+	lines = timeline.get()
+	with open(path, "w", encoding="utf-8") as f:
+		for line in lines:
+			f.write(line + "\n")
 
 
 def safe_raise_window(win):
@@ -223,6 +242,10 @@ class MainGui(wx.Frame):
 		self.m_close_timeline = menu3.Append(-1, "Close timeline\tCtrl+W", "removetimeline")
 		self.m_close_timeline.Enable(False)
 		self.Bind(wx.EVT_MENU, self.OnCloseTimeline, self.m_close_timeline)
+		m_export_buffer = menu3.Append(-1, "Export buffer...", "export_buffer")
+		self.Bind(wx.EVT_MENU, self.OnExportBuffer, m_export_buffer)
+		m_export_all_buffers = menu3.Append(-1, "Export all buffers...", "export_all_buffers")
+		self.Bind(wx.EVT_MENU, self.OnExportAllBuffers, m_export_all_buffers)
 		self.menuBar.Append(menu3, "Time&line")
 		menu4 = wx.Menu()
 		m_play_external = menu4.Append(-1, "Play media" if platform.system() == "Darwin" else "Play media\tCtrl+Return", "play_external")
@@ -2102,6 +2125,64 @@ class MainGui(wx.Frame):
 				get_app().currentAccount.currentIndex=0
 				self.on_list_change(None)
 				del tl
+
+	def OnExportBuffer(self, event=None):
+		account = get_app().currentAccount
+		tl = account.currentTimeline if account else None
+		if tl is None:
+			speak.speak("No buffer to export")
+			return
+		default_name = _safe_filename(tl.name) + ".txt"
+		with wx.FileDialog(
+			self, "Export buffer to text file",
+			defaultFile=default_name,
+			wildcard="Text files (*.txt)|*.txt|All files (*.*)|*.*",
+			style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+		) as dlg:
+			if dlg.ShowModal() != wx.ID_OK:
+				return
+			path = dlg.GetPath()
+		try:
+			_write_buffer_lines(tl, path)
+		except OSError as e:
+			wx.MessageBox(f"Could not write {path}:\n{e}", "Export buffer",
+			              wx.OK | wx.ICON_ERROR)
+			return
+		speak.speak(f"Exported {tl.name}")
+
+	def OnExportAllBuffers(self, event=None):
+		buffers = [(acct, tl) for acct in get_app().accounts for tl in acct.timelines]
+		if not buffers:
+			speak.speak("No buffers to export")
+			return
+		with wx.DirDialog(
+			self, "Choose a folder to export all buffers to",
+			style=wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST,
+		) as dlg:
+			if dlg.ShowModal() != wx.ID_OK:
+				return
+			folder = dlg.GetPath()
+		multi_account = len({acct.me.id for acct, _ in buffers}) > 1
+		exported = 0
+		errors = []
+		for acct, tl in buffers:
+			parts = []
+			if multi_account:
+				parts.append(_safe_filename(getattr(acct.me, "acct", "") or "account"))
+			parts.append(_safe_filename(tl.name))
+			path = os.path.join(folder, "__".join(parts) + ".txt")
+			try:
+				_write_buffer_lines(tl, path)
+				exported += 1
+			except OSError as e:
+				errors.append(f"{tl.name}: {e}")
+		if errors:
+			wx.MessageBox(
+				f"Exported {exported} buffer(s).\nErrors:\n" + "\n".join(errors),
+				"Export all buffers", wx.OK | wx.ICON_WARNING,
+			)
+		else:
+			speak.speak(f"Exported {exported} buffers")
 
 	def OnReply(self, event=None):
 		status = self.get_current_status()
