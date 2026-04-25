@@ -51,11 +51,17 @@ class SearchGui(wx.Dialog):
 		if not query:
 			return
 		key = _SEARCH_TYPES[self.kind.GetSelection()][1]
-		if key == "users":
-			misc.user_search(self.account, query)
-		else:
-			misc.search(self.account, query)
+		account = self.account
+		# Tear down this dialog before dispatching so the result window (which
+		# is also a top-level wx.Dialog with no parent) can claim focus
+		# cleanly. On Wayland/Orca, opening one parent-less dialog while
+		# another one is being destroyed lets focus fall through to the main
+		# window and makes the result dialog look like nothing happened.
 		self.Destroy()
+		if key == "users":
+			wx.CallAfter(misc.user_search, account, query)
+		else:
+			wx.CallAfter(misc.search, account, query)
 
 	def OnClose(self, event):
 		self.Destroy()

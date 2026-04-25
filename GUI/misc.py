@@ -554,6 +554,14 @@ def user_search(account, q):
 	try:
 		u = view.UserViewGui(account, users, "User search for " + q)
 		u.Show()
+		# Explicitly raise & request attention so screen readers (especially
+		# Orca on Wayland) actually announce the dialog instead of leaving
+		# focus on whatever was active before.
+		try:
+			u.Raise()
+			u.RequestUserAttention()
+		except Exception:
+			pass
 		if logger:
 			logger.info("user_search: UserViewGui shown")
 	except Exception as error:
