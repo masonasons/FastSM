@@ -533,13 +533,32 @@ def search(account, q, focus=True):
 
 def user_search(account, q):
 	try:
+		from logging_config import get_logger
+		logger = get_logger('search')
+	except ImportError:
+		logger = None
+	if logger:
+		logger.info("user_search: account=%s, q=%r", getattr(account.me, 'acct', '?'), q)
+	try:
 		users = account.search_users(q, limit=40)
-		if not users:
-			account.app.alert("No users found", "User search")
-			return
+	except Exception as error:
+		if logger:
+			logger.exception("user_search: search_users raised")
+		account.app.handle_error(error, "User search")
+		return
+	if logger:
+		logger.info("user_search: got %d user(s) back", len(users) if users is not None else -1)
+	if not users:
+		account.app.alert("No users found", "User search")
+		return
+	try:
 		u = view.UserViewGui(account, users, "User search for " + q)
 		u.Show()
+		if logger:
+			logger.info("user_search: UserViewGui shown")
 	except Exception as error:
+		if logger:
+			logger.exception("user_search: UserViewGui construction failed")
 		account.app.handle_error(error, "User search")
 
 
