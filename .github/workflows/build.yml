@@ -228,12 +228,35 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Need full history so we can list every commit between the
+          # previous release's targetCommitish and the current HEAD.
+          fetch-depth: 0
 
       - name: Get version
         id: version
         run: |
           version=$(python -c "from version import APP_VERSION; print(APP_VERSION)")
           echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Build changelog since previous release
+        id: changelog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          previous=$(gh release view latest --json targetCommitish --jq '.targetCommitish' 2>/dev/null || echo "")
+          {
+            echo "previous_sha=$previous"
+            echo "changelog<<CHANGELOG_EOF"
+            if [ -n "$previous" ] && git cat-file -e "$previous" 2>/dev/null; then
+              # %h short SHA, %s subject — one line per commit, oldest first.
+              git log --reverse --pretty=format:'- %h %s' "$previous..HEAD" || true
+            else
+              echo "_(previous release commit not found in history; full changelog unavailable)_"
+            fi
+            echo
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Download Windows zip artifact
         uses: actions/download-artifact@v4
@@ -276,10 +299,10 @@ jobs:
             Automated build from commit ${{ github.sha }}
 
             **Version:** ${{ steps.version.outputs.version }}
-            **Built:** ${{ github.event.head_commit.timestamp }}
-            **Commit:** ${{ github.event.head_commit.message }}
+            **Built:** ${{ github.run_id }} (${{ github.event_name }})
 
-            This release is automatically updated on every commit to master.
+            ## Changes since previous release
+            ${{ steps.changelog.outputs.changelog }}
 
             ## Downloads
             - **Windows Installer:** FastSMInstaller.exe (Recommended)
