@@ -162,9 +162,9 @@ class timelines_tab(wx.Panel, wx.Dialog):
 		self.main_box.Add(self.timeline_cache_enabled, 0, wx.ALL, 10)
 		self.timeline_cache_enabled.SetValue(get_app().prefs.timeline_cache_enabled)
 
-		cache_limit_label = wx.StaticText(self, -1, "Maximum items to cache per timeline (100-10000):")
+		cache_limit_label = wx.StaticText(self, -1, "Maximum items to cache per timeline (100-20000):")
 		self.main_box.Add(cache_limit_label, 0, wx.LEFT | wx.TOP, 10)
-		self.timeline_cache_limit = wx.SpinCtrl(self, -1, min=100, max=10000, initial=get_app().prefs.timeline_cache_limit, name="Maximum items to cache per timeline")
+		self.timeline_cache_limit = wx.SpinCtrl(self, -1, min=100, max=20000, initial=get_app().prefs.timeline_cache_limit, name="Maximum items to cache per timeline")
 		self.main_box.Add(self.timeline_cache_limit, 0, wx.ALL, 10)
 
 		# Calculate total cache size across all accounts
