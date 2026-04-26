@@ -234,8 +234,11 @@ class Application:
 
 		# Load accounts - first one on main thread, rest in parallel if already configured
 		if self.prefs.accounts > 0:
-			# First account must be on main thread (handles auth dialogs, sets currentAccount)
-			self.add_session()
+			# First account must be on main thread (handles auth dialogs, sets currentAccount).
+			# Pass index 0 explicitly — index=None now means "find a free folder
+			# for a brand-new account" (the dialog path), which would skip past
+			# the existing account0 we actually want to load here.
+			self.add_session(0)
 
 			# Load remaining accounts in parallel if more than one
 			if self.prefs.accounts > 1:
