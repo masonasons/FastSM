@@ -246,6 +246,8 @@ def get_output_devices():
 def init_audio_output(device_index=1):
 	"""Initialize audio output with the specified device. Call from application after prefs load."""
 	global out, vlc_instance
+	import logging
+	log = logging.getLogger('fastsm.sound')
 
 	# Free existing output first
 	if out is not None:
@@ -255,16 +257,23 @@ def init_audio_output(device_index=1):
 			pass
 		out = None
 
+	primary_err = None
 	try:
 		out = o.Output(device=device_index)
+		log.info("BASS output initialized on requested device %d", device_index)
 	except Exception as e:
+		primary_err = e
 		# Fall back to BASS default device (-1) if device selection fails.
 		# On Linux, device=1 is often not a valid device (real devices start at 2),
 		# so the Windows-style "device 1 = default" assumption fails there.
 		try:
 			out = o.Output(device=-1)
-		except:
-			pass
+			log.info("BASS output fell back to default device (-1) after device %d failed: %s",
+			         device_index, e)
+		except Exception as e2:
+			log.error("BASS output init FAILED on both device %d (%s) and default device (%s); "
+			          "no audio will play. Enumerated devices: %s",
+			          device_index, primary_err, e2, get_output_devices())
 
 	# Reset VLC instance so it gets recreated with new settings on next playback
 	if vlc_instance is not None:
@@ -276,6 +285,23 @@ def init_audio_output(device_index=1):
 
 # Initialize with default device (1) for now - will be reinited from application.py with selected device
 init_audio_output(1)
+
+# One-shot diagnostic on Linux: log BASS version + enumerated devices.
+# Helps debug "no sound" reports without needing a special build.
+if sys.platform.startswith('linux'):
+	try:
+		import logging
+		log = logging.getLogger('fastsm.sound')
+		try:
+			from sound_lib.main import BASS_GetVersion
+			ver_int = BASS_GetVersion()
+			ver_str = f"{(ver_int >> 24) & 0xff}.{(ver_int >> 16) & 0xff}.{(ver_int >> 8) & 0xff}.{ver_int & 0xff}"
+		except Exception:
+			ver_str = "<unknown>"
+		log.info("BASS %s; enumerated devices: %s; output handle: %s",
+		         ver_str, get_output_devices(), out)
+	except Exception:
+		pass
 
 def _extract_stream_url(url):
 	"""Use yt-dlp executable to extract direct stream URL from YouTube and similar services."""
@@ -536,8 +562,14 @@ def play(account, filename, pack="", wait=False):
 		else:
 			handle.play()
 			handles.append(handle)
-	except sound_lib.main.BassError:
-		pass
+	except sound_lib.main.BassError as e:
+		# Surface the BASS error code/message so we can tell the difference
+		# between an init failure (no audio at all) and a per-file decode
+		# error. Suppressed loudly was masking real bugs on Linux.
+		import logging
+		logging.getLogger('fastsm.sound').warning(
+			"BASS error playing %s (code=%s): %s",
+			filename, getattr(e, 'code', '?'), e)
 
 def play_url(url, vlc_only=False):
 	global player, player_type, vlc_instance, _play_in_progress
