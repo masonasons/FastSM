@@ -212,7 +212,12 @@ class Application:
 		# Initialize audio output with selected device
 		import sound
 		try:
-			sound.init_audio_output(self.prefs.audio_output_device)
+			# init_audio_output may upgrade away from the legacy Linux default
+			# (device 1 = ALSA "Default") to a sound server. Persist whatever
+			# it actually picked so the settings dropdown matches.
+			actual = sound.init_audio_output(self.prefs.audio_output_device)
+			if isinstance(actual, int) and actual > 0 and actual != self.prefs.audio_output_device:
+				self.prefs.audio_output_device = actual
 		except Exception as e:
 			# Audio init failure shouldn't crash the app
 			print(f"Warning: Audio initialization failed: {e}", file=sys.stderr)

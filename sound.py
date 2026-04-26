@@ -243,8 +243,33 @@ def get_output_devices():
 
 	return devices
 
+_LINUX_PREFERRED_DEVICE_NAMES = (
+	"pipewire sound server",
+	"pulseaudio sound server",
+)
+
+
+def _pick_best_linux_device(devices):
+	"""Return the device index of the first matching preferred sound server, or None.
+
+	BASS's device 1 on Linux is ALSA's 'Default' PCM, which on systems with
+	pipewire-alsa + many cards can route to nothing audible. Pipewire/Pulse
+	server entries are guaranteed-correct routes when present.
+	"""
+	for preferred in _LINUX_PREFERRED_DEVICE_NAMES:
+		for idx, name in devices:
+			if preferred in name.lower():
+				return idx
+	return None
+
+
 def init_audio_output(device_index=1):
-	"""Initialize audio output with the specified device. Call from application after prefs load."""
+	"""Initialize audio output with the specified device.
+
+	Returns the device index actually selected — callers (notably
+	application.py at startup) should write this back to prefs so the audio
+	device dropdown in settings reflects the truth.
+	"""
 	global out, vlc_instance
 	import logging
 	log = logging.getLogger('fastsm.sound')
@@ -256,6 +281,16 @@ def init_audio_output(device_index=1):
 		except:
 			pass
 		out = None
+
+	# Linux: when the caller hands us the legacy default (device 1 = ALSA
+	# 'Default'), try to upgrade to a real sound server first. Existing
+	# users whose saved pref is still 1 also get this — they never chose
+	# the ALSA default deliberately, it was the install-time default.
+	if sys.platform.startswith('linux') and device_index == 1:
+		best = _pick_best_linux_device(get_output_devices())
+		if best is not None and best != device_index:
+			log.info("Linux: auto-upgrading device 1 ('Default') -> %d", best)
+			device_index = best
 
 	primary_err = None
 	try:
@@ -270,6 +305,7 @@ def init_audio_output(device_index=1):
 			out = o.Output(device=-1)
 			log.info("BASS output fell back to default device (-1) after device %d failed: %s",
 			         device_index, e)
+			device_index = -1
 		except Exception as e2:
 			log.error("BASS output init FAILED on both device %d (%s) and default device (%s); "
 			          "no audio will play. Enumerated devices: %s",
@@ -282,6 +318,8 @@ def init_audio_output(device_index=1):
 		except:
 			pass
 		vlc_instance = None
+
+	return device_index
 
 # Initialize with default device (1) for now - will be reinited from application.py with selected device
 init_audio_output(1)
