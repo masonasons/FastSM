@@ -1,10 +1,41 @@
 import application
 import wx
+import re
 import shutil
 import os
 from application import get_app
 from . import main, misc, theme
 import speak
+
+
+_ACCOUNT_FOLDER_RE = re.compile(r'account(\d+)$')
+
+
+def _account_folder_index(account):
+	"""Return the on-disk folder index for an account, or None if unknown."""
+	idx = getattr(account, 'folder_index', None)
+	if idx is not None:
+		return idx
+	m = _ACCOUNT_FOLDER_RE.search(getattr(account, 'confpath', '') or '')
+	return int(m.group(1)) if m else None
+
+
+def _retarget_account(account, new_index):
+	"""Update an in-memory account so future saves go to the renumbered folder.
+
+	confpath, prefs file path, and the platform-side index all need to track the
+	rename — otherwise prefs.save() would write to the old (now non-existent)
+	directory and re-create the leftover folder we just renamed away from.
+	"""
+	account.folder_index = new_index
+	if account.confpath:
+		account.confpath = _ACCOUNT_FOLDER_RE.sub(f'account{new_index}', account.confpath)
+	prefs = getattr(account, 'prefs', None)
+	if prefs is not None and getattr(prefs, '_name', None):
+		prefs._name = _ACCOUNT_FOLDER_RE.sub(f'account{new_index}', prefs._name)
+	platform = getattr(account, '_platform', None)
+	if platform is not None and hasattr(platform, 'index'):
+		platform.index = new_index
 
 class AccountsGui(wx.Dialog):
 	def __init__(self):
@@ -101,7 +132,14 @@ class AccountsGui(wx.Dialog):
 
 		account_to_remove = app.accounts[selection]
 		account_name = account_to_remove.me.acct
-		account_index = selection  # The index in the accounts list matches the folder number
+		# Folder number on disk — may differ from the list selection because
+		# parallel-loaded accounts can land in app.accounts in completion order.
+		# Falling back on selection here would delete the right object in memory
+		# but renumber the wrong folders, leaving leftovers that the next
+		# "Add account" would silently re-adopt.
+		folder_index = _account_folder_index(account_to_remove)
+		if folder_index is None:
+			folder_index = selection
 
 		# Confirm removal
 		dlg = wx.MessageDialog(self,
@@ -139,7 +177,7 @@ class AccountsGui(wx.Dialog):
 		# Renumber remaining account folders to fill the gap
 		# e.g., if we removed account1 and had account0, account1, account2
 		# we need to rename account2 -> account1
-		for i in range(account_index + 1, total_accounts):
+		for i in range(folder_index + 1, total_accounts):
 			old_path = os.path.join(app.confpath, f"account{i}")
 			new_path = os.path.join(app.confpath, f"account{i - 1}")
 			if os.path.exists(old_path):
@@ -147,6 +185,11 @@ class AccountsGui(wx.Dialog):
 					shutil.move(old_path, new_path)
 				except Exception as e:
 					print(f"Warning: Could not rename account folder: {e}")
+			# Update any loaded account pointing at the old folder so its
+			# autosave/atexit doesn't recreate it under the old name.
+			for account in app.accounts:
+				if _account_folder_index(account) == i:
+					_retarget_account(account, i - 1)
 
 		# If we removed the current account, switch to first account
 		if app.currentAccount == account_to_remove:

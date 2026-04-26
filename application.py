@@ -259,6 +259,12 @@ class Application:
 				for i in sequential:
 					self.add_session(i)
 
+			# Parallel-loaded accounts append in completion order, so app.accounts
+			# may be shuffled relative to the on-disk account{N} folders. Sort
+			# back into folder-index order so dialogs that map list selection ↔
+			# account.folder_index work correctly (notably: removal renumbering).
+			self.accounts.sort(key=lambda a: getattr(a, 'folder_index', 0))
+
 		self._initialized = True
 
 		# Check for updates on startup if enabled
@@ -275,7 +281,12 @@ class Application:
 		import mastodon_api as t
 		import wx
 		if index is None:
-			index = len(self.accounts)
+			# Find the lowest folder index that is neither in use by a loaded
+			# account nor leftover on disk. len(self.accounts) is wrong when a
+			# previous removal failed to renumber (or skipped renumber because
+			# the deleted account was last) — that left a gap that this call
+			# would otherwise re-pick up as if it were a new account.
+			index = self._next_free_folder_index()
 		try:
 			self.accounts.append(t.mastodon(self, index))
 		except t.AccountSetupCancelled:
@@ -399,6 +410,17 @@ class Application:
 					self.prefs.accounts -= 1
 				except Exception as e:
 					print(f"Error removing account {index}: {e}")
+
+	def _next_free_folder_index(self):
+		"""Lowest account folder index that is unused both in-memory and on disk."""
+		used = {getattr(a, 'folder_index', -1) for a in self.accounts}
+		i = 0
+		while True:
+			if i not in used:
+				path = os.path.join(self.confpath, f"account{i}")
+				if not os.path.exists(path):
+					return i
+			i += 1
 
 	def _add_session_threaded(self, index):
 		"""Add account session from a background thread."""

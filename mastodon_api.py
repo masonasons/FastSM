@@ -43,6 +43,10 @@ class mastodon(object):
 
 	def __init__(self, app, index):
 		self.app = app
+		# Folder index for the on-disk account{N} directory. Tracked explicitly
+		# so removal/renumbering can find the right account regardless of the
+		# order in which parallel-loaded accounts landed in app.accounts.
+		self.folder_index = index
 		self.ready = False
 		self.timelines = []
 		self.currentTimeline = None
