@@ -171,7 +171,6 @@ player = None  # Media player for URL streams (VLC or sound_lib)
 player_type = None  # 'vlc' or 'soundlib' to track which player is active
 vlc_instance = None  # VLC instance (reused for efficiency)
 _play_in_progress = False  # Flag to prevent multiple concurrent play attempts
-_player_temp_path = None  # Temp file backing the current player, if any
 
 def get_output_devices():
 	"""Get list of available audio output devices.
@@ -505,47 +504,103 @@ def play(account, filename, pack="", wait=False):
 	except sound_lib.main.BassError:
 		pass
 
-def _play_via_download(url):
-	"""Download a remote audio URL to a temp file and play with FileStream.
+# Loopback HTTP→HTTPS relay used as a workaround for BASS builds that lack
+# libssl (notably common on Linux). BASS does HTTP fine; the relay terminates
+# the SSL on Python's side via requests and forwards the bytes (and Range
+# headers, so seeking still works) over plain HTTP to localhost.
+_relay_server = None
+_relay_port = None
+_relay_lock = __import__('threading').Lock()
+_relay_targets = {}  # token -> origin URL
 
-	Used when BASS itself can't reach the URL (e.g. Linux BASS without libssl
-	returning BASS_ERROR_SSL on every HTTPS Mastodon attachment).
-	"""
-	import tempfile
-	import requests
-	from urllib.parse import urlparse, unquote
-	global player, player_type, _player_temp_path
 
-	suffix = ''
-	try:
-		path = unquote(urlparse(url).path)
-		if '.' in os.path.basename(path):
-			suffix = '.' + os.path.basename(path).rsplit('.', 1)[-1]
-	except Exception:
-		pass
+def _start_relay():
+	"""Start the loopback HTTP relay if it's not already running. Returns the port."""
+	global _relay_server, _relay_port
+	if _relay_server is not None:
+		return _relay_port
+	with _relay_lock:
+		if _relay_server is not None:
+			return _relay_port
+		import http.server
+		import socketserver
+		import threading
+		import requests
 
-	tmp = tempfile.NamedTemporaryFile(prefix='fastsm_audio_', suffix=suffix, delete=False)
-	try:
-		with requests.get(url, stream=True, timeout=30) as r:
-			r.raise_for_status()
-			for chunk in r.iter_content(chunk_size=64 * 1024):
-				if chunk:
-					tmp.write(chunk)
-	finally:
-		tmp.close()
+		class _Handler(http.server.BaseHTTPRequestHandler):
+			def _resolve(self):
+				# Path is /<token>; ignore query string.
+				token = self.path.lstrip('/').split('?', 1)[0]
+				return _relay_targets.get(token)
 
-	try:
-		player = stream.FileStream(file=tmp.name)
-		player.volume = getattr(get_app().prefs, 'media_volume', 1.0)
-		player.play()
-		player_type = 'soundlib'
-		_player_temp_path = tmp.name
-	except Exception:
-		try:
-			os.remove(tmp.name)
-		except OSError:
-			pass
-		raise
+			def _proxy(self, method):
+				url = self._resolve()
+				if not url:
+					self.send_response(404)
+					self.end_headers()
+					return
+				headers = {'User-Agent': 'FastSM-relay/1.0'}
+				rng = self.headers.get('Range')
+				if rng:
+					headers['Range'] = rng
+				try:
+					if method == 'HEAD':
+						r = requests.head(url, headers=headers, timeout=15, allow_redirects=True)
+						self.send_response(r.status_code)
+						for h in ('Content-Type', 'Content-Length', 'Accept-Ranges', 'Content-Range'):
+							v = r.headers.get(h)
+							if v:
+								self.send_header(h, v)
+						self.end_headers()
+						return
+					with requests.get(url, headers=headers, stream=True, timeout=30) as r:
+						self.send_response(r.status_code)
+						for h in ('Content-Type', 'Content-Length', 'Accept-Ranges', 'Content-Range'):
+							v = r.headers.get(h)
+							if v:
+								self.send_header(h, v)
+						self.end_headers()
+						for chunk in r.iter_content(chunk_size=64 * 1024):
+							if not chunk:
+								continue
+							try:
+								self.wfile.write(chunk)
+							except (BrokenPipeError, ConnectionResetError, OSError):
+								# BASS closed the socket — normal on stop/seek.
+								return
+				except Exception:
+					try:
+						self.send_response(502)
+						self.end_headers()
+					except Exception:
+						pass
+
+			def do_GET(self):
+				self._proxy('GET')
+
+			def do_HEAD(self):
+				self._proxy('HEAD')
+
+			def log_message(self, fmt, *args):
+				pass
+
+		class _Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
+			daemon_threads = True
+			allow_reuse_address = True
+
+		_relay_server = _Server(('127.0.0.1', 0), _Handler)
+		_relay_port = _relay_server.server_address[1]
+		threading.Thread(target=_relay_server.serve_forever, daemon=True).start()
+		return _relay_port
+
+
+def _relay_url(origin_url):
+	"""Register an HTTPS URL with the relay and return a plain-HTTP loopback URL."""
+	import secrets
+	port = _start_relay()
+	token = secrets.token_urlsafe(12)
+	_relay_targets[token] = origin_url
+	return f'http://127.0.0.1:{port}/{token}'
 
 
 def play_url(url, vlc_only=False):
@@ -630,12 +685,18 @@ def play_url(url, vlc_only=False):
 		except sound_lib.main.BassError as e:
 			# Linux BASS builds frequently lack libssl support — URLStream of
 			# any HTTPS URL (every Mastodon attachment) returns BASS_ERROR_SSL
-			# (10). Pre-download with requests (which does have SSL) and play
-			# the local file, sidestepping BASS's HTTP/SSL stack entirely.
+			# (10). Run the request through a local HTTP→HTTPS relay so BASS
+			# only ever sees plain HTTP on loopback; the relay forwards Range
+			# headers so seeking still works and playback is true streaming
+			# (no pre-download).
 			code = getattr(e, 'code', None)
-			if code == 10 and stream_url.lower().startswith(('http://', 'https://')):
+			if code == 10 and stream_url.lower().startswith('https://'):
 				try:
-					_play_via_download(stream_url)
+					relay = _relay_url(stream_url)
+					player = stream.URLStream(url=relay)
+					player.volume = getattr(get_app().prefs, 'media_volume', 1.0)
+					player.play()
+					player_type = 'soundlib'
 					_open_after_play()
 				except Exception as e2:
 					speak.speak(f"Could not play audio: {e2}")
@@ -648,7 +709,7 @@ def play_url(url, vlc_only=False):
 
 def stop():
 	"""Stop media player (URL streams)."""
-	global player, player_type, _player_temp_path
+	global player, player_type
 	if player is not None:
 		try:
 			player.stop()
@@ -667,12 +728,6 @@ def stop():
 			audio_player.close_audio_player()
 		except:
 			pass
-	if _player_temp_path:
-		try:
-			os.remove(_player_temp_path)
-		except OSError:
-			pass
-		_player_temp_path = None
 
 def stop_all():
 	"""Stop all sounds including UI sounds and media player."""
