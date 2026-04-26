@@ -134,7 +134,13 @@ class general(wx.Panel, wx.Dialog):
 		self.footer.AppendText(account.prefs.footer)
 		# Get max chars from account, default to 500
 		max_chars = getattr(account, 'max_chars', 500)
-		self.footer.SetMaxLength(max_chars)
+		# wxGTK asserts inside SetMaxLength when called on a multiline control
+		# (it routes through GetEditable, which is single-line-only on GTK), so
+		# the dialog refused to open at all on Linux. The footer is only
+		# concatenated into outgoing posts where the post composer enforces the
+		# real limit, so dropping the hard cap on the entry control is fine.
+		if not self.footer.IsMultiLine():
+			self.footer.SetMaxLength(max_chars)
 
 		# Mastodon-specific options
 		platform_type = getattr(account.prefs, 'platform_type', 'mastodon')

@@ -171,6 +171,7 @@ player = None  # Media player for URL streams (VLC or sound_lib)
 player_type = None  # 'vlc' or 'soundlib' to track which player is active
 vlc_instance = None  # VLC instance (reused for efficiency)
 _play_in_progress = False  # Flag to prevent multiple concurrent play attempts
+_player_temp_path = None  # Temp file backing the current player, if any
 
 def get_output_devices():
 	"""Get list of available audio output devices.
@@ -504,6 +505,49 @@ def play(account, filename, pack="", wait=False):
 	except sound_lib.main.BassError:
 		pass
 
+def _play_via_download(url):
+	"""Download a remote audio URL to a temp file and play with FileStream.
+
+	Used when BASS itself can't reach the URL (e.g. Linux BASS without libssl
+	returning BASS_ERROR_SSL on every HTTPS Mastodon attachment).
+	"""
+	import tempfile
+	import requests
+	from urllib.parse import urlparse, unquote
+	global player, player_type, _player_temp_path
+
+	suffix = ''
+	try:
+		path = unquote(urlparse(url).path)
+		if '.' in os.path.basename(path):
+			suffix = '.' + os.path.basename(path).rsplit('.', 1)[-1]
+	except Exception:
+		pass
+
+	tmp = tempfile.NamedTemporaryFile(prefix='fastsm_audio_', suffix=suffix, delete=False)
+	try:
+		with requests.get(url, stream=True, timeout=30) as r:
+			r.raise_for_status()
+			for chunk in r.iter_content(chunk_size=64 * 1024):
+				if chunk:
+					tmp.write(chunk)
+	finally:
+		tmp.close()
+
+	try:
+		player = stream.FileStream(file=tmp.name)
+		player.volume = getattr(get_app().prefs, 'media_volume', 1.0)
+		player.play()
+		player_type = 'soundlib'
+		_player_temp_path = tmp.name
+	except Exception:
+		try:
+			os.remove(tmp.name)
+		except OSError:
+			pass
+		raise
+
+
 def play_url(url, vlc_only=False):
 	global player, player_type, vlc_instance, _play_in_progress
 	from application import get_app
@@ -568,19 +612,35 @@ def play_url(url, vlc_only=False):
 		# Extract actual stream URL for YouTube and similar services
 		stream_url = _extract_stream_url(url)
 
-		try:
-			player = stream.URLStream(url=stream_url)
-			# Apply media volume from preferences
-			player.volume = getattr(get_app().prefs, 'media_volume', 1.0)
-			player.play()
-			player_type = 'soundlib'
-			# Auto-open audio player if setting enabled
+		def _open_after_play():
 			if getattr(get_app().prefs, 'auto_open_audio_player', False):
 				try:
 					from GUI import audio_player
 					audio_player.auto_show_audio_player()
 				except:
 					pass
+
+		try:
+			player = stream.URLStream(url=stream_url)
+			# Apply media volume from preferences
+			player.volume = getattr(get_app().prefs, 'media_volume', 1.0)
+			player.play()
+			player_type = 'soundlib'
+			_open_after_play()
+		except sound_lib.main.BassError as e:
+			# Linux BASS builds frequently lack libssl support — URLStream of
+			# any HTTPS URL (every Mastodon attachment) returns BASS_ERROR_SSL
+			# (10). Pre-download with requests (which does have SSL) and play
+			# the local file, sidestepping BASS's HTTP/SSL stack entirely.
+			code = getattr(e, 'code', None)
+			if code == 10 and stream_url.lower().startswith(('http://', 'https://')):
+				try:
+					_play_via_download(stream_url)
+					_open_after_play()
+				except Exception as e2:
+					speak.speak(f"Could not play audio: {e2}")
+			else:
+				speak.speak(f"Could not play audio: {e}")
 		except Exception as e:
 			speak.speak(f"Could not play audio: {e}")
 	finally:
@@ -588,7 +648,7 @@ def play_url(url, vlc_only=False):
 
 def stop():
 	"""Stop media player (URL streams)."""
-	global player, player_type
+	global player, player_type, _player_temp_path
 	if player is not None:
 		try:
 			player.stop()
@@ -607,6 +667,12 @@ def stop():
 			audio_player.close_audio_player()
 		except:
 			pass
+	if _player_temp_path:
+		try:
+			os.remove(_player_temp_path)
+		except OSError:
+			pass
+		_player_temp_path = None
 
 def stop_all():
 	"""Stop all sounds including UI sounds and media player."""
