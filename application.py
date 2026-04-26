@@ -1639,6 +1639,9 @@ class Application:
 						elif platform.system() == "Darwin" and asset_name.endswith('.dmg'):
 							threading.Thread(target=self.download_update, args=[asset['browser_download_url'], False], daemon=True).start()
 							return
+						elif platform.system() == "Linux" and 'linux' in asset_name and asset_name.endswith('.tar.gz'):
+							threading.Thread(target=self.download_update, args=[asset['browser_download_url'], False], daemon=True).start()
+							return
 
 					# Fallback: if preferred format not found, try the other one
 					for asset in latest['assets']:
@@ -1926,6 +1929,9 @@ del "%~f0"
 				speak.speak(f"Update failed: {e}")
 				self.alert_from_thread(f"Failed to download or apply update: {e}", "Update Error")
 
+		elif platform.system() == "Linux":
+			self._download_linux_update(url, temp_dir)
+
 		else:
 			# macOS - download to Downloads folder with progress
 			progress_data = {'dialog': None, 'cancelled': False}
@@ -1985,6 +1991,195 @@ del "%~f0"
 				wx.CallAfter(close_progress_dialog)
 				speak.speak(f"Download failed: {e}")
 				self.alert_from_thread(f"Failed to download update: {e}", "Download Error")
+
+	def _download_linux_update(self, url, temp_dir):
+		"""Download the Linux portable tarball, stage it, and hand off to a
+		shell script that swaps the install dir in place once we exit."""
+		import speak
+		import shutil
+		import stat as _stat
+
+		# When frozen, sys.executable is .../FastSM/FastSM. The install dir
+		# we replace is the directory that contains the launcher binary plus
+		# the bundled _internal/, sounds/, etc.
+		if getattr(sys, 'frozen', False):
+			app_dir = os.path.dirname(sys.executable)
+		else:
+			# Source checkout — the in-place updater doesn't apply (developer
+			# would just git pull). Bail out with a friendly message.
+			self.alert_from_thread(
+				"Auto-update only works on the bundled Linux build. "
+				"Pull the latest source manually instead.",
+				"Update Not Supported")
+			return
+
+		exe_name = os.path.basename(sys.executable)
+		tarball_path = os.path.join(temp_dir, "FastSM-Linux-update.tar.gz")
+		extract_dir = os.path.join(temp_dir, "FastSM-Linux-update-extract")
+
+		progress_data = {'dialog': None, 'cancelled': False}
+
+		def create_progress_dialog():
+			progress_data['dialog'] = wx.ProgressDialog(
+				"Downloading Update",
+				"Downloading FastSM update...",
+				maximum=100,
+				style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE | wx.PD_CAN_ABORT | wx.PD_ELAPSED_TIME | wx.PD_REMAINING_TIME
+			)
+			progress_data['dialog'].Raise()
+
+		def update_progress(downloaded, total):
+			if progress_data['dialog'] and total > 0:
+				percent = int((downloaded / total) * 100)
+				mb_downloaded = downloaded / (1024 * 1024)
+				mb_total = total / (1024 * 1024)
+				def do_update():
+					if progress_data['dialog']:
+						cont, _ = progress_data['dialog'].Update(
+							percent,
+							f"Downloading: {mb_downloaded:.1f} MB / {mb_total:.1f} MB"
+						)
+						if not cont:
+							progress_data['cancelled'] = True
+				wx.CallAfter(do_update)
+
+		def close_progress_dialog():
+			if progress_data['dialog']:
+				progress_data['dialog'].Destroy()
+				progress_data['dialog'] = None
+
+		event = threading.Event()
+		def create_and_signal():
+			create_progress_dialog()
+			event.set()
+		wx.CallAfter(create_and_signal)
+		event.wait()
+
+		try:
+			for path in (tarball_path, extract_dir):
+				if os.path.isdir(path):
+					shutil.rmtree(path)
+				elif os.path.exists(path):
+					os.remove(path)
+
+			self.download_file_to(url, tarball_path, progress_callback=update_progress)
+
+			if progress_data['cancelled']:
+				wx.CallAfter(close_progress_dialog)
+				speak.speak("Download cancelled.")
+				if os.path.exists(tarball_path):
+					os.remove(tarball_path)
+				return
+
+			wx.CallAfter(close_progress_dialog)
+			speak.speak("Download complete. Preparing update...")
+
+			# Confirm we can write to the install dir before staging the
+			# script. If we're in /opt or /usr, the swap will fail and we'd
+			# rather warn the user than leave the install in a half state.
+			if not os.access(app_dir, os.W_OK):
+				self.alert_from_thread(
+					f"FastSM is installed to {app_dir} which is not writable "
+					"by your user. Auto-update cannot continue. Re-launch as "
+					"the owner of that directory or update manually.",
+					"Update Error")
+				return
+
+			parent_pid = os.getpid()
+			script_path = os.path.join(temp_dir, "fastsm-updater.sh")
+			# Single-quoted shell strings can't contain ', so escape any
+			# embedded apostrophes in paths the way bash expects.
+			def shq(s):
+				return "'" + s.replace("'", "'\\''") + "'"
+
+			script = f"""#!/bin/bash
+set -u
+PARENT_PID={parent_pid}
+TARBALL={shq(tarball_path)}
+EXTRACT={shq(extract_dir)}
+APP_DIR={shq(app_dir)}
+LAUNCHER={shq(os.path.join(app_dir, exe_name))}
+
+echo "Waiting for FastSM (pid $PARENT_PID) to exit..."
+tries=0
+while kill -0 "$PARENT_PID" 2>/dev/null; do
+	tries=$((tries + 1))
+	if [ "$tries" -ge 10 ]; then
+		echo "FastSM did not exit cleanly, terminating..."
+		kill -KILL "$PARENT_PID" 2>/dev/null || true
+		sleep 2
+		break
+	fi
+	sleep 1
+done
+
+echo "Extracting update..."
+mkdir -p "$EXTRACT"
+if ! tar -xzf "$TARBALL" -C "$EXTRACT"; then
+	echo "Extract failed; aborting." >&2
+	exit 1
+fi
+
+# The tarball wraps the install in a top-level FastSM/ directory.
+SRC="$EXTRACT/FastSM"
+if [ ! -d "$SRC" ]; then
+	# Some builds may not wrap; fall back to the extract root.
+	SRC="$EXTRACT"
+fi
+
+echo "Installing update..."
+# cp -af preserves permissions and the executable bit on the launcher
+# and shipped binaries; the trailing /. copies contents, not the
+# directory itself, into the existing install.
+if ! cp -af "$SRC"/. "$APP_DIR"/; then
+	echo "Copy failed; install may be in a partial state." >&2
+	exit 1
+fi
+
+echo "Cleaning up..."
+rm -rf "$EXTRACT"
+rm -f "$TARBALL"
+
+echo "Starting FastSM..."
+# setsid + nohup detaches the new launcher from this script's session so
+# it survives our exit cleanly.
+setsid nohup "$LAUNCHER" >/dev/null 2>&1 < /dev/null &
+
+rm -f "$0"
+"""
+			with open(script_path, 'w') as f:
+				f.write(script)
+			os.chmod(script_path, os.stat(script_path).st_mode | _stat.S_IXUSR | _stat.S_IXGRP | _stat.S_IXOTH)
+
+			speak.speak("Update ready. FastSM will now restart.")
+
+			# Detach via setsid + DEVNULL so the script outlives this
+			# process. Don't wait() — the script's whole job is to wait
+			# for *us* to exit.
+			import subprocess
+			subprocess.Popen(
+				[script_path],
+				stdin=subprocess.DEVNULL,
+				stdout=subprocess.DEVNULL,
+				stderr=subprocess.DEVNULL,
+				start_new_session=True,
+			)
+
+			from GUI import main
+			wx.CallAfter(main.window.OnClose)
+
+			# Same belt-and-suspenders as Windows: if a non-daemon thread
+			# wedges OnClose, force-quit so the script's wait loop falls
+			# through the kill-9 branch instead of hanging indefinitely.
+			def _force_quit_after(delay):
+				time.sleep(delay)
+				os._exit(0)
+			threading.Thread(target=_force_quit_after, args=(8,), daemon=True).start()
+
+		except Exception as e:
+			wx.CallAfter(close_progress_dialog)
+			speak.speak(f"Update failed: {e}")
+			self.alert_from_thread(f"Failed to download or apply update: {e}", "Update Error")
 
 	def _download_installer_update(self, url, temp_dir):
 		"""Download and run installer for installed versions of the app."""
