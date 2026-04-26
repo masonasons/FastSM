@@ -2,8 +2,10 @@ name: Build
 
 on:
   push:
-    branches: [master]
-  workflow_dispatch:  # Allow manual trigger
+    branches: [master]      # validation — runs the build jobs but NOT release
+  schedule:
+    - cron: '0 6 * * *'     # daily at 06:00 UTC: build + publish release
+  workflow_dispatch:        # manual trigger: build + publish release
 
 permissions:
   contents: write
@@ -177,6 +179,9 @@ jobs:
           path: ${{ steps.artifact.outputs.path }}
 
   release:
+    # Skip on push so we don't churn the latest release on every commit;
+    # the daily schedule and manual workflow_dispatch are what publish.
+    if: github.event_name != 'push'
     needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
 
