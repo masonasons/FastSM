@@ -11,7 +11,41 @@ permissions:
   contents: write
 
 jobs:
+  gate:
+    # Decide whether the rest of the workflow should run.
+    # - push / workflow_dispatch: always proceed.
+    # - schedule (daily cron): only proceed if master HEAD differs from the
+    #   commit recorded on the existing 'latest' release; otherwise the
+    #   daily run would just rebuild the same source and republish identical
+    #   artifacts.
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.decide.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Reason: event is ${{ github.event_name }}, not schedule."
+            exit 0
+          fi
+          current=$(git rev-parse HEAD)
+          last=$(gh release view latest --json targetCommitish --jq '.targetCommitish' 2>/dev/null || echo "")
+          if [ -z "$last" ] || [ "$current" != "$last" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "New commits since last release ($last -> $current); building."
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "No new commits since last release ($current); skipping daily build."
+          fi
+
   build-windows:
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     runs-on: windows-latest
 
     steps:
@@ -76,6 +110,8 @@ jobs:
           path: ${{ steps.artifact.outputs.installer_path }}
 
   build-macos:
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     runs-on: macos-latest
 
     steps:
@@ -110,6 +146,8 @@ jobs:
           path: ${{ steps.artifact.outputs.path }}
 
   build-linux:
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-22.04
 
     steps:
@@ -179,10 +217,12 @@ jobs:
           path: ${{ steps.artifact.outputs.path }}
 
   release:
-    # Skip on push so we don't churn the latest release on every commit;
-    # the daily schedule and manual workflow_dispatch are what publish.
-    if: github.event_name != 'push'
-    needs: [build-windows, build-macos, build-linux]
+    # Skip on push so we don't churn the latest release on every commit.
+    # The gate job already short-circuits the cron when there are no new
+    # commits since the last release, so reaching this job at all means
+    # the artifacts are worth publishing.
+    if: github.event_name != 'push' && needs.gate.outputs.should_run == 'true'
+    needs: [gate, build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
 
     steps:
