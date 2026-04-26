@@ -3,6 +3,11 @@ name: Build
 on:
   push:
     branches: [master]      # validation — runs the build jobs but NOT release
+    paths-ignore:           # skip the validation build for changes that can't break it
+      - '*.md'              # top-level markdown only; docs/ is bundled into the build
+      - '.gitignore'
+      - '.gitattributes'
+      - 'LICENSE'
   schedule:
     - cron: '0 6 * * *'     # daily at 06:00 UTC: build + publish release
   workflow_dispatch:        # manual trigger: build + publish release
