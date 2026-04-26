@@ -417,6 +417,10 @@ _LINUX_SYSTEM_LIB_PATTERNS = (
     # systemds expose — bundling .so.0 statically (rather than letting the
     # dynamic loader resolve to the system copy) breaks on those distros.
     "libsystemd.so*",
+    # libreadline from the CI runner is GPL-licensed and links against a
+    # specific libtinfo/libncurses ABI that differs across distros. Let the
+    # system copy resolve so we don't ship a mismatched build.
+    "libreadline.so*",
     # prismatoid's auditwheel-hashed copies of the same libs, which PyInstaller
     # also propagates up to _internal/. Without removing these, libprism's RPATH
     # finds its own libgio and GLib ends up registered twice. Safe to drop once
