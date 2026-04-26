@@ -143,7 +143,24 @@ jobs:
           # Needed by build.py's post-build libprism rewrite.
           pip install patchelf
 
+      - name: Stage libssl 1.1 for bundling
+        # BASS does dlopen("libssl.so.1.1") for HTTPS streaming; Ubuntu 22.04+
+        # ships only libssl.so.3, so without bundling 1.1 every HTTPS audio
+        # attachment fails with BASS_ERROR_SSL. Pull the .so files from
+        # Ubuntu 20.04's openssl deb so we always have a 1.1 to ship next
+        # to BASS regardless of the host distro.
+        run: |
+          mkdir -p libssl11
+          cd libssl11
+          wget -q http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb
+          dpkg-deb -x libssl1.1_*.deb extracted
+          cp extracted/usr/lib/x86_64-linux-gnu/libssl.so.1.1 ../libssl.so.1.1
+          cp extracted/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 ../libcrypto.so.1.1
+          ls -la ../libssl.so.1.1 ../libcrypto.so.1.1
+
       - name: Build executable
+        env:
+          FASTSM_BUNDLE_LIBSSL_DIR: ${{ github.workspace }}
         run: python build.py
 
       - name: Find build artifact

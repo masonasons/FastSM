@@ -7,14 +7,34 @@ from sound_lib import output as o
 import speak
 import re
 
-# Preload libssl into the process with global symbol visibility so BASS can
-# resolve OpenSSL symbols via dlsym(RTLD_DEFAULT, ...) for HTTPS streaming.
-# Without this, Linux distros that ship only libssl.so.3 (Ubuntu 22.04+) hit
-# BASS_ERROR_SSL (code 10) on every HTTPS URL because BASS's bundled dlopen
-# looks for libssl.so.1.1 by name. Python's _ssl module already loads libssl
-# but without RTLD_GLOBAL, so its symbols aren't visible to other libraries.
+# Preload libssl so BASS's HTTPS support works. BASS does a hard
+# dlopen("libssl.so.1.1") for HTTPS streaming, which fails outright on
+# distros that ship only libssl.so.3 (Ubuntu 22.04+) and gives every
+# Mastodon audio attachment BASS_ERROR_SSL (10).
+#
+# build.py bundles libssl.so.1.1 + libcrypto.so.1.1 next to BASS for the
+# Linux build. Loading those with explicit paths registers them in the
+# process under their real DT_SONAME ("libssl.so.1.1"), so BASS's later
+# dlopen by soname returns a handle to the already-resolved object.
+# Outside the frozen bundle (source checkout) we fall through to the
+# system libs and hope OpenSSL 1.1 is installed.
 if sys.platform.startswith('linux'):
-	for _ssl_soname in ('libssl.so.3', 'libssl.so.1.1', 'libssl.so.1.0.0'):
+	_libssl_search = []
+	if getattr(sys, 'frozen', False):
+		_internal = os.path.join(os.path.dirname(sys.executable), '_internal')
+		_libssl_search = [
+			os.path.join(_internal, 'libcrypto.so.1.1'),
+			os.path.join(_internal, 'libssl.so.1.1'),
+		]
+	for _path in _libssl_search:
+		if os.path.exists(_path):
+			try:
+				ctypes.CDLL(_path, mode=ctypes.RTLD_GLOBAL)
+			except OSError:
+				pass
+	# System fallback (also covers source checkouts and gives BASS a chance
+	# to resolve via dlsym if it ever supports that path).
+	for _ssl_soname in ('libssl.so.1.1', 'libssl.so.3', 'libssl.so.1.0.0'):
 		try:
 			ctypes.CDLL(_ssl_soname, mode=ctypes.RTLD_GLOBAL)
 			break

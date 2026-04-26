@@ -383,6 +383,7 @@ def build_linux(script_dir: Path, output_dir: Path) -> tuple:
 
     _patch_prism_libgio(app_dir / "_internal")
     _strip_bundled_system_libs(app_dir / "_internal")
+    _bundle_libssl11(app_dir / "_internal", script_dir)
 
     tar_path = create_linux_tarball(output_dir, app_dir)
     return True, tar_path
@@ -471,6 +472,34 @@ def _patch_prism_libgio(internal_dir: Path):
                 check=True,
             )
             print(f"Patched libprism.so: NEEDED {entry} -> libgio-2.0.so.0")
+            return
+
+
+_LIBSSL11_NAMES = ("libssl.so.1.1", "libcrypto.so.1.1")
+
+
+def _bundle_libssl11(internal_dir: Path, script_dir: Path):
+    """Copy libssl.so.1.1 + libcrypto.so.1.1 into the bundle so BASS's
+    dlopen("libssl.so.1.1") works on distros that ship only OpenSSL 3.
+
+    CI stages the .so files in the workspace root (or in
+    $FASTSM_BUNDLE_LIBSSL_DIR if set). Once they sit alongside the BASS
+    library at runtime, sound.py loads them with ctypes and BASS's later
+    dlopen by soname returns a handle to the already-resolved object.
+    """
+    src_dir = os.environ.get("FASTSM_BUNDLE_LIBSSL_DIR")
+    candidates = [Path(src_dir)] if src_dir else []
+    candidates.append(script_dir)
+    for soname in _LIBSSL11_NAMES:
+        for base in candidates:
+            src = base / soname
+            if src.exists():
+                dst = internal_dir / soname
+                shutil.copy2(src, dst)
+                print(f"Bundled OpenSSL 1.1 lib: {soname}")
+                break
+        else:
+            print(f"Warning: {soname} not found in {candidates}; HTTPS audio may fail on hosts without OpenSSL 1.1")
             return
 
 
