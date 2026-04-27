@@ -1,4 +1,9 @@
-"""Speech output via prism.
+"""Speech output via prism, with an accessible_output2 fallback for users who
+hit prism-specific issues on Windows/macOS.
+
+The legacy backend is gated behind the use_legacy_speech pref (Advanced tab).
+Linux builds don't ship accessible_output2 at all, so the fallback path is
+prism-only there.
 
 On macOS, prefer VoiceOver so FastSM speaks through the active screen reader
 instead of firing up AV Speech as a separate TTS voice. Windows and Linux use
@@ -28,6 +33,39 @@ _prism_backend_id = None
 _last_recheck = 0.0
 _RECHECK_INTERVAL = 5.0
 _lock = threading.Lock()
+
+# Legacy accessible_output2 backend, lazily imported so the dependency is only
+# loaded when the user actually opts into it.
+_a2_speaker = None
+_a2_imported = False
+
+
+def _use_legacy():
+	"""Read the use_legacy_speech pref without making speak.py import-cycle on application."""
+	if sys.platform.startswith('linux'):
+		return False
+	try:
+		from application import get_app
+		app = get_app()
+		if app is None:
+			return False
+		return bool(getattr(app.prefs, 'use_legacy_speech', False))
+	except Exception:
+		return False
+
+
+def _get_a2_speaker():
+	"""Lazily import accessible_output2 and return its auto-picked speaker."""
+	global _a2_speaker, _a2_imported
+	if _a2_imported:
+		return _a2_speaker
+	_a2_imported = True
+	try:
+		from accessible_output2 import outputs
+		_a2_speaker = outputs.auto.Auto()
+	except Exception:
+		_a2_speaker = None
+	return _a2_speaker
 
 
 def _create_backend():
@@ -92,11 +130,31 @@ def _try_speak(text, interrupt):
 		pass
 
 
+def _speak_via_a2(text, interrupt):
+	speaker = _get_a2_speaker()
+	if speaker is None:
+		return False
+	try:
+		speaker.speak(text, interrupt=interrupt)
+		try:
+			speaker.braille(text)
+		except Exception:
+			pass
+		return True
+	except Exception:
+		return False
+
+
 def _do_speak(text, interrupt):
 	# Backend creation is deferred to first speak() because prism's macOS
 	# VoiceOver backend needs an NSWindow to exist when create() is called —
 	# warming up at import time runs before GUI.main has built the wxFrame,
 	# so VOICE_OVER returns BackendNotAvailable and we'd get stuck on AV Speech.
+	if _use_legacy():
+		if _speak_via_a2(text, interrupt):
+			return
+		# accessible_output2 import or speak failed — fall through to prism so
+		# the user still hears something instead of going silent.
 	try:
 		_try_speak(text, interrupt)
 	except prism.PrismError:

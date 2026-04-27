@@ -172,6 +172,11 @@ class Application:
 		self.prefs.dark_mode = self.prefs.get("dark_mode", "off")
 		# Debug logging: write verbose logs to fastsm.log
 		self.prefs.debug_logging = self.prefs.get("debug_logging", False)
+		# Speech backend: prism is the modern default; this flag falls back to
+		# accessible_output2 for users where prism misbehaves (specific TTS
+		# engine quirks, screen reader compat issues, etc.). Linux-only Linux
+		# build doesn't ship a2 so the option is hidden on that platform.
+		self.prefs.use_legacy_speech = self.prefs.get("use_legacy_speech", False)
 		# Confirmation settings for menu/hotkey actions
 		self.prefs.confirm_boost = self.prefs.get("confirm_boost", False)
 		self.prefs.confirm_unboost = self.prefs.get("confirm_unboost", False)

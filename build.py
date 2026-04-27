@@ -103,10 +103,13 @@ def get_hidden_imports():
         # keyboard_handler
         "keyboard_handler",
         "keyboard_handler.wx_handler",
-        # speech backend (replaces accessible_output2)
+        # speech backend (with legacy accessible_output2 fallback)
         "prism",
         "prism.core",
         "prism.lib",
+        "accessible_output2",
+        "accessible_output2.outputs",
+        "accessible_output2.outputs.auto",
         "sound_lib",
         "sound_lib.stream",
         "sound_lib.output",
@@ -247,6 +250,9 @@ def build_windows(script_dir: Path, output_dir: Path) -> tuple:
     cmd.extend(["--collect-all", "prism"])
     cmd.extend(["--collect-all", "sound_lib"])
     cmd.extend(["--collect-all", "keyboard_handler"])
+    # Legacy speech backend (opt-in via Advanced tab). Submodules are platform-
+    # specific (sapi5, nvda, jaws, voiceover) and lazy-loaded by outputs.auto.
+    cmd.extend(["--collect-all", "accessible_output2"])
     # Enchant is imported inside try/except so PyInstaller can't trace it
     cmd.extend(["--collect-submodules", "enchant"])
     cmd.extend(["--collect-data", "enchant"])
@@ -584,9 +590,10 @@ def build_macos(script_dir: Path, output_dir: Path) -> tuple:
     if rthook.exists():
         cmd.extend(["--runtime-hook", str(rthook)])
 
-    # Collect keyboard_handler and the speech backend
+    # Collect keyboard_handler and the speech backends
     cmd.extend(["--collect-all", "keyboard_handler"])
     cmd.extend(["--collect-all", "prism"])
+    cmd.extend(["--collect-all", "accessible_output2"])
 
     # Add main script
     cmd.append(str(main_script))
