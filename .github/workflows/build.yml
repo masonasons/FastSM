@@ -28,6 +28,10 @@ jobs:
       should_run: ${{ steps.decide.outputs.should_run }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Need full history + tags so we can resolve the 'latest' tag to its
+          # commit SHA below.
+          fetch-depth: 0
       - name: Decide
         id: decide
         env:
@@ -39,7 +43,12 @@ jobs:
             exit 0
           fi
           current=$(git rev-parse HEAD)
-          last=$(gh release view latest --json targetCommitish --jq '.targetCommitish' 2>/dev/null || echo "")
+          # Resolve the 'latest' tag to its commit SHA. We can't use the
+          # release's targetCommitish — softprops/action-gh-release defaults
+          # that to the default branch name ('master'), so it never compares
+          # equal to a SHA. git rev-list dereferences lightweight or
+          # annotated tags down to the commit they point at.
+          last=$(git rev-list -n 1 latest 2>/dev/null || echo "")
           if [ -z "$last" ] || [ "$current" != "$last" ]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             echo "New commits since last release ($last -> $current); building."
@@ -249,7 +258,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          previous=$(gh release view latest --json targetCommitish --jq '.targetCommitish' 2>/dev/null || echo "")
+          # Resolve the 'latest' tag (still pointing at the previous release
+          # at this point — we delete and recreate it later in this job) to
+          # its commit SHA. Don't use targetCommitish: softprops defaults
+          # that to the default branch name, which makes the log range
+          # collapse to empty when HEAD is on that branch.
+          previous=$(git rev-list -n 1 latest 2>/dev/null || echo "")
           {
             echo "previous_sha=$previous"
             echo "changelog<<CHANGELOG_EOF"
