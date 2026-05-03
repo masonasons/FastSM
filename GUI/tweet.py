@@ -190,6 +190,30 @@ class TweetGui(wx.Dialog):
 				self.language.Disable()
 			self.main_box.Add(self.language, 0, wx.ALL, 10)
 
+			# Content type — only Pleroma/Akkoma/Glitch-soc honour this; vanilla
+			# Mastodon ignores it. Hidden on platforms that don't have the
+			# concept at all (Bluesky).
+			self.content_type = None
+			if self._platform_supports('content_type'):
+				self.content_type_label = wx.StaticText(self.panel, -1, "Content T&ype")
+				self.main_box.Add(self.content_type_label, 0, wx.LEFT | wx.TOP, 10)
+				# (label, API value) — None means "don't send the field, let
+				# the server use its default", which is what we want for
+				# vanilla Mastodon.
+				self.content_type_choices = [
+					("Default", None),
+					("Plain text", "text/plain"),
+					("Markdown", "text/markdown"),
+					("HTML", "text/html"),
+					("BBCode", "text/bbcode"),
+					("Misskey Markdown", "text/x.misskeymarkdown"),
+				]
+				self.content_type = wx.Choice(self.panel, -1,
+					choices=[name for name, _ in self.content_type_choices],
+					size=(800, 600), name="Content type")
+				self.content_type.SetSelection(0)
+				self.main_box.Add(self.content_type, 0, wx.ALL, 10)
+
 			# Media attachments - only show if platform supports it
 			self.media_list = None
 			if self._platform_supports('media_attachments'):
@@ -307,6 +331,10 @@ class TweetGui(wx.Dialog):
 		# Content warning
 		if self.cw_text is not None:
 			controls.append(self.cw_text)
+
+		# Content type
+		if getattr(self, 'content_type', None) is not None:
+			controls.append(self.content_type)
 
 		# Media section
 		if self.media_list is not None:
@@ -760,6 +788,12 @@ class TweetGui(wx.Dialog):
 				lang_index = self.language.GetSelection()
 				language = self.language_choices[lang_index][1]
 
+			# Get content type selection (None means "let server default")
+			content_type = None
+			if getattr(self, 'content_type', None) is not None:
+				ct_index = self.content_type.GetSelection()
+				content_type = self.content_type_choices[ct_index][1]
+
 			# Upload media attachments if any
 			media_ids = None
 			if self.media_list is not None and self.media_attachments:
@@ -786,11 +820,18 @@ class TweetGui(wx.Dialog):
 							visibility=visibility,
 							spoiler_text=spoiler_text,
 							media_ids=media_ids,
-							language=language
+							language=language,
+							content_type=content_type,
 						)
 					elif self.type == "quote":
 						self.account.app.prefs.quotes_sent += 1
-						status = self.account.quote(self.status, self.text.GetValue(), visibility=visibility, language=language)
+						status = self.account.quote(
+							self.status,
+							self.text.GetValue(),
+							visibility=visibility,
+							language=language,
+							content_type=content_type,
+						)
 					else:
 						self.account.app.prefs.replies_sent += 1
 						# Use original status ID if available (for mentions timeline)
@@ -807,15 +848,18 @@ class TweetGui(wx.Dialog):
 								print(f"Resolved to local ID: {reply_to_id}")
 							else:
 								reply_to_id = self.status.id
-						status = self.account.post(
+						post_kwargs = dict(
 							text=self.text.GetValue(),
 							id=reply_to_id,
 							visibility=visibility,
 							spoiler_text=spoiler_text,
 							media_ids=media_ids,
 							scheduled_at=scheduled_at,
-							language=language
+							language=language,
 						)
+						if content_type:
+							post_kwargs['content_type'] = content_type
+						status = self.account.post(**post_kwargs)
 				else:
 					# Check if poll is set and platform supports it
 					if self.poll_opt1 is not None and self.poll_opt1 != "" and self._platform_supports('polls'):
@@ -835,23 +879,31 @@ class TweetGui(wx.Dialog):
 							multiple=self.poll_multiple,
 							hide_totals=self.poll_hide_totals
 						)
-						status = self.account.api.status_post(
+						status_post_kwargs = dict(
 							status=self.text.GetValue(),
 							visibility=visibility,
 							spoiler_text=spoiler_text,
 							poll=poll_obj,
 							media_ids=media_ids,
 							scheduled_at=scheduled_at,
-							language=language
+							language=language,
 						)
+						if content_type:
+							status_post_kwargs['content_type'] = content_type
+						status = self.account.api.status_post(**status_post_kwargs)
 					else:
-						status = self.account.post(
-							self.text.GetValue(),
-							visibility=visibility,
+						post_kwargs = dict(
 							spoiler_text=spoiler_text,
 							media_ids=media_ids,
 							scheduled_at=scheduled_at,
-							language=language
+							language=language,
+						)
+						if content_type:
+							post_kwargs['content_type'] = content_type
+						status = self.account.post(
+							self.text.GetValue(),
+							visibility=visibility,
+							**post_kwargs,
 						)
 				self.account.app.prefs.chars_sent += len(self.text.GetValue())
 			except Exception as error:

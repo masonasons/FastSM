@@ -29,6 +29,7 @@ class MastodonAccount(PlatformAccount):
     supports_media_attachments = True
     supports_scheduling = True
     supports_editing = True
+    supports_content_type = True
 
     def __init__(self, app, index: int, api: Mastodon, me, confpath: str, max_chars: int = 500, prefs=None):
         super().__init__(app, index)
@@ -668,8 +669,9 @@ class MastodonAccount(PlatformAccount):
             acct = getattr(status.account, 'acct', '')
             is_remote = '@' in acct
 
-        # Extract language parameter
+        # Extract language / content_type parameters
         language = kwargs.get('language', None)
+        content_type = kwargs.get('content_type', None)
 
         result = None
         quote_succeeded = False
@@ -684,6 +686,8 @@ class MastodonAccount(PlatformAccount):
             }
             if language:
                 params['language'] = language
+            if content_type:
+                params['content_type'] = content_type
             result = self.api._Mastodon__api_request('POST', '/api/v1/statuses', params)
             # Verify the quote was actually attached
             # Check for quote, quote_id, or quoted_status_id in response
@@ -699,6 +703,8 @@ class MastodonAccount(PlatformAccount):
                 post_kwargs = {'status': text, 'quote_id': status_id, 'visibility': visibility}
                 if language:
                     post_kwargs['language'] = language
+                if content_type:
+                    post_kwargs['content_type'] = content_type
                 result = self.api.status_post(**post_kwargs)
                 # Check if quote was attached - also check for quote_id attribute
                 if result and (
@@ -718,6 +724,10 @@ class MastodonAccount(PlatformAccount):
                     'visibility': visibility,
                     'quote_url': status_url  # Some servers support URL-based quoting
                 }
+                if language:
+                    params['language'] = language
+                if content_type:
+                    params['content_type'] = content_type
                 result = self.api._Mastodon__api_request('POST', '/api/v1/statuses', params)
                 if result and ('quote' in result or 'quote_id' in result or 'quoted_status_id' in result):
                     quote_succeeded = True
@@ -753,6 +763,12 @@ class MastodonAccount(PlatformAccount):
             edit_kwargs['media_ids'] = media_ids
 
         # Note: language is not supported by Mastodon's status_update API
+
+        # Pleroma/Akkoma/Glitch accept content_type on edits too. Vanilla
+        # Mastodon ignores it.
+        content_type = kwargs.get('content_type')
+        if content_type:
+            edit_kwargs['content_type'] = content_type
 
         result = self.api.status_update(**edit_kwargs)
         return mastodon_status_to_universal(result)

@@ -24,6 +24,10 @@ class PlatformAccount(ABC):
     supports_media_attachments: bool = False
     supports_scheduling: bool = False
     supports_editing: bool = False
+    # Pleroma/Akkoma/Glitch-soc accept a content_type form field on
+    # status_post / status_update. Vanilla Mastodon silently ignores it,
+    # so it's safe to enable for any Mastodon-family backend.
+    supports_content_type: bool = False
 
     def __init__(self, app, index: int):
         self.app = app
@@ -57,6 +61,7 @@ class PlatformAccount(ABC):
             'media_attachments': self.supports_media_attachments,
             'scheduling': self.supports_scheduling,
             'editing': self.supports_editing,
+            'content_type': self.supports_content_type,
         }
         return feature_map.get(feature, False)
 

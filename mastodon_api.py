@@ -843,11 +843,16 @@ class mastodon(object):
 			return self._platform.unboost(id)
 		self.api.status_unreblog(id=id)
 
-	def quote(self, status, text, visibility=None, language=None):
+	def quote(self, status, text, visibility=None, language=None, content_type=None):
 		"""Quote a status - try native quote, fallback to URL"""
 		# Use platform backend if available
 		if hasattr(self, '_platform') and self._platform:
-			return self._platform.quote(status, text, visibility=visibility, language=language)
+			return self._platform.quote(
+				status, text,
+				visibility=visibility,
+				language=language,
+				content_type=content_type,
+			)
 
 		if visibility is None:
 			visibility = self.default_visibility
