@@ -672,13 +672,24 @@ class Application:
 
 				text += f" ({poll_status}: {', '.join(option_texts)})"
 
+		# Determine the effective quote: a quote on the post itself, or — when
+		# this is a boost wrapper — the quote on the inner reblog. Boosts don't
+		# carry their own quote (the quote belongs to the original post), so
+		# without this fallback boosted quote-posts render with no quote block
+		# at all: the recursive reblog pass strips the "RE: <url>" prefix from
+		# text, then the outer pass below skips the quote_formatted block
+		# because s.quote is None on the boost wrapper.
+		quote_obj = getattr(s, 'quote', None)
+		if not quote_obj and getattr(s, 'reblog', None):
+			quote_obj = getattr(s.reblog, 'quote', None)
+
 		# Strip quote-related URLs from text when there's a quote
-		if hasattr(s, 'quote') and s.quote:
+		if quote_obj:
 			import re
 			# Remove RE:/QT: followed by a URL at the start
 			text = re.sub(r'^(RE|QT|re|qt):\s*https?://\S+\s*', '', text, flags=re.IGNORECASE).strip()
 			# Get the quoted post's URL to strip it from the text
-			quote_url = getattr(s.quote, 'url', None)
+			quote_url = getattr(quote_obj, 'url', None)
 			if quote_url:
 				# Strip the exact URL if it appears at the end
 				text = text.rstrip()
@@ -713,9 +724,9 @@ class Application:
 
 		# Handle quotes: format as "Person: their comment. Quoting person2: quoted text. time"
 		quote_formatted = ""
-		if hasattr(s, 'quote') and s.quote:
-			quote_text = self.process_status(s.quote, True, account=account)
-			quote_wrapped = StatusWrapper(s.quote, quote_text)
+		if quote_obj:
+			quote_text = self.process_status(quote_obj, True, account=account)
+			quote_wrapped = StatusWrapper(quote_obj, quote_text)
 			quote_formatted = self.template_to_string(quote_wrapped, self.prefs.quoteTemplate, account=account)
 
 		wrapped = StatusWrapper(s, text)

@@ -742,15 +742,31 @@ class timeline(object):
 			return False
 
 	def _resolve_unresolved_quotes(self):
-		"""Fetch quoted posts that the cache couldn't satisfy."""
-		pending = [s for s in self.statuses
-		           if getattr(s, '_unresolved_quote_id', None) and not getattr(s, 'quote', None)]
+		"""Fetch quoted posts that the cache couldn't satisfy.
+
+		The unresolved-quote marker can sit on either an outer status (a normal
+		quote-post) or on an inner reblog (a boost of a quote-post). We collect
+		both so the API fetch + cache write covers boosted quote-posts too —
+		without this, boosted quotes loaded from cache render with no quote
+		block until a refresh.
+		"""
+		pending = []
+		for s in self.statuses:
+			# Track (host, target) — host is the status whose display cache to
+			# invalidate, target is the status that actually carries the
+			# _unresolved_quote_id and gets the resolved quote attached.
+			if getattr(s, '_unresolved_quote_id', None) and not getattr(s, 'quote', None):
+				pending.append((s, s))
+				continue
+			reblog = getattr(s, 'reblog', None)
+			if reblog and getattr(reblog, '_unresolved_quote_id', None) and not getattr(reblog, 'quote', None):
+				pending.append((s, reblog))
 		if not pending:
 			return
 
 		def resolve():
-			for s in pending:
-				quote_id = getattr(s, '_unresolved_quote_id', None)
+			for host, target in pending:
+				quote_id = getattr(target, '_unresolved_quote_id', None)
 				if not quote_id:
 					continue
 				try:
@@ -759,9 +775,9 @@ class timeline(object):
 					fetched = None
 				if not fetched:
 					continue
-				s.quote = fetched
+				target.quote = fetched
 				try:
-					del s._unresolved_quote_id
+					del target._unresolved_quote_id
 				except AttributeError:
 					pass
 				# Cache for next reload + drop the stale render so the next
@@ -770,13 +786,16 @@ class timeline(object):
 				if cache:
 					try:
 						cache.save_status(fetched)
-						cache.save_status(s)
+						cache.save_status(target)
+						if target is not host:
+							cache.save_status(host)
 					except Exception:
 						pass
-				try:
-					del s._display_cache
-				except AttributeError:
-					pass
+				for obj in (host, target):
+					try:
+						del obj._display_cache
+					except AttributeError:
+						pass
 			self.invalidate_display_cache()
 			if self.account == self.app.currentAccount and self.account.currentTimeline == self:
 				wx.CallAfter(main.window.refreshList)
