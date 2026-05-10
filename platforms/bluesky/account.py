@@ -935,7 +935,12 @@ class BlueskyAccount(PlatformAccount):
     def block(self, user_id: str) -> bool:
         """Block a user."""
         try:
-            self.client.app.bsky.graph.block.create(self._me.id, {'subject': user_id})
+            from atproto import models
+            record = models.AppBskyGraphBlock.Record(
+                subject=user_id,
+                created_at=self.client.get_current_time_iso(),
+            )
+            self.client.app.bsky.graph.block.create(self._me.id, record)
             return True
         except (AtProtocolError, InvokeTimeoutError) as e:
             self.app.handle_error(e, "block")
