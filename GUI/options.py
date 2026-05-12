@@ -812,6 +812,27 @@ class advanced(wx.Panel, wx.Dialog):
 		self.main_box.Add(self.debug_logging, 0, wx.ALL, 10)
 		self.debug_logging.SetValue(get_app().prefs.debug_logging)
 
+		# Default content type for the compose dialog (Pleroma/Akkoma/Glitch).
+		# Vanilla Mastodon ignores the field, so leaving it on "Default" is
+		# always safe.
+		default_content_type_label = wx.StaticText(self, -1, "Default post content type (Pleroma/Akkoma/Glitch only):")
+		self.main_box.Add(default_content_type_label, 0, wx.LEFT | wx.TOP, 10)
+		self.default_content_type_choices = [
+			("Default (server-configured)", ""),
+			("Plain text", "text/plain"),
+			("Markdown", "text/markdown"),
+			("HTML", "text/html"),
+			("BBCode", "text/bbcode"),
+			("Misskey Markdown", "text/x.misskeymarkdown"),
+		]
+		self.default_content_type = wx.Choice(self, -1,
+			choices=[name for name, _ in self.default_content_type_choices],
+			name="Default post content type")
+		current_ct = get_app().prefs.default_content_type or ""
+		ct_values = [v for _, v in self.default_content_type_choices]
+		self.default_content_type.SetSelection(ct_values.index(current_ct) if current_ct in ct_values else 0)
+		self.main_box.Add(self.default_content_type, 0, wx.ALL, 10)
+
 		# Legacy speech backend (Windows / macOS only — Linux builds don't
 		# ship accessible_output2). Toggle is for users where prism has
 		# trouble talking to their screen reader or TTS.
@@ -1065,6 +1086,8 @@ class OptionsGui(wx.Dialog):
 		# Restart-required: speak.py picks the backend at first speak() call.
 		if self.advanced.use_legacy_speech is not None:
 			get_app().prefs.use_legacy_speech = self.advanced.use_legacy_speech.GetValue()
+		ct_idx = self.advanced.default_content_type.GetSelection()
+		get_app().prefs.default_content_type = self.advanced.default_content_type_choices[ct_idx][1]
 		get_app().prefs.earcon_audio=self.audio_tab.earcon_audio.GetValue()
 		get_app().prefs.earcon_top=self.audio_tab.earcon_top.GetValue()
 		get_app().prefs.earcon_mention=self.audio_tab.earcon_mention.GetValue()

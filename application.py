@@ -177,6 +177,11 @@ class Application:
 		# engine quirks, screen reader compat issues, etc.). Linux-only Linux
 		# build doesn't ship a2 so the option is hidden on that platform.
 		self.prefs.use_legacy_speech = self.prefs.get("use_legacy_speech", False)
+		# Default content type for the compose dialog's Content Type dropdown.
+		# Empty string means "Default" (don't send the field — let the server
+		# use the user's configured default). Only meaningful on Pleroma/Akkoma/
+		# Glitch-soc; vanilla Mastodon ignores the field.
+		self.prefs.default_content_type = self.prefs.get("default_content_type", "")
 		# Confirmation settings for menu/hotkey actions
 		self.prefs.confirm_boost = self.prefs.get("confirm_boost", False)
 		self.prefs.confirm_unboost = self.prefs.get("confirm_unboost", False)

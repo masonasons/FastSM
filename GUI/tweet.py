@@ -211,7 +211,9 @@ class TweetGui(wx.Dialog):
 				self.content_type = wx.Choice(self.panel, -1,
 					choices=[name for name, _ in self.content_type_choices],
 					size=(800, 600), name="Content type")
-				self.content_type.SetSelection(0)
+				default_ct = getattr(self.account.app.prefs, 'default_content_type', '') or None
+				ct_values = [v for _, v in self.content_type_choices]
+				self.content_type.SetSelection(ct_values.index(default_ct) if default_ct in ct_values else 0)
 				self.main_box.Add(self.content_type, 0, wx.ALL, 10)
 
 			# Media attachments - only show if platform supports it
