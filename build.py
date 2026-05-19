@@ -23,6 +23,22 @@ def get_platform():
         return "linux"
 
 
+def get_macos_build_env():
+    """Return an environment that prefers Apple's system tools on macOS.
+
+    PyInstaller's macOS helpers call ``arch`` with Apple-specific flags such as
+    ``-arm64``. If another coreutils implementation appears earlier in PATH,
+    PyInstaller's isolated subprocesses can fail before analysis starts.
+    """
+    env = os.environ.copy()
+    system_paths = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+    current_paths = env.get("PATH", "").split(os.pathsep)
+    env["PATH"] = os.pathsep.join(
+        system_paths + [p for p in current_paths if p and p not in system_paths]
+    )
+    return env
+
+
 def get_git_commit_sha():
     """Get the current git commit SHA."""
     try:
@@ -603,7 +619,7 @@ def build_macos(script_dir: Path, output_dir: Path) -> tuple:
     print()
 
     try:
-        result = subprocess.run(cmd, cwd=script_dir)
+        result = subprocess.run(cmd, cwd=script_dir, env=get_macos_build_env())
     finally:
         # Clean up build_info.txt from source directory
         cleanup_build_info_file(script_dir)
