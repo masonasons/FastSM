@@ -12,32 +12,40 @@ prism's own ranking (which picks the active screen reader when one is running).
 AV Speech on macOS must be driven from the main thread, so off-thread callers
 are marshalled via wx.CallAfter.
 
-The backend is re-detected dynamically: if speak() raises PrismError (the
-screen reader quit, the audio device went away, etc.) we drop the cached
-backend and try again. We also periodically re-check whether a higher-priority
-backend has appeared since we last picked one, so a screen reader that starts
-after FastSM doesn't leave us stuck on a fallback.
+The backend is re-detected dynamically: if the backend raises (the screen
+reader quit, the audio device went away, prism exposed a native/DBus failure,
+etc.) we drop the cached backend and try again. We also periodically re-check
+whether a higher-priority backend has appeared since we last picked one, so a
+screen reader that starts after FastSM doesn't leave us stuck on a fallback.
 """
 
+import importlib
+import logging
 import sys
 import threading
 import time
 
-import prism
-
 
 _main_thread_id = threading.main_thread().ident
-_context = prism.Context()
+_prism = None
+_context = None
 _prism_backend = None
 _prism_backend_id = None
 _last_recheck = 0.0
 _RECHECK_INTERVAL = 5.0
+_PRISM_FAILURE_BACKOFF = 30.0
+_prism_backoff_until = 0.0
 _lock = threading.Lock()
+_logger = logging.getLogger("fastsm.speech")
 
 # Legacy accessible_output2 backend, lazily imported so the dependency is only
 # loaded when the user actually opts into it.
 _a2_speaker = None
 _a2_imported = False
+
+
+class _SpeechBackendUnavailable(Exception):
+	pass
 
 
 def _use_legacy():
@@ -68,34 +76,73 @@ def _get_a2_speaker():
 	return _a2_speaker
 
 
+def _prism_backoff_active():
+	return time.monotonic() < _prism_backoff_until
+
+
+def _log_prism_failure(action, error, backoff=False):
+	try:
+		extra = " Temporarily disabling prism speech." if backoff else ""
+		fastsm_logger = logging.getLogger("fastsm")
+		if not fastsm_logger.handlers:
+			return
+		_logger.warning("Prism speech %s failed: %s.%s", action, error, extra)
+		_logger.debug("Prism speech %s traceback", action, exc_info=True)
+	except Exception:
+		pass
+
+
+def _get_prism_module():
+	global _prism
+	if _prism_backoff_active():
+		raise _SpeechBackendUnavailable("prism speech is in failure backoff")
+	if _prism is None:
+		_prism = importlib.import_module("prism")
+	return _prism
+
+
+def _get_context():
+	global _context
+	if _context is None:
+		_context = _get_prism_module().Context()
+	return _context
+
+
 def _create_backend():
 	"""Create the best available backend, preferring VoiceOver on macOS.
 
 	Returns (backend, backend_id) so we can tell later whether a more-preferred
 	backend has come online without rebuilding the current one to compare.
 	"""
-	if sys.platform == 'darwin' and _context.exists(prism.BackendId.VOICE_OVER):
+	prism = _get_prism_module()
+	context = _get_context()
+	if sys.platform == 'darwin':
 		try:
-			return _context.create(prism.BackendId.VOICE_OVER), prism.BackendId.VOICE_OVER
-		except prism.PrismError:
+			if context.exists(prism.BackendId.VOICE_OVER):
+				return context.create(prism.BackendId.VOICE_OVER), prism.BackendId.VOICE_OVER
+		except Exception as error:
+			_log_prism_failure("VoiceOver detection", error)
 			pass
-	backend = _context.create_best()
+	backend = context.create_best()
 	return backend, getattr(backend, 'id', None)
 
 
 def _preferred_backend_changed():
 	"""Return True if a higher-priority backend than the cached one is now available."""
+	prism = _get_prism_module()
+	context = _get_context()
 	if sys.platform == 'darwin' and _prism_backend_id != prism.BackendId.VOICE_OVER:
 		try:
-			if _context.exists(prism.BackendId.VOICE_OVER):
+			if context.exists(prism.BackendId.VOICE_OVER):
 				return True
-		except prism.PrismError:
+		except Exception as error:
+			_log_prism_failure("VoiceOver recheck", error)
 			return False
 	return False
 
 
 def _get_prism_backend():
-	global _prism_backend, _prism_backend_id, _last_recheck
+	global _prism_backend, _prism_backend_id, _last_recheck, _context
 	with _lock:
 		now = time.monotonic()
 		if _prism_backend is not None and now - _last_recheck >= _RECHECK_INTERVAL:
@@ -104,21 +151,31 @@ def _get_prism_backend():
 				_prism_backend = None
 				_prism_backend_id = None
 		if _prism_backend is None:
-			_prism_backend, _prism_backend_id = _create_backend()
-			_last_recheck = time.monotonic()
+			try:
+				_prism_backend, _prism_backend_id = _create_backend()
+				_last_recheck = time.monotonic()
+			except Exception:
+				_context = None
+				raise
 		return _prism_backend
 
 
-def _invalidate_backend():
-	global _prism_backend, _prism_backend_id
+def _invalidate_backend(reset_context=False, backoff=False, reset_backoff=False):
+	global _context, _prism_backend, _prism_backend_id, _prism_backoff_until
 	with _lock:
 		_prism_backend = None
 		_prism_backend_id = None
+		if reset_context:
+			_context = None
+		if reset_backoff:
+			_prism_backoff_until = 0.0
+		if backoff:
+			_prism_backoff_until = time.monotonic() + _PRISM_FAILURE_BACKOFF
 
 
 def reset_backend():
 	"""Force re-detection of the speech backend on the next speak() call."""
-	_invalidate_backend()
+	_invalidate_backend(reset_context=True, reset_backoff=True)
 
 
 def _try_speak(text, interrupt):
@@ -157,13 +214,22 @@ def _do_speak(text, interrupt):
 		# the user still hears something instead of going silent.
 	try:
 		_try_speak(text, interrupt)
-	except prism.PrismError:
-		# The current backend died (screen reader closed, audio bus dropped,
-		# etc.). Drop it and retry once with a fresh pick.
+	except _SpeechBackendUnavailable:
+		pass
+	except Exception as error:
+		# The current backend died or prism exposed a native/DBus backend
+		# failure outside PrismError (for example an unsupported Orca DBus API).
+		# Drop it and retry once with a fresh pick, but never let speech output
+		# abort callers such as application shutdown.
+		_log_prism_failure("output", error)
 		_invalidate_backend()
 		try:
 			_try_speak(text, interrupt)
-		except prism.PrismError:
+		except _SpeechBackendUnavailable:
+			pass
+		except Exception as retry_error:
+			_log_prism_failure("retry", retry_error, backoff=True)
+			_invalidate_backend(reset_context=True, backoff=True)
 			pass
 
 
@@ -176,3 +242,11 @@ def speak(text, interrupt=False):
 			_do_speak(text, interrupt)
 	else:
 		_do_speak(text, interrupt)
+
+
+def speak_async(text, interrupt=False):
+	"""Best-effort speech for non-critical paths that must never block callers."""
+	try:
+		threading.Thread(target=speak, args=(text, interrupt), daemon=True).start()
+	except Exception as error:
+		_log_prism_failure("async dispatch", error)
