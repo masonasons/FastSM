@@ -145,7 +145,7 @@ try:
 	if fastsm_app.prefs.window_shown:
 		main.window.Show()
 	else:
-		speak.speak("Welcome to FastSM! Main window hidden.")
+		speak.speak_async("Welcome to FastSM! Main window hidden.")
 	wx_app.MainLoop()
 except Exception as e:
 	import traceback

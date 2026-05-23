@@ -797,7 +797,7 @@ class MainGui(wx.Frame):
 			speak.speak("Copied")
 
 	def OnClose(self, event=None):
-		speak.speak("Exiting.")
+		speak.speak_async("Exiting.")
 		# Sync timeline positions to server before exiting
 		if get_app().prefs.sync_timeline_position:
 			for account in get_app().accounts:
@@ -864,7 +864,7 @@ class MainGui(wx.Frame):
 	def OnPlayExternal(self,event=None):
 		status = self.get_current_status()
 		if status:
-			thread=threading.Thread(target=misc.play_external,args=(status,)).start()
+			thread=threading.Thread(target=misc.play_external,args=(status,),daemon=True).start()
 
 	def OnStopAudio(self,event=None):
 		sound.stop()

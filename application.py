@@ -1875,7 +1875,7 @@ class Application:
 
 				# Move from temp to app directory
 				shutil.move(zip_path, final_zip_path)
-				speak.speak("Download complete. Preparing update...")
+				speak.speak_async("Download complete. Preparing update...")
 
 				# Create updater batch script
 				batch_path = os.path.join(app_dir, "updater.bat")
@@ -1934,11 +1934,11 @@ del "%~f0"
 				with open(batch_path, 'w') as f:
 					f.write(batch_content)
 
-				speak.speak("Update ready. FastSM will now restart.")
 				# Run the updater and exit cleanly (OnClose handles cleanup like saving positions)
 				os.startfile(batch_path)
 				from GUI import main
 				wx.CallAfter(main.window.OnClose)
+				speak.speak_async("Update ready. FastSM will now restart.")
 				# Belt-and-suspenders: OnClose ends in sys.exit(), but if a
 				# rogue non-daemon thread (atproto websocket, sound backend,
 				# COM finalizer) keeps the process alive, the batch's wait
@@ -2098,7 +2098,7 @@ del "%~f0"
 				return
 
 			wx.CallAfter(close_progress_dialog)
-			speak.speak("Download complete. Preparing update...")
+			speak.speak_async("Download complete. Preparing update...")
 
 			# Confirm we can write to the install dir before staging the
 			# script. If we're in /opt or /usr, the swap will fail and we'd
@@ -2177,8 +2177,6 @@ rm -f "$0"
 				f.write(script)
 			os.chmod(script_path, os.stat(script_path).st_mode | _stat.S_IXUSR | _stat.S_IXGRP | _stat.S_IXOTH)
 
-			speak.speak("Update ready. FastSM will now restart.")
-
 			# Detach via setsid + DEVNULL so the script outlives this
 			# process. Don't wait() — the script's whole job is to wait
 			# for *us* to exit.
@@ -2193,6 +2191,7 @@ rm -f "$0"
 
 			from GUI import main
 			wx.CallAfter(main.window.OnClose)
+			speak.speak_async("Update ready. FastSM will now restart.")
 
 			# Same belt-and-suspenders as Windows: if a non-daemon thread
 			# wedges OnClose, force-quit so the script's wait loop falls
@@ -2269,7 +2268,6 @@ rm -f "$0"
 				return
 
 			wx.CallAfter(close_progress_dialog)
-			speak.speak("Download complete. Running installer...")
 
 			# Run the installer silently and close the app
 			# /SILENT shows progress but no user interaction
@@ -2287,6 +2285,7 @@ rm -f "$0"
 			# Close the app to allow installer to update files
 			from GUI import main
 			wx.CallAfter(main.window.OnClose)
+			speak.speak_async("Download complete. Running installer...")
 
 		except Exception as e:
 			wx.CallAfter(close_progress_dialog)
