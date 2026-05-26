@@ -36,6 +36,7 @@ _RECHECK_INTERVAL = 5.0
 _PRISM_FAILURE_BACKOFF = 30.0
 _prism_backoff_until = 0.0
 _lock = threading.Lock()
+_shutdown_started = False
 _logger = logging.getLogger("fastsm.speech")
 
 # Legacy accessible_output2 backend, lazily imported so the dependency is only
@@ -202,7 +203,23 @@ def _speak_via_a2(text, interrupt):
 		return False
 
 
-def _do_speak(text, interrupt):
+def _shutdown_active():
+	with _lock:
+		return _shutdown_started
+
+
+def _start_shutdown():
+	global _shutdown_started
+	with _lock:
+		if _shutdown_started:
+			return False
+		_shutdown_started = True
+		return True
+
+
+def _do_speak(text, interrupt, retry=True, allow_shutdown=False):
+	if _shutdown_active() and not allow_shutdown:
+		return
 	# Backend creation is deferred to first speak() because prism's macOS
 	# VoiceOver backend needs an NSWindow to exist when create() is called —
 	# warming up at import time runs before GUI.main has built the wxFrame,
@@ -222,6 +239,9 @@ def _do_speak(text, interrupt):
 		# Drop it and retry once with a fresh pick, but never let speech output
 		# abort callers such as application shutdown.
 		_log_prism_failure("output", error)
+		if not retry:
+			_invalidate_backend(reset_context=True, backoff=True)
+			return
 		_invalidate_backend()
 		try:
 			_try_speak(text, interrupt)
@@ -234,19 +254,45 @@ def _do_speak(text, interrupt):
 
 
 def speak(text, interrupt=False):
+	if _shutdown_active():
+		return
 	if sys.platform == 'darwin' and threading.current_thread().ident != _main_thread_id:
 		try:
 			import wx
 			wx.CallAfter(_do_speak, text, interrupt)
 		except Exception:
-			_do_speak(text, interrupt)
+			if not _shutdown_active():
+				_do_speak(text, interrupt)
 	else:
 		_do_speak(text, interrupt)
 
 
 def speak_async(text, interrupt=False):
 	"""Best-effort speech for non-critical paths that must never block callers."""
+	if _shutdown_active():
+		return
 	try:
 		threading.Thread(target=speak, args=(text, interrupt), daemon=True).start()
 	except Exception as error:
 		_log_prism_failure("async dispatch", error)
+
+
+def speak_before_shutdown(text, interrupt=False, timeout=0.5):
+	"""Speak one shutdown announcement before suppressing any later speech.
+
+	The announcement is allowed a short grace window, but shutdown must continue
+	even if a native speech backend blocks.
+	"""
+	if not _start_shutdown():
+		return
+	try:
+		thread = threading.Thread(
+			target=_do_speak,
+			args=(text, interrupt),
+			kwargs={"retry": False, "allow_shutdown": True},
+			daemon=True,
+		)
+		thread.start()
+		thread.join(timeout)
+	except Exception as error:
+		_log_prism_failure("shutdown dispatch", error)

@@ -3,7 +3,6 @@ import re
 import webbrowser
 import platform
 import pyperclip
-import sys
 import application
 from application import get_app
 import wx
@@ -60,6 +59,7 @@ def safe_raise_window(win):
 class MainGui(wx.Frame):
 	def __init__(self, title):
 		self.invisible=False
+		self._closing = False
 		self._find_text = ""  # Current search text for find in timeline
 		self._open_dialogs = []  # Track open dialogs for focus restoration
 		wx.Frame.__init__(self, None, title=title,size=(800,600))
@@ -796,8 +796,11 @@ class MainGui(wx.Frame):
 			pyperclip.copy(get_app().template_to_string(status, template))
 			speak.speak("Copied")
 
-	def OnClose(self, event=None):
-		speak.speak_async("Exiting.")
+	def OnClose(self, event=None, shutdown_message="Exiting."):
+		if self._closing:
+			return
+		self._closing = True
+		speak.speak_before_shutdown(shutdown_message)
 		# Sync timeline positions to server before exiting
 		if get_app().prefs.sync_timeline_position:
 			for account in get_app().accounts:
@@ -847,7 +850,15 @@ class MainGui(wx.Frame):
 					except Exception as e:
 						print(f"Error cleaning up cache: {e}")
 		if platform.system()!="Darwin" and self.trayicon is not None:
-			self.trayicon.on_exit(event,False)
+			try:
+				self.trayicon.RemoveIcon()
+			except Exception:
+				pass
+			try:
+				self.trayicon.Destroy()
+			except Exception:
+				pass
+			self.trayicon = None
 		# Clean up account resources (close timeline caches)
 		for account in get_app().accounts:
 			if hasattr(account, 'cleanup'):
@@ -856,10 +867,7 @@ class MainGui(wx.Frame):
 				except:
 					pass
 		self.Destroy()
-		# On Mac, we need to explicitly exit the main loop
-		if platform.system() == "Darwin":
-			wx.GetApp().ExitMainLoop()
-		sys.exit()
+		wx.CallAfter(wx.GetApp().ExitMainLoop)
 	
 	def OnPlayExternal(self,event=None):
 		status = self.get_current_status()

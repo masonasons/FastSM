@@ -1,6 +1,7 @@
 import importlib
 import sys
 import threading
+import time
 import types
 import unittest
 
@@ -180,6 +181,133 @@ class SpeakPrismFailureTests(unittest.TestCase):
 		threading.Thread = FailingThread
 		try:
 			speak.speak_async("non-critical")
+		finally:
+			threading.Thread = original_thread
+
+	def test_shutdown_announcement_blocks_later_speech(self):
+		speak_calls = []
+
+		class Backend:
+			id = "speech_dispatcher"
+
+			def speak(self, text, interrupt):
+				speak_calls.append((text, interrupt))
+
+			def braille(self, text):
+				pass
+
+		class Context:
+			def create_best(self):
+				return Backend()
+
+		speak = _load_speak_with_context(Context)
+
+		speak.speak_before_shutdown("Exiting.", interrupt=True)
+		speak.speak("late speech")
+		speak.speak_async("late async speech")
+		speak._do_speak("queued before shutdown", False)
+
+		self.assertEqual(speak_calls, [("Exiting.", True)])
+
+	def test_shutdown_announcement_does_not_retry_broken_backend(self):
+		class Context:
+			create_count = 0
+
+			def create_best(self):
+				type(self).create_count += 1
+				raise RuntimeError("unsupported Orca DBus API")
+
+		speak = _load_speak_with_context(Context)
+
+		speak.speak_before_shutdown("Exiting.")
+
+		self.assertEqual(Context.create_count, 1)
+		self.assertIsNone(speak._prism_backend)
+
+	def test_shutdown_announcement_has_bounded_wait(self):
+		started = threading.Event()
+		release = threading.Event()
+
+		class Backend:
+			id = "speech_dispatcher"
+
+			def speak(self, text, interrupt):
+				started.set()
+				release.wait(1.0)
+
+			def braille(self, text):
+				pass
+
+		class Context:
+			def create_best(self):
+				return Backend()
+
+		speak = _load_speak_with_context(Context)
+
+		start = time.monotonic()
+		try:
+			speak.speak_before_shutdown("Exiting.", timeout=0.01)
+			elapsed = time.monotonic() - start
+			self.assertLess(elapsed, 0.2)
+			self.assertTrue(started.wait(0.2))
+		finally:
+			release.set()
+
+	def test_shutdown_announcement_has_bounded_wait_on_darwin(self):
+		started = threading.Event()
+		release = threading.Event()
+
+		class Backend:
+			id = "voice_over"
+
+			def speak(self, text, interrupt):
+				started.set()
+				release.wait(1.0)
+
+			def braille(self, text):
+				pass
+
+		class Context:
+			def exists(self, backend_id):
+				return False
+
+			def create_best(self):
+				return Backend()
+
+		speak = _load_speak_with_context(Context)
+		original_platform = sys.platform
+		sys.platform = "darwin"
+
+		start = time.monotonic()
+		try:
+			speak.speak_before_shutdown("Exiting.", timeout=0.01)
+			elapsed = time.monotonic() - start
+			self.assertLess(elapsed, 0.2)
+			self.assertTrue(started.wait(0.2))
+		finally:
+			sys.platform = original_platform
+			release.set()
+
+	def test_shutdown_announcement_start_failure_is_swallowed(self):
+		class FailingThread:
+			def __init__(self, *args, **kwargs):
+				pass
+
+			def start(self):
+				raise RuntimeError("cannot start thread")
+
+			def join(self, timeout=None):
+				raise AssertionError("join should not run after start failure")
+
+		class Context:
+			def create_best(self):
+				raise AssertionError("speech should not be attempted")
+
+		speak = _load_speak_with_context(Context)
+		original_thread = threading.Thread
+		threading.Thread = FailingThread
+		try:
+			speak.speak_before_shutdown("Exiting.")
 		finally:
 			threading.Thread = original_thread
 

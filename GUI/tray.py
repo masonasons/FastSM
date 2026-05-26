@@ -34,9 +34,10 @@ class TaskBarIcon(wx.adv.TaskBarIcon):
 		self.frame.ToggleWindow()
 
 	def on_exit(self, event, blah=True):
-		self.Destroy()
 		if blah:
 			self.frame.OnClose(event)
+		else:
+			self.Destroy()
 
 	def set_icon(self, path):
 #		icon = wx.Icon(wx.Bitmap(path))

@@ -1937,14 +1937,12 @@ del "%~f0"
 				# Run the updater and exit cleanly (OnClose handles cleanup like saving positions)
 				os.startfile(batch_path)
 				from GUI import main
-				wx.CallAfter(main.window.OnClose)
-				speak.speak_async("Update ready. FastSM will now restart.")
-				# Belt-and-suspenders: OnClose ends in sys.exit(), but if a
-				# rogue non-daemon thread (atproto websocket, sound backend,
-				# COM finalizer) keeps the process alive, the batch's wait
-				# loop hangs. Force-terminate after a grace window so cache
-				# writes have time to flush but a stuck shutdown doesn't
-				# wedge the update.
+				wx.CallAfter(main.window.OnClose, None, "Update ready. FastSM will now restart.")
+				# Belt-and-suspenders: if a rogue non-daemon thread (atproto
+				# websocket, sound backend, COM finalizer) keeps the process
+				# alive, the batch's wait loop hangs. Force-terminate after a
+				# grace window so cache writes have time to flush but a stuck
+				# shutdown doesn't wedge the update.
 				def _force_quit_after(delay):
 					time.sleep(delay)
 					os._exit(0)
@@ -2190,8 +2188,7 @@ rm -f "$0"
 			)
 
 			from GUI import main
-			wx.CallAfter(main.window.OnClose)
-			speak.speak_async("Update ready. FastSM will now restart.")
+			wx.CallAfter(main.window.OnClose, None, "Update ready. FastSM will now restart.")
 
 			# Same belt-and-suspenders as Windows: if a non-daemon thread
 			# wedges OnClose, force-quit so the script's wait loop falls
@@ -2284,8 +2281,7 @@ rm -f "$0"
 
 			# Close the app to allow installer to update files
 			from GUI import main
-			wx.CallAfter(main.window.OnClose)
-			speak.speak_async("Download complete. Running installer...")
+			wx.CallAfter(main.window.OnClose, None, "Download complete. Running installer...")
 
 		except Exception as e:
 			wx.CallAfter(close_progress_dialog)
