@@ -627,6 +627,9 @@ class templates(wx.Panel, wx.Dialog):
 		self.notificationTemplate_placeholder_btn = wx.Button(self, -1, "Insert Placeholder...")
 		self.main_box.Add(self.notificationTemplate_placeholder_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 		self.notificationTemplate_placeholder_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_placeholder_menu(e, self.notificationTemplate, 'notification'))
+		self.restore_defaults_btn = wx.Button(self, -1, "&Restore Defaults")
+		self.main_box.Add(self.restore_defaults_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+		self.restore_defaults_btn.Bind(wx.EVT_BUTTON, self.on_restore_defaults)
 		self.include_media_descriptions = wx.CheckBox(self, -1, "Include image/media descriptions in post text")
 		self.main_box.Add(self.include_media_descriptions, 0, wx.ALL, 10)
 		self.include_media_descriptions.SetValue(get_app().prefs.include_media_descriptions)
@@ -638,6 +641,21 @@ class templates(wx.Panel, wx.Dialog):
 		self.max_usernames_display = wx.SpinCtrl(self, -1, min=0, max=20, initial=get_app().prefs.max_usernames_display, name="Collapse usernames threshold")
 		self.main_box.Add(self.max_usernames_display, 0, wx.EXPAND | wx.ALL, 10)
 		self.SetSizer(self.main_box)
+
+	def on_restore_defaults(self, event):
+		result = wx.MessageBox(
+			"This will reset all template fields to their default values. Your customizations will be lost when you click OK to save. Continue?",
+			"Restore Default Templates",
+			wx.YES_NO | wx.ICON_QUESTION
+		)
+		if result == wx.YES:
+			self.postTemplate.SetValue("$account.display_name$ (@$account.acct$): $text$ $created_at$")
+			self.copyTemplate.SetValue("$account.display_name$ (@$account.acct$): $text$")
+			self.boostTemplate.SetValue("$account.display_name$ boosted $reblog.account.display_name$: $text$ $created_at$")
+			self.quoteTemplate.SetValue("Quoting $account.display_name$ (@$account.acct$): $text$")
+			self.notificationTemplate.SetValue("$account.display_name$ (@$account.acct$) $type$: $text$ $created_at$")
+			self.messageTemplate.SetValue("$account.display_name$: $text$ $created_at$")
+			self.userTemplate.SetValue("$display_name$ (@$acct$): $followers_count$ followers, $following_count$ following, $statuses_count$ posts. Bio: $note$")
 
 	def show_placeholder_menu(self, event, text_ctrl, template_type):
 		"""Show a context menu with available placeholders for the template type."""
