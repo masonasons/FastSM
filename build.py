@@ -119,6 +119,10 @@ def get_hidden_imports():
         "google_auth_httplib2",
         "httplib2",
         "uritemplate",
+        # Vendored youtube-search-python (platforms/youtube/vendor) is imported
+        # as top-level `youtubesearchpython` via a runtime sys.path shim, so
+        # PyInstaller can't trace it or its httpx dependency statically.
+        "httpx",
         "GUI",
         "GUI.main",
         "GUI.tweet",
@@ -304,6 +308,13 @@ def build_windows(script_dir: Path, output_dir: Path) -> tuple:
     client_secret = script_dir / "platforms" / "youtube" / "client_secret.json"
     if client_secret.exists():
         cmd.extend(["--add-data", f"{client_secret}{os.pathsep}platforms/youtube"])
+    # Bundle the vendored youtube-search-python tree so the runtime sys.path shim
+    # in platforms/youtube/__init__.py can import it in the frozen app. httpx
+    # ships data (CA bundle) so collect it fully.
+    yt_vendor = script_dir / "platforms" / "youtube" / "vendor"
+    if yt_vendor.exists():
+        cmd.extend(["--add-data", f"{yt_vendor}{os.pathsep}platforms/youtube/vendor"])
+    cmd.extend(["--collect-all", "httpx"])
 
     # Add runtime hook to redirect stderr to config directory early
     runtime_hook = script_dir / "runtime_hook.py"
