@@ -81,6 +81,8 @@ class AccountsGui(wx.Dialog):
 				instance = parsed.netloc or parsed.path.strip('/')
 				if instance:
 					acct = f"{acct} on {instance}"
+			elif platform_type == 'youtube':
+				acct = f"{acct} on YouTube"
 			self.list.Insert(acct, self.list.GetCount())
 			if i==app.currentAccount:
 				self.list.SetSelection(index)
@@ -92,7 +94,18 @@ class AccountsGui(wx.Dialog):
 	def New(self, event):
 		app = get_app()
 		num_accounts_before = len(app.accounts)
-		app.add_session()
+		# Use the next CONTIGUOUS folder index, not the lowest free one. Startup
+		# loads accounts via range(prefs.accounts), so an account placed at a
+		# non-contiguous index (caused by a leftover/orphan folder on disk) is
+		# never loaded -> the account seems to "not save" and must be re-added
+		# every boot. Clear any orphan squatting at that index (it isn't a
+		# loaded account, so it's stale data) before creating the new one.
+		new_index = app.prefs.accounts
+		orphan = os.path.join(app.confpath, f"account{new_index}")
+		loaded_here = any(getattr(a, 'folder_index', -1) == new_index for a in app.accounts)
+		if os.path.exists(orphan) and not loaded_here:
+			shutil.rmtree(orphan, ignore_errors=True)
+		app.add_session(new_index)
 		# Check if a new account was actually added
 		if len(app.accounts) <= num_accounts_before:
 			# Account creation was cancelled or failed

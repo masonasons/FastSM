@@ -262,7 +262,10 @@ class Application:
 				parallelizable = []
 				sequential = []
 				for i in range(1, self.prefs.accounts):
-					if self._is_account_configured(i):
+					# YouTube accounts always load on the main thread: a dead/expired
+					# token triggers an interactive browser re-login, which must not
+					# run on a worker thread (it opens a browser + binds a local port).
+					if self._is_account_configured(i) and self._account_platform_type(i) != "youtube":
 						parallelizable.append(i)
 					else:
 						sequential.append(i)
@@ -314,6 +317,37 @@ class Application:
 				return
 			# Otherwise just skip this account
 
+	@staticmethod
+	def _account_platform_type(index):
+		"""Read an account's platform_type from disk without loading it."""
+		import config
+		try:
+			if config.is_portable_mode():
+				prefs = config.Config(name="account"+str(index), autosave=False, save_on_exit=False)
+			else:
+				prefs = config.Config(name="FastSM/account"+str(index), autosave=False, save_on_exit=False)
+			return prefs.get("platform_type", "")
+		except:
+			return ""
+
+	@staticmethod
+	def _youtube_refresh_token(prefs):
+		"""Return the stored YouTube refresh token string, or "".
+
+		Coerces youtube_token (which may come back as a config.Config, a dict,
+		or something unexpected) to a dict so both account-state checks agree.
+		"""
+		import config
+		token = prefs.get("youtube_token", None)
+		if isinstance(token, config.Config):
+			try:
+				token = dict(token)
+			except Exception:
+				token = {}
+		elif not isinstance(token, dict):
+			token = {}
+		return token.get("refresh_token") or ""
+
 	def _is_account_configured(self, index):
 		"""Check if an account has credentials saved (no dialogs needed)."""
 		import config
@@ -329,6 +363,9 @@ class Application:
 			if platform_type == "bluesky":
 				# Bluesky needs handle and password
 				return bool(prefs.get("bluesky_handle", "")) and bool(prefs.get("bluesky_password", ""))
+			elif platform_type == "youtube":
+				# YouTube needs a stored OAuth refresh token
+				return bool(self._youtube_refresh_token(prefs))
 			else:
 				# Mastodon needs instance URL and access token
 				return bool(prefs.get("instance_url", "")) and bool(prefs.get("access_token", ""))
@@ -358,6 +395,11 @@ class Application:
 					return (True, "bluesky", handle or "incomplete")
 				# Just platform_type set, nothing else
 				return (True, "bluesky", "setup not started")
+			elif platform_type == "youtube":
+				if self._youtube_refresh_token(prefs):
+					return (False, None, None)  # Fully configured
+				# Platform chosen but OAuth login never finished
+				return (True, "youtube", "login not completed")
 			else:
 				# Mastodon
 				instance_url = prefs.get("instance_url", "")
@@ -549,7 +591,21 @@ class Application:
 		if is_scheduled:
 			return self._process_scheduled_status(s)
 
-		if hasattr(s, 'content'):
+		# YouTube posts use a per-account template (Templates tab in account
+		# options). Default shows title + author; the description is opt-in via
+		# the $description$ placeholder.
+		if template == "" and getattr(s, '_platform', '') == 'youtube':
+			acct_obj = account or getattr(self, 'currentAccount', None)
+			if acct_obj is not None:
+				yt_tpl = getattr(acct_obj.prefs, 'youtube_template', '') or ''
+				if yt_tpl:
+					template = yt_tpl
+
+		if getattr(s, '_platform', '') == 'youtube':
+			# The displayed post text is the video title (stored in .text);
+			# the full description lives in .content for $description$.
+			text = getattr(s, 'text', '') or (self.strip_html(s.content) if hasattr(s, 'content') else "")
+		elif hasattr(s, 'content'):
 			text = self.strip_html(s.content)
 		else:
 			text = ""
@@ -593,8 +649,10 @@ class Application:
 						text = f"{filter_warning}. {text}"
 					# 'ignore' mode: just use the text as-is
 
-			# Add media descriptions to text (only for non-reblogs to avoid duplication)
-			if self.prefs.include_media_descriptions and hasattr(s, 'media_attachments') and s.media_attachments:
+			# Add media descriptions to text (only for non-reblogs to avoid duplication).
+			# Skipped for YouTube: the video IS the post, so a "(Video) with no
+			# description" suffix is just noise.
+			if self.prefs.include_media_descriptions and getattr(s, '_platform', '') != 'youtube' and hasattr(s, 'media_attachments') and s.media_attachments:
 				for media in s.media_attachments:
 					# Handle both objects (from API) and dicts (from cache)
 					if isinstance(media, dict):
@@ -1021,6 +1079,12 @@ class Application:
 		if template == "":
 			template = self.prefs.postTemplate
 
+		# $description$ (YouTube): the full video description, kept in .content.
+		# Deferred like $text$ so $..$ inside it isn't treated as a template var.
+		description_content = None
+		if "$description$" in template:
+			description_content = self.strip_html(getattr(s, 'content', '') or '')
+
 		# Prepare text content now, but replace AFTER other substitutions
 		# to prevent $..$ patterns in post text from being interpreted as template vars
 		text_content = None
@@ -1064,8 +1128,8 @@ class Application:
 			if "$" in temp[i]:
 				t = temp[i].split("$")
 				r = t[1]
-				if r == "text":
-					continue  # Already handled above
+				if r == "text" or r == "description":
+					continue  # Handled (deferred) below
 				if "." in r:
 					q = r.split(".")
 					# Support multi-level attribute access (e.g., reblog.account.display_name)
@@ -1145,9 +1209,12 @@ class Application:
 								template = template.replace("$" + t[1] + "$", str(getattr(s, t[1])))
 							except Exception as e:
 								print(e)
-		# Replace $text$ last to prevent post content with $..$ from being interpreted as template vars
+		# Replace $text$ / $description$ last to prevent post content with $..$
+		# from being interpreted as template vars
 		if text_content is not None:
 			template = template.replace("$text$", text_content)
+		if description_content is not None:
+			template = template.replace("$description$", description_content)
 		return template
 
 	def get_users_in_status(self, account, s):

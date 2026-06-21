@@ -97,6 +97,32 @@ def get_hidden_imports():
         "platforms.mastodon.models",
         "platforms.bluesky",
         "platforms.bluesky.account",
+        # YouTube platform (imported lazily via the platform registry)
+        "platforms.youtube",
+        "platforms.youtube.account",
+        "platforms.youtube.models",
+        "platforms.youtube.oauth",
+        "platforms.youtube.innertube",
+        # Google OAuth + YouTube Data API (imported lazily inside functions,
+        # so PyInstaller's static analysis can't see them)
+        "google",
+        "google.auth",
+        "google.auth.transport.requests",
+        "google.oauth2",
+        "google.oauth2.credentials",
+        "google_auth_oauthlib",
+        "google_auth_oauthlib.flow",
+        "googleapiclient",
+        "googleapiclient.discovery",
+        "googleapiclient.http",
+        "googleapiclient.discovery_cache",
+        "google_auth_httplib2",
+        "httplib2",
+        "uritemplate",
+        # Vendored youtube-search-python (platforms/youtube/vendor) is imported
+        # as top-level `youtubesearchpython` via a runtime sys.path shim, so
+        # PyInstaller can't trace it or its httpx dependency statically.
+        "httpx",
         "GUI",
         "GUI.main",
         "GUI.tweet",
@@ -272,6 +298,23 @@ def build_windows(script_dir: Path, output_dir: Path) -> tuple:
     # Enchant is imported inside try/except so PyInstaller can't trace it
     cmd.extend(["--collect-submodules", "enchant"])
     cmd.extend(["--collect-data", "enchant"])
+
+    # YouTube Data API: collect googleapiclient's bundled discovery docs (build()
+    # uses static discovery) plus google-auth-oauthlib, all lazy-imported.
+    cmd.extend(["--collect-all", "googleapiclient"])
+    cmd.extend(["--collect-all", "google_auth_oauthlib"])
+    cmd.extend(["--collect-submodules", "google"])
+    # Bundle the OAuth client so "Add account -> YouTube" works in the build.
+    client_secret = script_dir / "platforms" / "youtube" / "client_secret.json"
+    if client_secret.exists():
+        cmd.extend(["--add-data", f"{client_secret}{os.pathsep}platforms/youtube"])
+    # Bundle the vendored youtube-search-python tree so the runtime sys.path shim
+    # in platforms/youtube/__init__.py can import it in the frozen app. httpx
+    # ships data (CA bundle) so collect it fully.
+    yt_vendor = script_dir / "platforms" / "youtube" / "vendor"
+    if yt_vendor.exists():
+        cmd.extend(["--add-data", f"{yt_vendor}{os.pathsep}platforms/youtube/vendor"])
+    cmd.extend(["--collect-all", "httpx"])
 
     # Add runtime hook to redirect stderr to config directory early
     runtime_hook = script_dir / "runtime_hook.py"

@@ -1,5 +1,14 @@
 Mastodon.py>=2.0.0
 atproto
+# YouTube platform: Google OAuth + Data API v3
+google-auth
+google-auth-oauthlib
+google-api-python-client
+# YouTube search/recommendations via InnerTube scraping.
+# The maintained fork is vendored at platforms/youtube/vendor/youtubesearchpython
+# (made importable by a sys.path shim in platforms/youtube/__init__.py), so the
+# library itself is not a PyPI dependency. It does need httpx at runtime:
+httpx
 pyinstaller
 pyperclip
 requests
