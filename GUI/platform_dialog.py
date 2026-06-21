@@ -21,10 +21,12 @@ class PlatformSelectDialog(wx.Dialog):
         # Radio buttons
         self.mastodon_radio = wx.RadioButton(panel, label="Mastodon", style=wx.RB_GROUP)
         self.bluesky_radio = wx.RadioButton(panel, label="Bluesky")
+        self.youtube_radio = wx.RadioButton(panel, label="YouTube")
 
         radio_sizer = wx.BoxSizer(wx.VERTICAL)
         radio_sizer.Add(self.mastodon_radio, 0, wx.ALL, 5)
         radio_sizer.Add(self.bluesky_radio, 0, wx.ALL, 5)
+        radio_sizer.Add(self.youtube_radio, 0, wx.ALL, 5)
         sizer.Add(radio_sizer, 0, wx.CENTER, 5)
 
         # Buttons
@@ -46,6 +48,8 @@ class PlatformSelectDialog(wx.Dialog):
         """Return the selected platform name."""
         if self.bluesky_radio.GetValue():
             return "bluesky"
+        if self.youtube_radio.GetValue():
+            return "youtube"
         return "mastodon"
 
 

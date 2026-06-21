@@ -67,4 +67,7 @@ vlc/
 # yt-dlp executable (download from https://github.com/yt-dlp/yt-dlp/releases)
 yt-dlp.exe
 
+# YouTube OAuth client (download from Google Cloud Console; never commit)
+platforms/youtube/client_secret.json
+
 todo.txt

@@ -109,6 +109,8 @@ class mastodon(object):
 		# Initialize based on platform type
 		if self.prefs.platform_type == "bluesky":
 			self._init_bluesky(index)
+		elif self.prefs.platform_type == "youtube":
+			self._init_youtube(index)
 		else:
 			self.prefs.platform_type = "mastodon"
 			self._init_mastodon(index)
@@ -502,6 +504,99 @@ class mastodon(object):
 
 		self._finish_timeline_init()
 
+	def _init_youtube(self, index):
+		"""Initialize YouTube account via Google OAuth (installed-app flow)."""
+		from platforms.youtube import oauth
+		from platforms.youtube import YouTubeAccount
+
+		# Optional user-supplied OAuth client (falls back to bundled FastSM client).
+		self.prefs.youtube_client_id = self.prefs.get("youtube_client_id", "")
+		self.prefs.youtube_client_secret = self.prefs.get("youtube_client_secret", "")
+		# Per-account post display template (editable in account options -> Templates).
+		# Default: author name + handle + title + date. Add $description$ to show
+		# the video description.
+		self.prefs.youtube_template = self.prefs.get(
+			"youtube_template", "$account.display_name$ (@$account.acct$): $text$ $created_at$")
+		# Stored token dict (refresh token + last access token). Empty = log in.
+		token = self.prefs.get("youtube_token", None)
+		if isinstance(token, config.Config):
+			token = dict(token)
+
+		def save_token(token_dict):
+			"""Persist refreshed/new tokens back to the account config."""
+			self.prefs.youtube_token = token_dict
+
+		try:
+			# Browser login if we have no stored refresh token yet.
+			if not token or not token.get("refresh_token"):
+				token = oauth.run_oauth_flow(self.prefs)
+				save_token(token)
+
+			try:
+				creds = oauth.dict_to_credentials(token, self.prefs)
+				oauth.ensure_valid_credentials(creds, save_token)
+			except oauth.YouTubeReauthRequired:
+				# Stored token is dead (revoked, or expired after the 7-day
+				# Testing-mode limit). Re-run the browser login now instead of
+				# leaving the account broken.
+				speak.speak("Your YouTube session expired. Please sign in again.")
+				token = oauth.run_oauth_flow(self.prefs)
+				save_token(token)
+				creds = oauth.dict_to_credentials(token, self.prefs)
+				oauth.ensure_valid_credentials(creds, save_token)
+			service = oauth.build_youtube_service(creds)
+
+			# Fetch the authenticated user's channel (identity).
+			me_resp = service.channels().list(
+				part="snippet,statistics,contentDetails", mine=True
+			).execute()
+			items = me_resp.get("items", []) if me_resp else []
+			if not items:
+				speak.speak("This Google account has no YouTube channel.")
+				_exit_app()
+			me_channel = items[0]
+		except oauth.YouTubeAuthError as e:
+			speak.speak("YouTube login error: " + str(e))
+			# Clear a bad token so the next launch re-prompts for login.
+			self.prefs.youtube_token = {}
+			_exit_app()
+		except Exception as e:
+			if _logger:
+				_logger.exception("YouTube init failed: %s", e)
+			speak.speak("Error connecting to YouTube: " + str(e))
+			_exit_app()
+
+		# Platform properties
+		self.api = service
+		self.max_chars = 10000  # comment length ceiling
+		self.default_visibility = 'public'
+
+		# Initialize platform backend
+		self._platform = YouTubeAccount(
+			self.app, index, service, me_channel, self.confpath,
+			credentials=creds, prefs=self.prefs, on_token_refresh=save_token,
+		)
+		self.me = self._platform.me
+
+		self._finish_init(index)
+
+		# Built-in timelines (Home = recommendations, Liked, Your Videos)
+		self._create_builtin_timelines()
+
+		# Restore saved searches (channel/user timelines can be re-added by the user)
+		for q in list(self.prefs.search_timelines):
+			try:
+				self.timelines.append(timeline.timeline(self, name=q + " Search", type="search", data=q, silent=True))
+			except:
+				self.prefs.search_timelines.remove(q)
+
+		# No streaming for YouTube
+		self.stream_listener = None
+		self.stream = None
+		self._stream_started = False
+
+		self._finish_timeline_init()
+
 	def _finish_init(self, index):
 		"""Common initialization after platform-specific setup."""
 		import wx
@@ -556,7 +651,16 @@ class mastodon(object):
 		Respects the timeline_order preference if set, otherwise uses default order.
 		"""
 		# Define available built-in timelines for each platform
-		if self.prefs.platform_type == "bluesky":
+		if self.prefs.platform_type == "youtube":
+			# Home = recommendations (InnerTube), Liked = liked-videos playlist,
+			# Sent = your channel's uploads. No notifications/mentions/DMs on YouTube.
+			available = {
+				"home": ("Home", "home", None, None),
+				"favourites": ("Liked Videos", "favourites", None, None),
+				"sent": ("Your Videos", "user", self.me.acct, self.me),
+			}
+			default_order = ["home", "favourites", "sent"]
+		elif self.prefs.platform_type == "bluesky":
 			available = {
 				"home": ("Home", "home", None, None),
 				"notifications": ("Notifications", "notifications", None, None),
@@ -590,8 +694,8 @@ class mastodon(object):
 				timeline.add(self, name, tl_type, data, user)
 
 	def start_stream(self):
-		# Bluesky doesn't support streaming
-		if self.prefs.platform_type == "bluesky":
+		# Only Mastodon supports streaming
+		if self.prefs.platform_type in ("bluesky", "youtube"):
 			return
 
 		# Use lock to prevent race condition where multiple threads try to start stream
@@ -613,8 +717,8 @@ class mastodon(object):
 			self.stream_thread.start()
 
 	def _run_stream(self):
-		# Bluesky doesn't support streaming
-		if self.prefs.platform_type == "bluesky":
+		# Only Mastodon supports streaming
+		if self.prefs.platform_type in ("bluesky", "youtube"):
 			return
 
 		import time

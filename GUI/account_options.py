@@ -182,6 +182,11 @@ class OptionsGui(wx.Dialog):
 		self.notebook.AddPage(self.timelines_panel, "Timelines")
 		self.alias_panel = AliasPanel(self.account, self.notebook)
 		self.notebook.AddPage(self.alias_panel, "Aliases")
+		# Templates tab - currently YouTube-specific (post display template)
+		self.templates_panel = None
+		if getattr(self.account.prefs, 'platform_type', '') == 'youtube':
+			self.templates_panel = TemplatesPanel(self.account, self.notebook)
+			self.notebook.AddPage(self.templates_panel, "Templates")
 		self.main_box.Add(self.notebook, 0, wx.ALL, 10)
 		self.ok = wx.Button(self.panel, wx.ID_OK, "&OK")
 		self.ok.SetDefault()
@@ -202,6 +207,12 @@ class OptionsGui(wx.Dialog):
 
 		# Save timeline order
 		self.account.prefs.timeline_order = self.timelines_panel.get_order()
+
+		# Save YouTube post template (and refresh display so it takes effect now)
+		if self.templates_panel is not None:
+			self.account.prefs.youtube_template = self.templates_panel.get_template()
+			for tl in getattr(self.account, 'timelines', []):
+				tl.invalidate_display_cache()
 
 		# Handle mentions_in_notifications setting change
 		if self.general.mentions_in_notifications is not None:
@@ -469,3 +480,52 @@ class AliasPanel(wx.Panel):
 				new_idx = min(idx, self.alias_list.GetCount() - 1)
 				self.alias_list.SetSelection(new_idx)
 		self._update_buttons()
+
+
+# Default YouTube post template: author name + handle + title + date.
+DEFAULT_YOUTUBE_TEMPLATE = "$account.display_name$ (@$account.acct$): $text$ $created_at$"
+
+
+class TemplatesPanel(wx.Panel):
+	"""Panel for customizing how YouTube posts (videos) are displayed."""
+
+	def __init__(self, account, parent):
+		super().__init__(parent)
+		self.account = account
+		self.main_box = wx.BoxSizer(wx.VERTICAL)
+
+		info = wx.StaticText(self, -1,
+			"How YouTube videos are shown in timelines. Edit the template below.")
+		self.main_box.Add(info, 0, wx.ALL, 10)
+
+		self.template_label = wx.StaticText(self, -1, "Post &template")
+		self.main_box.Add(self.template_label, 0, wx.LEFT | wx.TOP, 10)
+		current = getattr(account.prefs, 'youtube_template', '') or DEFAULT_YOUTUBE_TEMPLATE
+		self.template = wx.TextCtrl(self, -1, current, style=wx.TE_MULTILINE, name="Post template")
+		self.main_box.Add(self.template, 0, wx.EXPAND | wx.ALL, 10)
+
+		# Placeholder reference
+		placeholders = (
+			"Placeholders:\n"
+			"$text$ - video title\n"
+			"$account.display_name$ - channel name\n"
+			"$account.acct$ - channel @handle\n"
+			"$created_at$ - publish date\n"
+			"$description$ - full video description\n"
+			"$url$ - link to the video"
+		)
+		self.placeholders_label = wx.StaticText(self, -1, placeholders)
+		self.main_box.Add(self.placeholders_label, 0, wx.ALL, 10)
+
+		self.reset_btn = wx.Button(self, -1, "&Reset to Default")
+		self.reset_btn.Bind(wx.EVT_BUTTON, self.on_reset)
+		self.main_box.Add(self.reset_btn, 0, wx.ALL, 10)
+
+		self.SetSizer(self.main_box)
+
+	def on_reset(self, event):
+		self.template.SetValue(DEFAULT_YOUTUBE_TEMPLATE)
+
+	def get_template(self):
+		value = self.template.GetValue().strip()
+		return value or DEFAULT_YOUTUBE_TEMPLATE

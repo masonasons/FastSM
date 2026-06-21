@@ -356,7 +356,70 @@ class youtube_tab(wx.Panel, wx.Dialog):
 		vlc_sizer.Add(self.vlc_download, 0)
 		self.main_box.Add(vlc_sizer, 0, wx.ALL, 10)
 
+		# YouTube account (Google OAuth) status + sign out
+		account_sizer = wx.BoxSizer(wx.HORIZONTAL)
+		self.youtube_status = wx.StaticText(self, -1, self._youtube_status_text())
+		account_sizer.Add(self.youtube_status, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+		self.youtube_signout = wx.Button(self, -1, "Sign out of YouTube")
+		self.youtube_signout.Bind(wx.EVT_BUTTON, self.on_youtube_signout)
+		self.youtube_signout.Enable(self._find_youtube_account() is not None)
+		account_sizer.Add(self.youtube_signout, 0)
+		self.main_box.Add(account_sizer, 0, wx.ALL, 10)
+
 		self.SetSizer(self.main_box)
+
+	def _find_youtube_account(self):
+		"""Return a signed-in YouTube account (current first), or None."""
+		app = get_app()
+		cur = getattr(app, 'currentAccount', None)
+		if cur is not None and getattr(cur.prefs, 'platform_type', '') == 'youtube':
+			return cur
+		for acc in getattr(app, 'accounts', []):
+			if getattr(acc.prefs, 'platform_type', '') == 'youtube':
+				return acc
+		return None
+
+	def _youtube_status_text(self):
+		"""Human-readable sign-in status for the YouTube account."""
+		acc = self._find_youtube_account()
+		if acc is None:
+			return "YouTube: no account signed in."
+		me = getattr(getattr(acc, '_platform', None), 'me', None)
+		name = getattr(me, 'display_name', '') or getattr(me, 'username', '')
+		if name:
+			return f"YouTube: signed in as {name}."
+		return "YouTube: signed in."
+
+	def on_youtube_signout(self, event):
+		"""Clear the stored OAuth token so the next launch re-prompts login."""
+		import speak
+		acc = self._find_youtube_account()
+		if acc is None:
+			speak.speak("No YouTube account is signed in.")
+			return
+		if wx.MessageBox(
+			"Sign out of YouTube? You'll need to log in again the next time you start FastSM.",
+			"Confirm Sign Out", wx.YES_NO | wx.ICON_QUESTION) != wx.YES:
+			return
+		# Best-effort: revoke the grant at Google so the token can't be reused.
+		try:
+			from platforms.youtube import oauth
+			token = acc.prefs.get("youtube_token", None)
+			if token:
+				oauth.revoke_token(dict(token) if not isinstance(token, dict) else token)
+		except Exception:
+			pass
+		# Per-account prefs autosave, so this persists immediately.
+		acc.prefs.youtube_token = {}
+		# Drop in-memory creds so nothing refreshes/re-saves the token this session.
+		try:
+			if getattr(acc, '_platform', None) is not None:
+				acc._platform.credentials = None
+		except Exception:
+			pass
+		self.youtube_status.SetLabel("YouTube: signed out. Restart FastSM to log in again.")
+		self.youtube_signout.Enable(False)
+		speak.speak("Signed out of YouTube. Restart FastSM to log in again.")
 
 	def on_ytdlp_browse(self, event):
 		"""Browse for yt-dlp executable."""

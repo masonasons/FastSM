@@ -1,5 +1,12 @@
 Mastodon.py>=2.0.0
 atproto
+# YouTube platform: Google OAuth + Data API v3
+google-auth
+google-auth-oauthlib
+google-api-python-client
+# YouTube search/recommendations via InnerTube scraping (the c:\yt rebuild).
+# Swap this for the custom rebuild's package name/source once vendored.
+youtube-search-python
 pyinstaller
 pyperclip
 requests
