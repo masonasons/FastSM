@@ -384,7 +384,14 @@ class mastodon(object):
 
 		# Initialize the client and login
 		handle = self.prefs.bluesky_handle
-		service = self.prefs.bluesky_service
+		service = (self.prefs.bluesky_service or "https://bsky.social").strip()
+		if not service.startswith(("http://", "https://")):
+			service = "https://" + service
+			self.prefs.bluesky_service = service
+			try:
+				self.prefs.save()
+			except:
+				pass
 		pw_len = len(self.prefs.bluesky_password or "")
 		if _logger:
 			_logger.info(
@@ -429,9 +436,6 @@ class mastodon(object):
 					exc_info=True,
 				)
 			speak.speak("Error logging into Bluesky: " + str(e))
-			# Clear credentials
-			self.prefs.bluesky_handle = ""
-			self.prefs.bluesky_password = ""
 			_exit_app()
 		except Exception as e:
 			if _logger:
