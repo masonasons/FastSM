@@ -150,6 +150,7 @@ class MastodonStreamListener(StreamListener):
 								break
 					if needs_refresh:
 						main.window.refreshList()
+					self.account.app.refresh_fusion_view_soon()
 				except Exception as e:
 					if not self._is_network_error(e):
 						self.account.app.handle_error(e, "Stream delete (main thread)")
@@ -180,6 +181,7 @@ class MastodonStreamListener(StreamListener):
 								break
 					if needs_refresh:
 						main.window.refreshList()
+					self.account.app.refresh_fusion_view_soon()
 				except Exception as e:
 					if not self._is_network_error(e):
 						self.account.app.handle_error(e, "Stream status update (main thread)")

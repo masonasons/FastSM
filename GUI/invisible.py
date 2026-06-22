@@ -127,6 +127,8 @@ class invisible_interface(object):
 			speak.speak(get_app().process_notification(item, account=account), True)
 		elif tl_type in ("messages", "conversations"):
 			speak.speak(get_app().process_conversation(item, account=account), True)
+		elif tl_type == "fusion":
+			speak.speak(getattr(item, '_display_cache', None) or item.accessible_label(), True)
 		else:
 			# mentions now treated same as home/user/etc.
 			speak.speak(get_app().process_status(item, account=account), True)

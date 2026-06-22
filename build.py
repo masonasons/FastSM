@@ -110,6 +110,7 @@ def get_hidden_imports():
         # Other modules
         "config",
         "timeline",
+        "fusion_account",
         "streaming",
         "mastodon_api",
         "application",
@@ -305,6 +306,12 @@ def build_windows(script_dir: Path, output_dir: Path) -> tuple:
 
     # Create zip file for distribution
     zip_path = create_windows_zip(output_dir, app_dir)
+
+    # PyInstaller leaves an intermediate executable in the work directory that
+    # looks runnable but cannot find the collected runtime DLLs beside it.
+    if build_dir.exists():
+        print(f"Removing intermediate build directory: {build_dir}")
+        shutil.rmtree(build_dir)
 
     return True, zip_path
 

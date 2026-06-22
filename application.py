@@ -82,6 +82,7 @@ class Application:
 		self.currentAccount = None
 		self.timeline_settings = []
 		self._initialized = False
+		self._fusion_refresh_pending = False
 
 	@classmethod
 	def get_instance(cls):
@@ -283,6 +284,8 @@ class Application:
 			# account.folder_index work correctly (notably: removal renumbering).
 			self.accounts.sort(key=lambda a: getattr(a, 'folder_index', 0))
 
+		self.ensure_fusion_account()
+
 		self._initialized = True
 
 		# Check for updates on startup if enabled
@@ -306,13 +309,65 @@ class Application:
 			# would otherwise re-pick up as if it were a new account.
 			index = self._next_free_folder_index()
 		try:
-			self.accounts.append(t.mastodon(self, index))
+			self._remove_fusion_account()
+			account = t.mastodon(self, index)
+			self.accounts.append(account)
+			if getattr(self, '_initialized', False):
+				self.ensure_fusion_account()
+			return account
 		except t.AccountSetupCancelled:
+			if getattr(self, '_initialized', False):
+				self.ensure_fusion_account()
 			# User cancelled account setup - exit gracefully if no accounts
 			if len(self.accounts) == 0:
 				wx.CallAfter(wx.Exit)
 				return
 			# Otherwise just skip this account
+			return None
+
+	def _remove_fusion_account(self):
+		self.accounts = [a for a in self.accounts if not getattr(a, 'is_virtual', False)]
+
+	def ensure_fusion_account(self):
+		"""Ensure the virtual Fusion View account exists at the end of the account list."""
+		self._remove_fusion_account()
+		if not self.accounts:
+			return
+		from fusion_account import FusionAccount
+		self.accounts.append(FusionAccount(self))
+
+	def get_fusion_timeline(self):
+		for account in self.accounts:
+			if getattr(account, 'is_virtual', False):
+				return account.get_timeline_by_type('fusion')
+		return None
+
+	def get_fusion_timelines(self):
+		for account in self.accounts:
+			if getattr(account, 'is_virtual', False):
+				return [tl for tl in account.timelines if tl.type == 'fusion']
+		return []
+
+	def refresh_fusion_view(self):
+		"""Rebuild the Fusion View from currently loaded source timelines."""
+		for tl in self.get_fusion_timelines():
+			tl.load()
+
+	def refresh_fusion_view_soon(self):
+		"""Debounced Fusion refresh for bursts of streaming or refresh events."""
+		if self._fusion_refresh_pending:
+			return
+		self._fusion_refresh_pending = True
+
+		def do_refresh():
+			self._fusion_refresh_pending = False
+			self.refresh_fusion_view()
+
+		try:
+			import wx
+			wx.CallAfter(lambda: wx.CallLater(100, do_refresh))
+		except Exception:
+			do_refresh()
 
 	def _is_account_configured(self, index):
 		"""Check if an account has credentials saved (no dialogs needed)."""

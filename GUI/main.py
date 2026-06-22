@@ -564,6 +564,11 @@ class MainGui(wx.Frame):
 		if not tl.statuses or tl.index >= len(tl.statuses):
 			return None
 		item = tl.statuses[tl.index]
+		if tl.type == "fusion":
+			original = getattr(item, 'original', None)
+			if getattr(item, 'item_type', None) == "notifications" and hasattr(original, 'status'):
+				return original.status
+			return original
 		if get_app().currentAccount.currentTimeline.type == "conversations":
 			# Conversations have last_status instead of being a status directly
 			if hasattr(item, 'last_status') and item.last_status:
@@ -576,6 +581,14 @@ class MainGui(wx.Frame):
 			# For follow notifications etc. without a status, return None
 			return None
 		return item
+
+	def get_current_status_account(self):
+		"""Return the source account for the selected item."""
+		account = get_app().currentAccount
+		tl = account.currentTimeline
+		if tl and tl.type == "fusion" and tl.statuses and tl.index < len(tl.statuses):
+			return getattr(tl.statuses[tl.index], 'source_account', account)
+		return account
 
 	def _sync_status_state_across_buffers(self, account, status_id, **state_updates):
 		"""Sync status state (favourited, reblogged, etc.) across all buffers.
@@ -1029,6 +1042,8 @@ class MainGui(wx.Frame):
 		if selected_idx >= 0 and selected_idx < len(timelines):
 			account.currentTimeline = timelines[selected_idx]
 			account.currentIndex = selected_idx
+			if account.currentTimeline.type == "fusion":
+				account.currentTimeline.load()
 
 		# Update close timeline menu state
 		if account.currentTimeline and account.currentTimeline.removable:
@@ -1089,6 +1104,8 @@ class MainGui(wx.Frame):
 	def on_list_change(self, event):
 		get_app().currentAccount.currentTimeline=get_app().currentAccount.list_timelines()[self.list.GetSelection()]
 		get_app().currentAccount.currentIndex=self.list.GetSelection()
+		if get_app().currentAccount.currentTimeline.type == "fusion":
+			get_app().currentAccount.currentTimeline.load()
 		if get_app().currentAccount.currentTimeline.removable:
 			self.m_close_timeline.Enable(True)
 		else:
@@ -1133,20 +1150,40 @@ class MainGui(wx.Frame):
 		misc.havent_posted(get_app().currentAccount)
 
 	def refreshList(self):
-		stuffage=get_app().currentAccount.currentTimeline.get()
-		self.list2.Freeze()
-		# Use Set() for batch update - much faster than Clear() + individual Append()
-		self.list2.Set(stuffage)
 		tl = get_app().currentAccount.currentTimeline
-		count = self.list2.GetCount()
-		if count == 0:
-			# Empty list - ensure index is 0
-			tl.index = 0
-		else:
-			# Clamp index to valid range and set selection
-			tl.index = max(0, min(tl.index, count - 1))
-			self.list2.SetSelection(tl.index)
-		self.list2.Thaw()
+		top_item_id = None
+		if tl.type == "fusion" and hasattr(self.list2, "GetTopItem"):
+			try:
+				top_index = self.list2.GetTopItem()
+				previous_statuses = getattr(tl, "_previous_refresh_statuses", None)
+				if previous_statuses and 0 <= top_index < len(previous_statuses):
+					top_item_id = str(getattr(previous_statuses[top_index], "id", ""))
+			except Exception:
+				top_item_id = None
+		stuffage=tl.get()
+		self.list2.Freeze()
+		try:
+			self._programmatic_list2_selection = True
+			# Use Set() for batch update - much faster than Clear() + individual Append()
+			self.list2.Set(stuffage)
+			count = self.list2.GetCount()
+			if count == 0:
+				# Empty list - ensure index is 0
+				tl.index = 0
+			else:
+				# Clamp index to valid range and set selection
+				tl.index = max(0, min(tl.index, count - 1))
+				self.list2.SetSelection(tl.index)
+				if top_item_id and hasattr(self.list2, "SetFirstItem"):
+					for idx, item in enumerate(tl.statuses):
+						if str(getattr(item, "id", "")) == top_item_id:
+							self.list2.SetFirstItem(idx)
+							break
+		finally:
+			self._programmatic_list2_selection = False
+			self.list2.Thaw()
+			if hasattr(tl, "_previous_refresh_statuses"):
+				del tl._previous_refresh_statuses
 
 	def insertListItem(self, display_text, position=0):
 		"""Insert a single item at a position (for incremental streaming updates).
@@ -1173,7 +1210,11 @@ class MainGui(wx.Frame):
 		if new_count > 0:
 			tl.index = max(0, min(tl.index, new_count - 1))
 
-		self.list2.SetSelection(tl.index)
+		self._programmatic_list2_selection = True
+		try:
+			self.list2.SetSelection(tl.index)
+		finally:
+			self._programmatic_list2_selection = False
 		# Ensure the selection is visible
 		if tl.index >= 0:
 			self.list2.EnsureVisible(tl.index)
@@ -1188,6 +1229,10 @@ class MainGui(wx.Frame):
 		get_app().save_users()
 
 	def on_list2_change(self, event):
+		if getattr(self, "_programmatic_list2_selection", False):
+			if event:
+				event.Skip()
+			return
 		get_app().currentAccount.currentTimeline.index=self.list2.GetSelection()
 		# Track position change for timeline sync
 		get_app().currentAccount.currentTimeline.mark_position_moved()
@@ -1249,7 +1294,7 @@ class MainGui(wx.Frame):
 		# For other timelines, show the post viewer
 		status = self.get_current_status()
 		if status:
-			viewer = view.ViewGui(get_app().currentAccount, status)
+			viewer = view.ViewGui(self.get_current_status_account(), status)
 			viewer.Show()
 		else:
 			speak.speak("No messages in this conversation")
@@ -1979,7 +2024,7 @@ class MainGui(wx.Frame):
 	def OnUrl(self, event=None):
 		status = self.get_current_status()
 		if status:
-			misc.url_chooser(get_app().currentAccount, status)
+			misc.url_chooser(self.get_current_status_account(), status)
 
 	def OnTweetUrl(self, event=None):
 		status = self.get_current_status()
@@ -1996,7 +2041,8 @@ class MainGui(wx.Frame):
 				url = getattr(status.reblog, 'url', None)
 			if not url and hasattr(status, 'account'):
 				# Construct URL based on platform
-				platform_type = getattr(get_app().currentAccount.prefs, 'platform_type', 'mastodon')
+				account = self.get_current_status_account()
+				platform_type = getattr(account.prefs, 'platform_type', 'mastodon')
 				if platform_type == 'bluesky':
 					# Bluesky URL format: https://bsky.app/profile/{handle}/post/{rkey}
 					handle = getattr(status.account, 'acct', '') or getattr(status.account, 'handle', '')
@@ -2011,7 +2057,7 @@ class MainGui(wx.Frame):
 					url = f"https://bsky.app/profile/{handle}/post/{rkey}"
 				else:
 					# Mastodon URL format
-					url = f"{get_app().currentAccount.prefs.instance_url}/@{status.account.acct}/{status.id}"
+					url = f"{account.prefs.instance_url}/@{status.account.acct}/{status.id}"
 		if url:
 			if platform.system()!="Darwin":
 				webbrowser.open(url)
@@ -2191,35 +2237,35 @@ class MainGui(wx.Frame):
 	def OnReply(self, event=None):
 		status = self.get_current_status()
 		if status:
-			misc.reply(get_app().currentAccount, status)
+			misc.reply(self.get_current_status_account(), status)
 
 	def OnEdit(self, event=None):
 		status = self.get_current_status()
 		if status:
 			if not self._can_edit_status(status):
-				account = get_app().currentAccount
+				account = self.get_current_status_account()
 				if hasattr(account, 'supports_feature') and not account.supports_feature('editing'):
 					speak.speak("Editing posts is not supported on this platform")
 				else:
 					speak.speak("You can only edit your own posts")
 				return
-			misc.edit(get_app().currentAccount, status)
+			misc.edit(self.get_current_status_account(), status)
 
 	def OnQuote(self, event=None):
 		status = self.get_current_status()
 		if status:
-			misc.quote(get_app().currentAccount, status)
+			misc.quote(self.get_current_status_account(), status)
 
 	def OnMessage(self, event=None):
 		status = self.get_current_status()
 		if status:
-			misc.message(get_app().currentAccount, status)
+			misc.message(self.get_current_status_account(), status)
 
 	def OnLikeToggle(self, event=None):
 		"""Toggle favourite/like state for a status."""
 		status = self.get_current_status()
 		if status:
-			account = get_app().currentAccount
+			account = self.get_current_status_account()
 			try:
 				# Get the actual status (unwrap boosts) - need to interact with the original post
 				status_to_check = status.reblog if hasattr(status, 'reblog') and status.reblog else status
@@ -2256,7 +2302,7 @@ class MainGui(wx.Frame):
 		"""Toggle boost/retweet state for a status."""
 		status = self.get_current_status()
 		if status:
-			account = get_app().currentAccount
+			account = self.get_current_status_account()
 			try:
 				# Get the actual status (unwrap boosts) - need to interact with the original post
 				status_to_check = status.reblog if hasattr(status, 'reblog') and status.reblog else status
@@ -2355,7 +2401,7 @@ class MainGui(wx.Frame):
 		"""Toggle bookmark state for a status."""
 		status = self.get_current_status()
 		if status:
-			account = get_app().currentAccount
+			account = self.get_current_status_account()
 			platform_type = getattr(account.prefs, 'platform_type', 'mastodon')
 			if platform_type == 'bluesky':
 				speak.speak("Bookmarks are not supported on Bluesky")

@@ -5,7 +5,46 @@ import sound
 import threading
 import os
 import wx
+from datetime import datetime, timezone
 from GUI import main
+from models import UniversalStatus, UniversalUser
+
+
+class FusionTimelineItem(object):
+	"""Normalized item for the virtual Fusion timeline."""
+
+	def __init__(self, source, source_account, item_type, author, timestamp, time_text, text, post_url, original):
+		self.source = source
+		self.source_account = source_account
+		self.item_type = item_type
+		self.author = author
+		self.timestamp = timestamp
+		self.time_text = time_text
+		self.text = text
+		self.post_url = post_url
+		self.original = original
+		self.id = f"fusion:{item_type}:{source}:{getattr(source_account.me, 'id', '')}:{getattr(original, 'id', '')}"
+		self.created_at = timestamp
+		self.account = getattr(original, 'account', None)
+		self.reblog = getattr(original, 'reblog', None)
+		self.quote = getattr(original, 'quote', None)
+		self.favourited = getattr(original, 'favourited', False)
+		self.reblogged = getattr(original, 'reblogged', False)
+		self.bookmarked = getattr(original, 'bookmarked', False)
+		self.url = post_url
+		self._fusion_item = True
+		self._display_cache = self.accessible_label()
+
+	def accessible_label(self):
+		prefix = self.source
+		if self.author:
+			prefix += f", {self.author}"
+		label = prefix
+		if self.text:
+			label += f": {self.text}"
+		if self.time_text:
+			label += f" {self.time_text}"
+		return label
 
 
 class TimelineSettings(object):
@@ -216,6 +255,8 @@ class timeline(object):
 			status_id = self.data
 			self.func = lambda sid=status_id, **kwargs: self.account.api._Mastodon__api_request('GET', f'/api/v1/statuses/{sid}/quotes')
 			self.removable = True
+		elif self.type == "fusion":
+			self.func = self._load_fusion_items
 
 		# Load saved filter settings if any
 		from GUI.timeline_filter import get_saved_filter
@@ -243,6 +284,76 @@ class timeline(object):
 				return self.account._platform.get_remote_user_timeline(self._remote_url, self._remote_username, filter=self._remote_filter, **kwargs)
 			return self.account._platform.get_remote_user_timeline(self._remote_url, self._remote_username, **kwargs)
 		return []
+
+	def _load_fusion_placeholder(self, **kwargs):
+		"""Return a single accessible placeholder item for the future Fusion View."""
+		user = UniversalUser(
+			id="fusion-view",
+			acct="fusion-view",
+			username="fusion-view",
+			display_name="Fusion View",
+			_platform="fastsm",
+		)
+		return [UniversalStatus(
+			id="fusion-view-placeholder",
+			account=user,
+			content="Fusion View placeholder. Unified Mastodon and Bluesky timelines are not connected yet.",
+			text="Fusion View placeholder. Unified Mastodon and Bluesky timelines are not connected yet.",
+			created_at=datetime.now(timezone.utc),
+			_platform="fastsm",
+		)]
+
+	def _normalize_fusion_timestamp(self, value):
+		if isinstance(value, datetime):
+			if value.tzinfo is None:
+				return value.replace(tzinfo=timezone.utc)
+			return value
+		if isinstance(value, str):
+			try:
+				parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+				if parsed.tzinfo is None:
+					return parsed.replace(tzinfo=timezone.utc)
+				return parsed
+			except ValueError:
+				pass
+		return datetime.min.replace(tzinfo=timezone.utc)
+
+	def _load_fusion_items(self, **kwargs):
+		"""Combine already-loaded timeline items from real accounts."""
+		source_timeline_type = self.data or "home"
+		items = []
+		for account in self.app.accounts:
+			if account is self.account or getattr(account, 'is_virtual', False):
+				continue
+			platform_type = getattr(account.prefs, 'platform_type', '')
+			if platform_type not in ('mastodon', 'bluesky'):
+				continue
+			source_timeline = account.get_timeline_by_type(source_timeline_type) if hasattr(account, 'get_timeline_by_type') else None
+			if not source_timeline:
+				continue
+			source = "Mastodon" if platform_type == "mastodon" else "Bluesky"
+			for item in list(getattr(source_timeline, 'statuses', [])):
+				if source_timeline_type == "notifications":
+					status_for_url = getattr(item, 'status', None)
+					author_obj = getattr(item, 'account', None)
+					timestamp = self._normalize_fusion_timestamp(getattr(item, 'created_at', None))
+					text = self.app.process_notification(item, account=account)
+					post_url = getattr(status_for_url, 'url', None) if status_for_url else None
+				else:
+					author_obj = getattr(item, 'account', None)
+					timestamp = self._normalize_fusion_timestamp(getattr(item, 'created_at', None))
+					text = self.app.process_status(item, return_only_text=True, account=account)
+					post_url = getattr(item, 'url', None)
+				author = ""
+				if author_obj:
+					author = getattr(author_obj, 'display_name', '') or getattr(author_obj, 'acct', '')
+				time_text = self.app.parse_date(timestamp)
+				items.append(FusionTimelineItem(source, account, source_timeline_type, author, timestamp, time_text, text, post_url, item))
+
+		items.sort(key=lambda item: item.timestamp, reverse=True)
+		if items:
+			return items
+		return self._load_fusion_placeholder()
 
 	def _search_statuses(self, **kwargs):
 		"""Helper to search and return only statuses"""
@@ -1114,6 +1225,36 @@ class timeline(object):
 		return all_results
 
 	def load(self, back=False, speech=False, items=[]):
+		if self.type == "fusion" and items == []:
+			previous_statuses = list(self.statuses)
+			current_id = None
+			if self.statuses and 0 <= self.index < len(self.statuses):
+				current_id = str(getattr(self.statuses[self.index], 'id', ''))
+			fusion_items = self.func()
+			self._previous_refresh_statuses = previous_statuses
+			self.statuses = fusion_items
+			self._status_ids = set(str(getattr(item, 'id', '')) for item in fusion_items)
+			self.invalidate_display_cache()
+			if not self.statuses:
+				self.index = 0
+			elif current_id:
+				for idx, item in enumerate(self.statuses):
+					if str(getattr(item, 'id', '')) == current_id:
+						self.index = idx
+						break
+				else:
+					self.index = max(0, min(self.index, len(self.statuses) - 1))
+			else:
+				self.index = max(0, min(self.index, len(self.statuses) - 1))
+			if self.initial:
+				self.initial = False
+				if hasattr(self.account, '_on_timeline_initial_load_complete'):
+					self.account._on_timeline_initial_load_complete()
+			if self.app.currentAccount == self.account and self.account.currentTimeline == self:
+				wx.CallAfter(main.window.refreshList)
+			if speech:
+				speak.speak(f"{len(self.statuses)} items in {self.name}")
+			return True
 		if self.hide:
 			# Still notify if this was an initial load that got skipped
 			if self.initial:
@@ -1562,6 +1703,11 @@ class timeline(object):
 		else:
 			tl = items
 		if tl is not None:
+			selected_status_id = None
+			if not self.initial and self.statuses and 0 <= self.index < len(self.statuses):
+				selected_status = self.statuses[self.index]
+				selected_status_id = str(getattr(selected_status, '_scheduled_id', None) or getattr(selected_status, 'id', ''))
+
 			# Sort scheduled posts by scheduled date (soonest first)
 			if self.type == "scheduled" and tl:
 				tl = sorted(tl, key=lambda x: getattr(x, '_scheduled_at', None) or getattr(x, 'scheduled_at', None) or '')
@@ -1624,8 +1770,8 @@ class timeline(object):
 							filtered_objs2.append(i)
 					objs2 = filtered_objs2
 
-				if self.app.currentAccount == self.account and self.account.currentTimeline == self:
-					wx.CallAfter(main.window.refreshList)
+				if self.type in ("home", "mentions", "notifications"):
+					self.app.refresh_fusion_view_soon()
 
 				if items == []:
 					# Don't set since_id for timelines that use internal pagination IDs
@@ -1657,20 +1803,21 @@ class timeline(object):
 					import time
 					self._last_load_time = time.time()
 
-				# Adjust index when items are added before current position
-				if not back and not self.initial:
-					if not self.app.prefs.reversed:
-						# New items added at front, shift index to stay on same item
-						self.index += len(objs2)
-				if back and self.app.prefs.reversed:
-					# Previous items added at front, shift index to stay on same item
-					self.index += len(objs2)
+				# Keep focus on the same post even when refresh inserts new items above it.
+				if selected_status_id:
+					for idx, item in enumerate(self.statuses):
+						item_id = str(getattr(item, '_scheduled_id', None) or getattr(item, 'id', ''))
+						if item_id == selected_status_id:
+							self.index = idx
+							break
 
 				if self.initial:
 					if not self.app.prefs.reversed:
 						self.index = 0
 					else:
 						self.index = len(self.statuses) - 1
+				if self.app.currentAccount == self.account and self.account.currentTimeline == self:
+					wx.CallAfter(main.window.refreshList)
 				if not self.mute and not self.hide and len(objs2) > 0:
 					self.play(objs2)
 				self.app.prefs.statuses_received += newitems
@@ -1743,6 +1890,8 @@ class timeline(object):
 		if self.account.timelines and self == self.account.timelines[-1] and not self.account.ready:
 			self.account.ready = True
 			sound.play(self.account, "ready")
+		if self.type in ("home", "mentions", "notifications"):
+			self.app.refresh_fusion_view_soon()
 
 	def toggle_read(self):
 		if self.read:
@@ -1765,6 +1914,16 @@ class timeline(object):
 		self.app.save_timeline_settings()
 
 	def get(self):
+		if self.type == "fusion":
+			items = []
+			for item in self.statuses:
+				display = getattr(item, '_display_cache', None)
+				if display is None and hasattr(item, 'accessible_label'):
+					display = item.accessible_label()
+				if display is None:
+					display = self.app.process_status(item, account=self.account)
+				items.append(display)
+			return items
 		# Return cached display list if available and valid
 		if hasattr(self, '_display_list_cache') and self._display_list_cache is not None:
 			if len(self._display_list_cache) == len(self.statuses):

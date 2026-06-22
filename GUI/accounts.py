@@ -92,13 +92,13 @@ class AccountsGui(wx.Dialog):
 	def New(self, event):
 		app = get_app()
 		num_accounts_before = len(app.accounts)
-		app.add_session()
+		new_account = app.add_session()
 		# Check if a new account was actually added
-		if len(app.accounts) <= num_accounts_before:
+		if new_account is None or len(app.accounts) <= num_accounts_before:
 			# Account creation was cancelled or failed
 			return
 		app.prefs.accounts+=1
-		app.currentAccount=app.accounts[len(app.accounts)-1]
+		app.currentAccount=new_account
 		main.window.refreshTimelines()
 		main.window.on_list_change(None)
 		main.window.SetLabel(app.currentAccount.me.acct+" - "+application.name+" "+application.version)
@@ -132,6 +132,9 @@ class AccountsGui(wx.Dialog):
 
 		account_to_remove = app.accounts[selection]
 		account_name = account_to_remove.me.acct
+		if getattr(account_to_remove, 'is_virtual', False):
+			speak.speak("Fusion View cannot be removed")
+			return
 		# Folder number on disk — may differ from the list selection because
 		# parallel-loaded accounts can land in app.accounts in completion order.
 		# Falling back on selection here would delete the right object in memory
