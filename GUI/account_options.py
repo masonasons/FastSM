@@ -373,12 +373,12 @@ class FusionPanel(wx.Panel):
 				instance = parsed.netloc or parsed.path.strip('/')
 				if instance:
 					label = f"{label} on {instance}"
-					checked = app.is_account_in_fusion_view(real_account)
-				chk = wx.CheckBox(self, -1, label)
-				chk.SetValue(checked)
-				chk.account = real_account
-				self.main_box.Add(chk, 0, wx.ALL, 5)
-				self.checkboxes.append(chk)
+			checked = app.is_account_in_fusion_view(real_account)
+			chk = wx.CheckBox(self, -1, label)
+			chk.SetValue(checked)
+			chk.account = real_account
+			self.main_box.Add(chk, 0, wx.ALL, 5)
+			self.checkboxes.append(chk)
 
 		self.SetSizer(self.main_box)
 
