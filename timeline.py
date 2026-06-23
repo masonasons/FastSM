@@ -13,7 +13,7 @@ from models import UniversalStatus, UniversalUser
 class FusionTimelineItem(object):
 	"""Normalized item for the virtual Fusion timeline."""
 
-	def __init__(self, source, source_account, item_type, author, timestamp, time_text, text, post_url, original):
+	def __init__(self, source, source_account, item_type, author, timestamp, time_text, text, post_url, original, notif_type=None):
 		self.source = source
 		self.source_account = source_account
 		self.item_type = item_type
@@ -23,6 +23,7 @@ class FusionTimelineItem(object):
 		self.text = text
 		self.post_url = post_url
 		self.original = original
+		self.notif_type = notif_type
 		self.id = f"fusion:{item_type}:{source}:{getattr(source_account.me, 'id', '')}:{getattr(original, 'id', '')}"
 		self.created_at = timestamp
 		self.account = getattr(original, 'account', None)
@@ -35,16 +36,39 @@ class FusionTimelineItem(object):
 		self._fusion_item = True
 		self._display_cache = self.accessible_label()
 
+	@property
+	def service(self):
+		return self.source
+
+	@property
+	def type(self):
+		return self.notif_type or ""
+
+	@property
+	def source_account_name(self):
+		return getattr(self.source_account, 'me', None) and getattr(self.source_account.me, 'acct', '') or ''
+
+	@property
+	def source_account_display_name(self):
+		return getattr(self.source_account, 'me', None) and getattr(self.source_account.me, 'display_name', '') or self.source_account_name
+
 	def accessible_label(self):
-		prefix = self.source
-		if self.author:
-			prefix += f", {self.author}"
-		label = prefix
-		if self.text:
-			label += f": {self.text}"
-		if self.time_text:
-			label += f" {self.time_text}"
-		return label
+		app = getattr(self.source_account, 'app', None)
+		if not app:
+			prefix = self.source
+			if self.author:
+				prefix += f", {self.author}"
+			label = prefix
+			if self.text:
+				label += f": {self.text}"
+			if self.time_text:
+				label += f" {self.time_text}"
+			return label
+		if self.item_type == "notifications":
+			template = app.prefs.unifiedNotificationTemplate
+		else:
+			template = app.prefs.unifiedTimelineItemTemplate
+		return app.template_to_string(self, template, account=self.source_account)
 
 
 class TimelineSettings(object):
@@ -267,8 +291,11 @@ class timeline(object):
 			self._is_filtered = True
 
 		if self.type != "conversation":
-			# Check if we should load from cache first
-			if self._should_use_cache() and self._load_from_cache():
+			# Fusion timelines are built on demand from already-loaded source timelines;
+			# skip the initial background load so they populate fresh only when shown.
+			if self.type == "fusion":
+				pass
+			elif self._should_use_cache() and self._load_from_cache():
 				# Cache loaded successfully - spawn background refresh thread
 				threading.Thread(target=self._refresh_after_cache, daemon=True).start()
 			else:
@@ -333,11 +360,14 @@ class timeline(object):
 				continue
 			source = "Mastodon" if platform_type == "mastodon" else "Bluesky"
 			for item in list(getattr(source_timeline, 'statuses', [])):
+				notif_type = None
 				if source_timeline_type == "notifications":
 					status_for_url = getattr(item, 'status', None)
 					author_obj = getattr(item, 'account', None)
 					timestamp = self._normalize_fusion_timestamp(getattr(item, 'created_at', None))
-					text = self.app.process_notification(item, account=account)
+					raw_notif_type = getattr(item, 'type', None)
+					notif_type = self.app.get_notification_type_label(raw_notif_type) if raw_notif_type else None
+					text = self.app.get_notification_status_text(status_for_url, account=account)
 					post_url = getattr(status_for_url, 'url', None) if status_for_url else None
 				else:
 					author_obj = getattr(item, 'account', None)
@@ -348,7 +378,7 @@ class timeline(object):
 				if author_obj:
 					author = getattr(author_obj, 'display_name', '') or getattr(author_obj, 'acct', '')
 				time_text = self.app.parse_date(timestamp)
-				items.append(FusionTimelineItem(source, account, source_timeline_type, author, timestamp, time_text, text, post_url, item))
+				items.append(FusionTimelineItem(source, account, source_timeline_type, author, timestamp, time_text, text, post_url, item, notif_type=notif_type))
 
 		items.sort(key=lambda item: item.timestamp, reverse=True)
 		if items:
@@ -686,6 +716,9 @@ class timeline(object):
 
 	def _should_use_cache(self):
 		"""Check if this timeline should use caching."""
+		# Fusion timelines are never cached; they are rebuilt on demand from source timelines.
+		if self.type == 'fusion':
+			return False
 		# Check global cache enabled
 		if not self.app.prefs.timeline_cache_enabled:
 			return False
@@ -1918,10 +1951,11 @@ class timeline(object):
 			items = []
 			for item in self.statuses:
 				display = getattr(item, '_display_cache', None)
-				if display is None and hasattr(item, 'accessible_label'):
-					display = item.accessible_label()
 				if display is None:
-					display = self.app.process_status(item, account=self.account)
+					if hasattr(item, 'accessible_label'):
+						display = item.accessible_label()
+					else:
+						display = self.app.process_status(item, account=self.account)
 				items.append(display)
 			return items
 		# Return cached display list if available and valid
@@ -2172,7 +2206,7 @@ def timelineThread(account):
 							i.members.append(i2.id)
 					except:
 						pass
-				if i.type != "conversation":
+				if i.type != "conversation" and i.type != "fusion":
 					i.load()
 			except MastodonError as error:
 				sound.play(account, "error")

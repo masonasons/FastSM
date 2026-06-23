@@ -125,7 +125,10 @@ class Application:
 		self.prefs.notificationTemplate = self.prefs.get("notificationTemplate", "$account.display_name$ (@$account.acct$) $type$: $text$ $created_at$")
 		self.prefs.messageTemplate = self.prefs.get("messageTemplate", "$account.display_name$: $text$ $created_at$")
 		self.prefs.userTemplate = self.prefs.get("userTemplate", "$display_name$ (@$acct$): $followers_count$ followers, $following_count$ following, $statuses_count$ posts. Bio: $note$")
+		self.prefs.unifiedTimelineItemTemplate = self.prefs.get("unifiedTimelineItemTemplate", "$service$ - $account.display_name$ (@$account.acct$): $text$ $created_at$")
+		self.prefs.unifiedNotificationTemplate = self.prefs.get("unifiedNotificationTemplate", "$service$ - $account.display_name$ (@$account.acct$) $type$: $text$ $created_at$")
 		self.prefs.accounts = self.prefs.get("accounts", 1)
+		self.prefs.show_fusion_view = self.prefs.get("show_fusion_view", False)
 		self.prefs.errors = self.prefs.get("errors", True)
 		self.prefs.streaming = self.prefs.get("streaming", False)
 		self.prefs.invisible = self.prefs.get("invisible", False)
@@ -333,6 +336,8 @@ class Application:
 		self._remove_fusion_account()
 		if not self.accounts:
 			return
+		if not self.prefs.show_fusion_view:
+			return
 		from fusion_account import FusionAccount
 		self.accounts.append(FusionAccount(self))
 
@@ -368,6 +373,29 @@ class Application:
 			wx.CallAfter(lambda: wx.CallLater(100, do_refresh))
 		except Exception:
 			do_refresh()
+
+	def set_show_fusion_view(self, show):
+		"""Toggle the Fusion View on or off dynamically."""
+		self.prefs.show_fusion_view = show
+		from GUI import main
+		if show:
+			self.ensure_fusion_account()
+			if hasattr(main, 'window') and main.window:
+				main.window.refreshTimelines()
+		else:
+			fusion_account = None
+			for account in self.accounts:
+				if getattr(account, 'is_virtual', False):
+					fusion_account = account
+					break
+			self._remove_fusion_account()
+			if fusion_account and self.currentAccount is fusion_account:
+				if self.accounts:
+					self.currentAccount = self.accounts[0]
+					if hasattr(main, 'window') and main.window:
+						main.window._switch_to_account(self.currentAccount)
+			if hasattr(main, 'window') and main.window:
+				main.window.refreshTimelines()
 
 	def _is_account_configured(self, index):
 		"""Check if an account has credentials saved (no dialogs needed)."""
@@ -856,8 +884,8 @@ class Application:
 
 		return result
 
-	def process_notification(self, n, account=None):
-		"""Process a Mastodon notification for display using notification template"""
+	def get_notification_type_label(self, notif_type):
+		"""Return a human-readable label for a notification type."""
 		type_labels = {
 			'follow': 'followed you',
 			'favourite': 'favourited your post',
@@ -871,90 +899,94 @@ class Application:
 			'admin.report': 'new report',
 			'quote': 'quoted your post',
 		}
+		return type_labels.get(notif_type, notif_type)
+
+	def get_notification_status_text(self, status, account=None):
+		"""Build the status text for a notification (quotes, polls, etc.) without template wrapper."""
+		if not status:
+			return ""
+		# Use text field if available, otherwise strip HTML from content
+		status_text = getattr(status, 'text', '') or self.strip_html(getattr(status, 'content', ''))
+
+		# Collapse consecutive usernames at start of text if max_usernames_display is set
+		max_usernames = getattr(self.prefs, 'max_usernames_display', 0)
+		if max_usernames > 0:
+			import re
+			username_pattern = r'^((?:@[\w.-]+(?:@[\w.-]+)?(?:\s+|$))+)'
+			match = re.match(username_pattern, status_text)
+			if match:
+				username_portion = match.group(1)
+				usernames = re.findall(r'@[\w.-]+(?:@[\w.-]+)?', username_portion)
+				if len(usernames) > max_usernames:
+					first_username = usernames[0]
+					remaining_count = len(usernames) - 1
+					rest_of_text = status_text[len(username_portion):].lstrip()
+					status_text = f"{first_username} and {remaining_count} more"
+					if rest_of_text:
+						status_text += f" {rest_of_text}"
+
+		# Handle quote notifications - format similar to how quotes are shown in timelines
+		if hasattr(status, 'quote') and status.quote:
+			import re
+			# Strip quote-related URLs from status_text (same as process_status)
+			status_text = re.sub(r'^(RE|QT|re|qt):\s*https?://\S+\s*', '', status_text, flags=re.IGNORECASE).strip()
+			quote_url = getattr(status.quote, 'url', None)
+			if quote_url:
+				status_text = status_text.rstrip()
+				if status_text.endswith(quote_url):
+					status_text = status_text[:-len(quote_url)].rstrip()
+			status_text = re.sub(r'\s*https?://[^\s]+/@[^\s]+/\d+\s*$', '', status_text).strip()
+
+			quote = status.quote
+			quote_text = getattr(quote, 'text', '') or self.strip_html(getattr(quote, 'content', ''))
+			quote_account = getattr(quote, 'account', None)
+			if quote_account:
+				quote_user_id = str(getattr(quote_account, 'id', ''))
+				if account and quote_user_id and quote_user_id in account.prefs.aliases:
+					quote_name = account.prefs.aliases[quote_user_id]
+				else:
+					quote_name = getattr(quote_account, 'display_name', '') or getattr(quote_account, 'acct', '')
+				quote_acct = getattr(quote_account, 'acct', '')
+				status_text += f" Quoting {quote_name} (@{quote_acct}): {quote_text}"
+			else:
+				status_text += f" Quoting: {quote_text}"
+
+		# Add poll info for notifications with polls
+		if hasattr(status, 'poll') and status.poll:
+			poll = status.poll
+			def get_poll_attr(obj, name, default=None):
+				if isinstance(obj, dict):
+					return obj.get(name, default)
+				return getattr(obj, name, default)
+
+			is_expired = get_poll_attr(poll, 'expired', False)
+			options = get_poll_attr(poll, 'options', [])
+			votes_count = get_poll_attr(poll, 'votes_count', 0)
+			option_texts = []
+			for opt in options:
+				opt_title = get_poll_attr(opt, 'title', str(opt))
+				opt_votes = get_poll_attr(opt, 'votes_count', 0)
+				if is_expired and votes_count > 0:
+					pct = (opt_votes / votes_count) * 100
+					option_texts.append(f"{opt_title}: {pct:.0f}%")
+				else:
+					option_texts.append(opt_title)
+			poll_label = "Poll ended" if is_expired else "Poll"
+			status_text += f" ({poll_label}: {', '.join(option_texts)})"
+
+		return status_text
+
+	def process_notification(self, n, account=None):
+		"""Process a Mastodon notification for display using notification template"""
 
 		notif_type = getattr(n, 'type', 'unknown')
 		status = getattr(n, 'status', None)
 
 		# Get human-readable type label
-		label = type_labels.get(notif_type, notif_type)
+		label = self.get_notification_type_label(notif_type)
 
 		# Build status text if notification has an associated status
-		status_text = ""
-		if status:
-			# Use text field if available, otherwise strip HTML from content
-			status_text = getattr(status, 'text', '') or self.strip_html(getattr(status, 'content', ''))
-
-			# Collapse consecutive usernames at start of text if max_usernames_display is set
-			max_usernames = getattr(self.prefs, 'max_usernames_display', 0)
-			if max_usernames > 0:
-				import re
-				username_pattern = r'^((?:@[\w.-]+(?:@[\w.-]+)?(?:\s+|$))+)'
-				match = re.match(username_pattern, status_text)
-				if match:
-					username_portion = match.group(1)
-					usernames = re.findall(r'@[\w.-]+(?:@[\w.-]+)?', username_portion)
-					if len(usernames) > max_usernames:
-						first_username = usernames[0]
-						remaining_count = len(usernames) - 1
-						rest_of_text = status_text[len(username_portion):].lstrip()
-						status_text = f"{first_username} and {remaining_count} more"
-						if rest_of_text:
-							status_text += f" {rest_of_text}"
-
-			# Handle quote notifications - format similar to how quotes are shown in timelines
-			if hasattr(status, 'quote') and status.quote:
-				import re
-				# Strip quote-related URLs from status_text (same as process_status)
-				# Remove RE:/QT: followed by a URL at the start
-				status_text = re.sub(r'^(RE|QT|re|qt):\s*https?://\S+\s*', '', status_text, flags=re.IGNORECASE).strip()
-				# Get the quoted post's URL to strip it from the text
-				quote_url = getattr(status.quote, 'url', None)
-				if quote_url:
-					# Strip the exact URL if it appears at the end
-					status_text = status_text.rstrip()
-					if status_text.endswith(quote_url):
-						status_text = status_text[:-len(quote_url)].rstrip()
-				# Also strip any trailing Mastodon-style status URLs (https://instance/@user/id)
-				status_text = re.sub(r'\s*https?://[^\s]+/@[^\s]+/\d+\s*$', '', status_text).strip()
-
-				quote = status.quote
-				quote_text = getattr(quote, 'text', '') or self.strip_html(getattr(quote, 'content', ''))
-				quote_account = getattr(quote, 'account', None)
-				if quote_account:
-					# Check for alias
-					quote_user_id = str(getattr(quote_account, 'id', ''))
-					if account and quote_user_id and quote_user_id in account.prefs.aliases:
-						quote_name = account.prefs.aliases[quote_user_id]
-					else:
-						quote_name = getattr(quote_account, 'display_name', '') or getattr(quote_account, 'acct', '')
-					quote_acct = getattr(quote_account, 'acct', '')
-					status_text += f" Quoting {quote_name} (@{quote_acct}): {quote_text}"
-				else:
-					status_text += f" Quoting: {quote_text}"
-
-			# Add poll info for notifications with polls
-			if hasattr(status, 'poll') and status.poll:
-				poll = status.poll
-				# Handle both object and dict (from cache)
-				def get_poll_attr(obj, name, default=None):
-					if isinstance(obj, dict):
-						return obj.get(name, default)
-					return getattr(obj, name, default)
-
-				is_expired = get_poll_attr(poll, 'expired', False)
-				options = get_poll_attr(poll, 'options', [])
-				votes_count = get_poll_attr(poll, 'votes_count', 0)
-				option_texts = []
-				for opt in options:
-					opt_title = get_poll_attr(opt, 'title', str(opt))
-					opt_votes = get_poll_attr(opt, 'votes_count', 0)
-					if is_expired and votes_count > 0:
-						pct = (opt_votes / votes_count) * 100
-						option_texts.append(f"{opt_title}: {pct:.0f}%")
-					else:
-						option_texts.append(opt_title)
-				poll_label = "Poll ended" if is_expired else "Poll"
-				status_text += f" ({poll_label}: {', '.join(option_texts)})"
+		status_text = self.get_notification_status_text(status, account=account)
 
 		# Wrap notification with type label and text for templating
 		wrapped = NotificationWrapper(n, type_label=label, text=status_text)

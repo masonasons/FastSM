@@ -162,6 +162,10 @@ class timelines_tab(wx.Panel, wx.Dialog):
 		self.main_box.Add(self.timeline_cache_enabled, 0, wx.ALL, 10)
 		self.timeline_cache_enabled.SetValue(get_app().prefs.timeline_cache_enabled)
 
+		self.show_fusion_view=wx.CheckBox(self, -1, "Show unified Fusion View account")
+		self.main_box.Add(self.show_fusion_view, 0, wx.ALL, 10)
+		self.show_fusion_view.SetValue(get_app().prefs.show_fusion_view)
+
 		cache_limit_label = wx.StaticText(self, -1, "Maximum items to cache per timeline (100-20000):")
 		self.main_box.Add(cache_limit_label, 0, wx.LEFT | wx.TOP, 10)
 		self.timeline_cache_limit = wx.SpinCtrl(self, -1, min=100, max=20000, initial=get_app().prefs.timeline_cache_limit, name="Maximum items to cache per timeline")
@@ -627,6 +631,22 @@ class templates(wx.Panel, wx.Dialog):
 		self.notificationTemplate_placeholder_btn = wx.Button(self, -1, "Insert Placeholder...")
 		self.main_box.Add(self.notificationTemplate_placeholder_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 		self.notificationTemplate_placeholder_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_placeholder_menu(e, self.notificationTemplate, 'notification'))
+		self.unifiedTimelineItemTemplate_label = wx.StaticText(self, -1, "Unified timeline item template")
+		self.main_box.Add(self.unifiedTimelineItemTemplate_label, 0, wx.LEFT | wx.TOP, 10)
+		self.unifiedTimelineItemTemplate = wx.TextCtrl(self, -1, "", name="Unified timeline item template")
+		self.main_box.Add(self.unifiedTimelineItemTemplate, 0, wx.EXPAND | wx.ALL, 10)
+		self.unifiedTimelineItemTemplate.AppendText(get_app().prefs.unifiedTimelineItemTemplate)
+		self.unifiedTimelineItemTemplate_placeholder_btn = wx.Button(self, -1, "Insert Placeholder...")
+		self.main_box.Add(self.unifiedTimelineItemTemplate_placeholder_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+		self.unifiedTimelineItemTemplate_placeholder_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_placeholder_menu(e, self.unifiedTimelineItemTemplate, 'unified_timeline_item'))
+		self.unifiedNotificationTemplate_label = wx.StaticText(self, -1, "Unified notification template")
+		self.main_box.Add(self.unifiedNotificationTemplate_label, 0, wx.LEFT | wx.TOP, 10)
+		self.unifiedNotificationTemplate = wx.TextCtrl(self, -1, "", name="Unified notification template")
+		self.main_box.Add(self.unifiedNotificationTemplate, 0, wx.EXPAND | wx.ALL, 10)
+		self.unifiedNotificationTemplate.AppendText(get_app().prefs.unifiedNotificationTemplate)
+		self.unifiedNotificationTemplate_placeholder_btn = wx.Button(self, -1, "Insert Placeholder...")
+		self.main_box.Add(self.unifiedNotificationTemplate_placeholder_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+		self.unifiedNotificationTemplate_placeholder_btn.Bind(wx.EVT_BUTTON, lambda e: self.show_placeholder_menu(e, self.unifiedNotificationTemplate, 'unified_notification'))
 		self.restore_defaults_btn = wx.Button(self, -1, "&Restore Defaults")
 		self.main_box.Add(self.restore_defaults_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 		self.restore_defaults_btn.Bind(wx.EVT_BUTTON, self.on_restore_defaults)
@@ -656,6 +676,8 @@ class templates(wx.Panel, wx.Dialog):
 			self.notificationTemplate.SetValue("$account.display_name$ (@$account.acct$) $type$: $text$ $created_at$")
 			self.messageTemplate.SetValue("$account.display_name$: $text$ $created_at$")
 			self.userTemplate.SetValue("$display_name$ (@$acct$): $followers_count$ followers, $following_count$ following, $statuses_count$ posts. Bio: $note$")
+			self.unifiedTimelineItemTemplate.SetValue("$service$ - $account.display_name$ (@$account.acct$): $text$ $created_at$")
+			self.unifiedNotificationTemplate.SetValue("$service$ - $account.display_name$ (@$account.acct$) $type$: $text$ $created_at$")
 
 	def show_placeholder_menu(self, event, text_ctrl, template_type):
 		"""Show a context menu with available placeholders for the template type."""
@@ -755,6 +777,33 @@ class templates(wx.Panel, wx.Dialog):
 				('$status.language$', 'Related post language code (if any)'),
 				('$status.application.name$', 'Related posting application name'),
 				('$status.application.website$', 'Related posting application website'),
+			]
+		elif template_type == 'unified_timeline_item':
+			placeholders = [
+				('$service$', 'Source service (Mastodon/Bluesky)'),
+				('$source_account_name$', 'FastSM source account handle'),
+				('$source_account_display_name$', 'FastSM source account display name'),
+				('$text$', 'Post text content'),
+				('$created_at$', 'Creation date/time'),
+				('$account.display_name$', 'Author display name'),
+				('$account.acct$', 'Author account handle'),
+				('$account.username$', 'Author username'),
+				('$account.url$', 'Author profile URL'),
+				('$url$', 'Post URL'),
+			]
+		elif template_type == 'unified_notification':
+			placeholders = [
+				('$service$', 'Source service (Mastodon/Bluesky)'),
+				('$source_account_name$', 'FastSM source account handle'),
+				('$source_account_display_name$', 'FastSM source account display name'),
+				('$type$', 'Notification type'),
+				('$text$', 'Related post text (if any)'),
+				('$created_at$', 'Notification date/time'),
+				('$account.display_name$', 'Triggering user display name'),
+				('$account.acct$', 'Triggering user account handle'),
+				('$account.username$', 'Triggering user username'),
+				('$account.url$', 'Triggering user profile URL'),
+				('$url$', 'Related post URL (if any)'),
 			]
 		else:
 			placeholders = []
@@ -1086,6 +1135,9 @@ class OptionsGui(wx.Dialog):
 		get_app().prefs.load_all_previous=self.advanced.load_all_previous.GetValue()
 		get_app().prefs.sync_timeline_position=self.timelines_tab.sync_timeline_position.GetValue()
 		get_app().prefs.timeline_cache_enabled=self.timelines_tab.timeline_cache_enabled.GetValue()
+		new_show_fusion_view = self.timelines_tab.show_fusion_view.GetValue()
+		if get_app().prefs.show_fusion_view != new_show_fusion_view:
+			get_app().set_show_fusion_view(new_show_fusion_view)
 		get_app().prefs.timeline_cache_limit=self.timelines_tab.timeline_cache_limit.GetValue()
 		get_app().prefs.check_for_updates=self.advanced.check_for_updates.GetValue()
 		# Dark mode setting
@@ -1176,6 +1228,8 @@ class OptionsGui(wx.Dialog):
 			get_app().prefs.quoteTemplate != self.templates.quoteTemplate.GetValue() or
 			get_app().prefs.messageTemplate != self.templates.messageTemplate.GetValue() or
 			get_app().prefs.notificationTemplate != self.templates.notificationTemplate.GetValue() or
+			get_app().prefs.unifiedTimelineItemTemplate != self.templates.unifiedTimelineItemTemplate.GetValue() or
+			get_app().prefs.unifiedNotificationTemplate != self.templates.unifiedNotificationTemplate.GetValue() or
 			get_app().prefs.include_media_descriptions != self.templates.include_media_descriptions.GetValue() or
 			get_app().prefs.include_link_preview != self.templates.include_link_preview.GetValue() or
 			get_app().prefs.max_usernames_display != self.templates.max_usernames_display.GetValue() or
@@ -1192,6 +1246,8 @@ class OptionsGui(wx.Dialog):
 		get_app().prefs.copyTemplate=self.templates.copyTemplate.GetValue()
 		get_app().prefs.userTemplate=self.templates.userTemplate.GetValue()
 		get_app().prefs.notificationTemplate=self.templates.notificationTemplate.GetValue()
+		get_app().prefs.unifiedTimelineItemTemplate=self.templates.unifiedTimelineItemTemplate.GetValue()
+		get_app().prefs.unifiedNotificationTemplate=self.templates.unifiedNotificationTemplate.GetValue()
 		get_app().prefs.include_media_descriptions=self.templates.include_media_descriptions.GetValue()
 		get_app().prefs.include_link_preview=self.templates.include_link_preview.GetValue()
 		get_app().prefs.max_usernames_display=self.templates.max_usernames_display.GetValue()
