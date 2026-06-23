@@ -129,6 +129,7 @@ class Application:
 		self.prefs.unifiedNotificationTemplate = self.prefs.get("unifiedNotificationTemplate", "$service$ - $account.display_name$ (@$account.acct$) $type$: $text$ $created_at$")
 		self.prefs.accounts = self.prefs.get("accounts", 1)
 		self.prefs.show_fusion_view = self.prefs.get("show_fusion_view", False)
+		self.prefs.fusion_excluded_accounts = self.prefs.get("fusion_excluded_accounts", [])
 		self.prefs.errors = self.prefs.get("errors", True)
 		self.prefs.streaming = self.prefs.get("streaming", False)
 		self.prefs.invisible = self.prefs.get("invisible", False)
@@ -396,6 +397,29 @@ class Application:
 						main.window._switch_to_account(self.currentAccount)
 			if hasattr(main, 'window') and main.window:
 				main.window.refreshTimelines()
+
+	def is_account_in_fusion_view(self, account):
+		"""Check if a real account is included in the Fusion View."""
+		if getattr(account, 'is_virtual', False):
+			return False
+		excluded = getattr(self.prefs, 'fusion_excluded_accounts', [])
+		return str(getattr(account.me, 'id', '')) not in [str(aid) for aid in excluded]
+
+	def set_account_in_fusion_view(self, account, include):
+		"""Include or exclude a real account from the Fusion View."""
+		if getattr(account, 'is_virtual', False):
+			return
+		account_id = str(getattr(account.me, 'id', ''))
+		excluded = list(getattr(self.prefs, 'fusion_excluded_accounts', []))
+		excluded_ids = [str(aid) for aid in excluded]
+		if include:
+			if account_id in excluded_ids:
+				idx = excluded_ids.index(account_id)
+				excluded.pop(idx)
+		else:
+			if account_id not in excluded_ids:
+				excluded.append(account_id)
+		self.prefs.fusion_excluded_accounts = excluded
 
 	def _is_account_configured(self, index):
 		"""Check if an account has credentials saved (no dialogs needed)."""

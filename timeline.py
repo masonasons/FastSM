@@ -352,6 +352,8 @@ class timeline(object):
 		for account in self.app.accounts:
 			if account is self.account or getattr(account, 'is_virtual', False):
 				continue
+			if not self.app.is_account_in_fusion_view(account):
+				continue
 			platform_type = getattr(account.prefs, 'platform_type', '')
 			if platform_type not in ('mastodon', 'bluesky'):
 				continue

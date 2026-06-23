@@ -180,6 +180,9 @@ class OptionsGui(wx.Dialog):
 		self.notebook.AddPage(self.general, "General")
 		self.timelines_panel = TimelinesPanel(self.account, self.notebook)
 		self.notebook.AddPage(self.timelines_panel, "Timelines")
+		if getattr(self.account, 'is_virtual', False):
+			self.fusion_panel = FusionPanel(self.account, self.notebook)
+			self.notebook.AddPage(self.fusion_panel, "Fusion View")
 		self.alias_panel = AliasPanel(self.account, self.notebook)
 		self.notebook.AddPage(self.alias_panel, "Aliases")
 		self.main_box.Add(self.notebook, 0, wx.ALL, 10)
@@ -222,6 +225,10 @@ class OptionsGui(wx.Dialog):
 						# Reload in background
 						threading.Thread(target=tl.load, daemon=True).start()
 						break
+
+		# Save Fusion View account inclusion settings from the virtual account panel
+		if getattr(self.account, 'is_virtual', False):
+			self.fusion_panel.save()
 
 		# Explicitly save preferences to ensure persistence
 		self.account.prefs.save()
@@ -340,6 +347,61 @@ class TimelinesPanel(wx.Panel):
 	def get_order(self):
 		"""Return the current timeline order."""
 		return self.current_order
+
+
+class FusionPanel(wx.Panel):
+	"""Panel for choosing which real accounts appear in the Fusion View."""
+
+	def __init__(self, account, parent):
+		super().__init__(parent)
+		self.account = account
+		self.main_box = wx.BoxSizer(wx.VERTICAL)
+
+		info = wx.StaticText(self, -1, "Select which accounts appear in the unified Fusion View:")
+		self.main_box.Add(info, 0, wx.ALL, 10)
+
+		self.checkboxes = []
+		app = get_app()
+		for real_account in app.accounts:
+			if getattr(real_account, 'is_virtual', False):
+				continue
+			label = getattr(real_account.me, 'acct', 'Unknown')
+			platform_type = getattr(real_account.prefs, 'platform_type', 'mastodon')
+			if platform_type == 'mastodon' and hasattr(real_account, 'api') and hasattr(real_account.api, 'api_base_url'):
+				from urllib.parse import urlparse
+				parsed = urlparse(real_account.api.api_base_url)
+				instance = parsed.netloc or parsed.path.strip('/')
+				if instance:
+					label = f"{label} on {instance}"
+					checked = app.is_account_in_fusion_view(real_account)
+				chk = wx.CheckBox(self, -1, label)
+				chk.SetValue(checked)
+				chk.account = real_account
+				self.main_box.Add(chk, 0, wx.ALL, 5)
+				self.checkboxes.append(chk)
+
+		self.SetSizer(self.main_box)
+
+	def save(self):
+		app = get_app()
+		changed = False
+		for chk in self.checkboxes:
+			old = app.is_account_in_fusion_view(chk.account)
+			new = chk.GetValue()
+			if old != new:
+				app.set_account_in_fusion_view(chk.account, new)
+				changed = True
+		if changed:
+			# Refresh the Fusion View so the change is visible immediately.
+			import threading
+			for tl in self.account.timelines:
+				if tl.type == "fusion":
+					tl.statuses = []
+					tl._status_ids = set()
+					tl.index = 0
+					tl.initial = True
+					threading.Thread(target=tl.load, daemon=True).start()
+					break
 
 
 class AliasPanel(wx.Panel):
