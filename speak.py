@@ -33,11 +33,9 @@ _prism_backend = None
 _prism_backend_id = None
 _last_recheck = 0.0
 _RECHECK_INTERVAL = 5.0
-_PRISM_FAILURE_BACKOFF = 30.0
-_prism_backoff_until = 0.0
 _lock = threading.Lock()
-_shutdown_started = False
 _logger = logging.getLogger("fastsm.speech")
+_shutdown_started = False
 
 # Legacy accessible_output2 backend, lazily imported so the dependency is only
 # loaded when the user actually opts into it.
@@ -77,17 +75,12 @@ def _get_a2_speaker():
 	return _a2_speaker
 
 
-def _prism_backoff_active():
-	return time.monotonic() < _prism_backoff_until
-
-
-def _log_prism_failure(action, error, backoff=False):
+def _log_prism_failure(action, error):
 	try:
-		extra = " Temporarily disabling prism speech." if backoff else ""
 		fastsm_logger = logging.getLogger("fastsm")
 		if not fastsm_logger.handlers:
 			return
-		_logger.warning("Prism speech %s failed: %s.%s", action, error, extra)
+		_logger.warning("Prism speech %s failed: %s.", action, error)
 		_logger.debug("Prism speech %s traceback", action, exc_info=True)
 	except Exception:
 		pass
@@ -95,8 +88,6 @@ def _log_prism_failure(action, error, backoff=False):
 
 def _get_prism_module():
 	global _prism
-	if _prism_backoff_active():
-		raise _SpeechBackendUnavailable("prism speech is in failure backoff")
 	if _prism is None:
 		_prism = importlib.import_module("prism")
 	return _prism
@@ -161,22 +152,18 @@ def _get_prism_backend():
 		return _prism_backend
 
 
-def _invalidate_backend(reset_context=False, backoff=False, reset_backoff=False):
-	global _context, _prism_backend, _prism_backend_id, _prism_backoff_until
+def _invalidate_backend(reset_context=False):
+	global _context, _prism_backend, _prism_backend_id
 	with _lock:
 		_prism_backend = None
 		_prism_backend_id = None
 		if reset_context:
 			_context = None
-		if reset_backoff:
-			_prism_backoff_until = 0.0
-		if backoff:
-			_prism_backoff_until = time.monotonic() + _PRISM_FAILURE_BACKOFF
 
 
 def reset_backend():
 	"""Force re-detection of the speech backend on the next speak() call."""
-	_invalidate_backend(reset_context=True, reset_backoff=True)
+	_invalidate_backend(reset_context=True)
 
 
 def _try_speak(text, interrupt):
@@ -235,12 +222,12 @@ def _do_speak(text, interrupt, retry=True, allow_shutdown=False):
 		pass
 	except Exception as error:
 		# The current backend died or prism exposed a native/DBus backend
-		# failure outside PrismError (for example an unsupported Orca DBus API).
+		# failure outside PrismError (for example an unsupported Orca D-Bus API).
 		# Drop it and retry once with a fresh pick, but never let speech output
 		# abort callers such as application shutdown.
 		_log_prism_failure("output", error)
 		if not retry:
-			_invalidate_backend(reset_context=True, backoff=True)
+			_invalidate_backend(reset_context=True)
 			return
 		_invalidate_backend()
 		try:
@@ -248,8 +235,8 @@ def _do_speak(text, interrupt, retry=True, allow_shutdown=False):
 		except _SpeechBackendUnavailable:
 			pass
 		except Exception as retry_error:
-			_log_prism_failure("retry", retry_error, backoff=True)
-			_invalidate_backend(reset_context=True, backoff=True)
+			_log_prism_failure("retry", retry_error)
+			_invalidate_backend(reset_context=True)
 			pass
 
 

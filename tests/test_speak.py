@@ -137,7 +137,7 @@ class SpeakPrismFailureTests(unittest.TestCase):
 
 		self.assertIsNone(speak._prism_backend)
 
-	def test_backoff_skips_repeated_prism_creation_attempts(self):
+	def test_repeated_prism_creation_attempts_keep_trying(self):
 		class Context:
 			create_count = 0
 
@@ -148,9 +148,9 @@ class SpeakPrismFailureTests(unittest.TestCase):
 		speak = _load_speak_with_context(Context)
 
 		speak.speak("first failure")
-		speak.speak("during backoff")
+		speak.speak("second failure")
 
-		self.assertEqual(Context.create_count, 2)
+		self.assertEqual(Context.create_count, 4)
 
 	def test_prism_failure_does_not_show_dialogs(self):
 		class DialogSentinel:
