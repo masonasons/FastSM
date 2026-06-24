@@ -166,11 +166,25 @@ def reset_backend():
 	_invalidate_backend(reset_context=True)
 
 
+def _sanitize_speech_text(text):
+	"""Ensure text can be passed to native speech APIs without UTF-8 errors.
+
+	Some incoming strings contain lone surrogates or other characters that are
+	legal in Python strings but rejected by backends expecting valid UTF-8.
+	Encoding with replacement gives a safe version that still speaks.
+	"""
+	if not isinstance(text, str):
+		text = str(text)
+	# Replace characters that cannot be represented in UTF-8 (e.g. lone surrogates)
+	return text.encode('utf-8', 'replace').decode('utf-8')
+
+
 def _try_speak(text, interrupt):
 	backend = _get_prism_backend()
-	backend.speak(text, interrupt)
+	safe_text = _sanitize_speech_text(text)
+	backend.speak(safe_text, interrupt)
 	try:
-		backend.braille(text)
+		backend.braille(safe_text)
 	except Exception:
 		pass
 
