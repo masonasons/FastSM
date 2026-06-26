@@ -166,23 +166,58 @@ def reset_backend():
 	_invalidate_backend(reset_context=True)
 
 
-def _sanitize_speech_text(text):
-	"""Ensure text can be passed to native speech APIs without UTF-8 errors.
+_C0_STRIPPED = ''.join(
+	chr(c) for c in range(0x20) if chr(c) not in ('\t', '\n', '\r')
+) + '\x7f'
+_C0_TRANSLATE = {ord(c): None for c in _C0_STRIPPED}
+# NUL is special-cased to a space rather than dropped: prism rejects strings
+# that start with NUL with PRISM_ERROR_INVALID_UTF8, and dropping NULs from
+# 'foo\x00bar' would just merge tokens that the source actually separated.
+_C0_TRANSLATE[0] = ord(' ')
 
-	Some incoming strings contain lone surrogates or other characters that are
-	legal in Python strings but rejected by backends expecting valid UTF-8.
-	Encoding with replacement gives a safe version that still speaks.
+
+def _sanitize_speech_text(text):
+	"""Ensure text can be passed to prism without it returning Invalid UTF-8.
+
+	prism's native side rejects several inputs that are legal UTF-8 from Python's
+	perspective — most commonly text containing a NUL byte (which our C-signature
+	wrapper sees as 'const char *' and which triggers a leading-NUL false-positive
+	at the very least). C0 control characters carry no speech meaning anyway and
+	some backends choke on them too. Also coerce lone surrogates via an encode/
+	decode round-trip with replacement, which produces a string Python's UTF-8
+	encoder will accept without raising.
 	"""
 	if not isinstance(text, str):
 		text = str(text)
-	# Replace characters that cannot be represented in UTF-8 (e.g. lone surrogates)
-	return text.encode('utf-8', 'replace').decode('utf-8')
+	# Replace lone surrogates / anything Python's UTF-8 encoder would otherwise reject.
+	text = text.encode('utf-8', 'replace').decode('utf-8')
+	# Strip C0 controls (keep TAB/LF/CR) and DEL; turn NUL into a space.
+	return text.translate(_C0_TRANSLATE)
 
 
 def _try_speak(text, interrupt):
 	backend = _get_prism_backend()
 	safe_text = _sanitize_speech_text(text)
-	backend.speak(safe_text, interrupt)
+	# An empty / whitespace-only payload is not speakable, and prism's Python
+	# wrapper would raise PrismInvalidParamError on len()==0 anyway.
+	if not safe_text or not safe_text.strip():
+		return
+	try:
+		backend.speak(safe_text, interrupt)
+	except Exception as error:
+		# Prism returning PRISM_ERROR_INVALID_UTF8 for text that IS valid UTF-8
+		# from Python's side has been observed for certain codepoints (e.g.
+		# U+200C, U+10FFFF) regardless of backend. Log a sample so we can spot
+		# the offending character without needing the user to reproduce.
+		if type(error).__name__ == 'PrismInvalidUtf8Error':
+			sample = safe_text[:60]
+			_logger.warning(
+				"Prism rejected text as Invalid UTF-8: len=%d sample_repr=%r first_codepoints=%s",
+				len(safe_text),
+				sample,
+				[f'U+{ord(c):04X}' for c in sample[:20]],
+			)
+		raise
 	try:
 		backend.braille(safe_text)
 	except Exception:
