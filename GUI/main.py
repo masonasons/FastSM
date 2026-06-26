@@ -8,7 +8,7 @@ from application import get_app
 import wx
 from keyboard_handler.wx_handler import WXKeyboardHandler
 import speak
-from . import account_options, accounts, chooser, custom_timelines, explore_dialog, hashtag_dialog, invisible, lists, misc, options, profile, search, theme, timeline_filter, timelines, tray, tweet, view
+from . import account_options, accounts, chooser, custom_timelines, explore_dialog, hashtag_dialog, invisible, keymap_manager, lists, misc, options, profile, search, theme, timeline_filter, timelines, tray, tweet, view
 import sound
 import timeline
 import threading
@@ -122,6 +122,11 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnOptions, m_options)
 		m_account_options = menu.Append(-1, "Account options\tCtrl+Shift+,", "account_options")
 		self.Bind(wx.EVT_MENU, self.OnAccountOptions, m_account_options)
+		if platform.system() == "Darwin":
+			m_keymap = menu.Append(-1, "Keyboard manager (Ctrl+Shift+K)", "keymap")
+		else:
+			m_keymap = menu.Append(-1, "Keyboard manager\tCtrl+Shift+K", "keymap")
+		self.Bind(wx.EVT_MENU, self.OnKeymapManager, m_keymap)
 		m_hide_window = menu.Append(-1, "Hide Window\tCtrl+Shift+W", "hide_window")
 		self.Bind(wx.EVT_MENU, self.OnHideWindow, m_hide_window)
 		if platform.system() != "Darwin":
@@ -461,19 +466,33 @@ class MainGui(wx.Frame):
 		# Note: theme is applied in FastSM.pyw after prefs are loaded
 
 	def _load_keymap_file(self, path):
-		"""Load a keymap file and return dict of key -> action mappings."""
+		"""Load a keymap file and return dict of key -> action mappings.
+
+		Also populates self._last_keymap_unbinds with the set of actions
+		marked 'unbind:ActionName' in the file, used by the inheritance
+		logic to drop default bindings the user explicitly disabled.
+		"""
 		keymap = {}
+		unbinds = set()
 		if os.path.exists(path):
 			try:
-				with open(path, "r") as f:
+				with open(path, "r", encoding="utf-8") as f:
 					for line in f:
 						line = line.strip()
-						if "=" in line and not line.startswith("#"):
+						if not line or line.startswith("#"):
+							continue
+						if line.startswith("unbind:"):
+							action = line[len("unbind:"):].strip()
+							if action:
+								unbinds.add(action)
+							continue
+						if "=" in line:
 							parts = line.split("=", 1)
 							if len(parts) == 2:
 								keymap[parts[0].strip()] = parts[1].strip()
-			except:
+			except OSError:
 				pass
+		self._last_keymap_unbinds = unbinds
 		return keymap
 
 	def _load_keymap_with_inheritance(self):
@@ -504,6 +523,7 @@ class MainGui(wx.Frame):
 
 		# Load custom keymap
 		custom_keymap = {}
+		custom_unbinds = set()
 		custom_paths = [
 			os.path.join(get_app().confpath, f"keymaps/{custom_keymap_name}.keymap"),
 			f"keymaps/{custom_keymap_name}.keymap",  # Bundled custom keymaps
@@ -511,23 +531,25 @@ class MainGui(wx.Frame):
 
 		for path in custom_paths:
 			custom_keymap = self._load_keymap_file(path)
-			if custom_keymap:
+			custom_unbinds = getattr(self, "_last_keymap_unbinds", set())
+			if custom_keymap or custom_unbinds:
 				break
 
-		if not custom_keymap:
+		if not custom_keymap and not custom_unbinds:
 			return default_keymap
 
-		# Get set of actions defined in custom keymap
-		custom_actions = set(custom_keymap.values())
+		# Actions the custom keymap has spoken for, either by rebinding or
+		# explicitly unbinding. Default keys mapping to any of these are dropped.
+		custom_actions = set(custom_keymap.values()) | custom_unbinds
 
 		# Build final keymap: start with defaults, but remove any keys
-		# whose action is redefined in custom keymap
+		# whose action is redefined or unbound in the custom keymap.
 		final_keymap = {}
 		for key, action in default_keymap.items():
 			if action not in custom_actions:
 				final_keymap[key] = action
 
-		# Add all custom keymap entries
+		# Add all custom keymap entries (unbinds are NOT registered as keys).
 		final_keymap.update(custom_keymap)
 
 		return final_keymap
@@ -1823,6 +1845,18 @@ class MainGui(wx.Frame):
 	def OnAccountOptions(self, event=None):
 		Opt=account_options.OptionsGui(get_app().currentAccount)
 		Opt.Show()
+
+	def OnKeymapManager(self, event=None):
+		# When triggered from the invisible interface, the main window may be
+		# hidden — show it so the dialog has a visible parent.
+		if not self.IsShown():
+			self.Show(True)
+			safe_raise_window(self)
+		km = keymap_manager.KeymapManagerGui(self)
+		km.Show()
+
+	# Alias so invisible.register_key finds it for the 'KeymapManager' action.
+	KeymapManager = OnKeymapManager
 
 	def OnUpdateProfile(self, event=None):
 		Profile=profile.ProfileGui(get_app().currentAccount)
