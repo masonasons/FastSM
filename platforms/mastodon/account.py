@@ -762,13 +762,10 @@ class MastodonAccount(PlatformAccount):
         if media_ids:
             edit_kwargs['media_ids'] = media_ids
 
-        # Note: language is not supported by Mastodon's status_update API
-
-        # Pleroma/Akkoma/Glitch accept content_type on edits too. Vanilla
-        # Mastodon ignores it.
-        content_type = kwargs.get('content_type')
-        if content_type:
-            edit_kwargs['content_type'] = content_type
+        # Note: language is not supported by Mastodon's status_update API.
+        # content_type is intentionally not forwarded — Mastodon.py's
+        # status_update() signature rejects the kwarg with TypeError, and the
+        # original post's content_type isn't editable on the wire anyway.
 
         result = self.api.status_update(**edit_kwargs)
         return mastodon_status_to_universal(result)
