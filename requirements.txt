@@ -5,11 +5,10 @@ pyperclip
 requests
 wxpython
 Pillow
-prismatoid>=0.12
 git+https://github.com/accessibleapps/keyboard_handler
 git+https://github.com/accessibleapps/sound_lib
-# Legacy speech backend, opt-in via Advanced settings on Windows/macOS.
-# Linux build doesn't bundle it (no Linux backend in accessible_output2 anyway).
+# Speech: accessible_output2 on Windows/macOS, Orca via D-Bus (jeepney) on Linux.
 accessible_output2 ; sys_platform != 'linux'
+jeepney ; sys_platform == 'linux'
 # Windows only
 pyenchant ; sys_platform == 'win32'

@@ -55,7 +55,7 @@ pip install -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22
 
 ### macOS notes
 
-Speech uses AV Speech (via prism) and must run on the main thread; `speak.py` handles that automatically with `wx.CallAfter` when called off-thread.
+Speech uses accessible_output2 (VoiceOver) and must run on the main thread; `speak.py` handles that automatically with `wx.CallAfter` when called off-thread.
 
 ### Portable mode
 

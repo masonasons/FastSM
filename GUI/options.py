@@ -868,16 +868,6 @@ class advanced(wx.Panel, wx.Dialog):
 		self.default_content_type.SetSelection(ct_values.index(current_ct) if current_ct in ct_values else 0)
 		self.main_box.Add(self.default_content_type, 0, wx.ALL, 10)
 
-		# Legacy speech backend (Windows / macOS only — Linux builds don't
-		# ship accessible_output2). Toggle is for users where prism has
-		# trouble talking to their screen reader or TTS.
-		self.use_legacy_speech = None
-		if not sys.platform.startswith('linux'):
-			self.use_legacy_speech = wx.CheckBox(self, -1,
-				"Use legacy speech output (accessible_output2) — restart required")
-			self.main_box.Add(self.use_legacy_speech, 0, wx.ALL, 10)
-			self.use_legacy_speech.SetValue(get_app().prefs.use_legacy_speech)
-
 		self.SetSizer(self.main_box)
 
 
@@ -1117,10 +1107,6 @@ class OptionsGui(wx.Dialog):
 				set_debug_mode(get_app().prefs.debug_logging)
 			except Exception:
 				pass
-		# Legacy speech backend (Windows/macOS only — checkbox is None on Linux).
-		# Restart-required: speak.py picks the backend at first speak() call.
-		if self.advanced.use_legacy_speech is not None:
-			get_app().prefs.use_legacy_speech = self.advanced.use_legacy_speech.GetValue()
 		ct_idx = self.advanced.default_content_type.GetSelection()
 		get_app().prefs.default_content_type = self.advanced.default_content_type_choices[ct_idx][1]
 		get_app().prefs.earcon_audio=self.audio_tab.earcon_audio.GetValue()

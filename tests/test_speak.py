@@ -6,184 +6,125 @@ import types
 import unittest
 
 
-class _BackendId:
-	VOICE_OVER = "voice_over"
+def _load_speak_with_speaker(speaker, *, orca_submit=None, platform="win32"):
+	"""Import speak with a stub accessible_output2 and a forced Orca submit.
 
-
-class _PrismError(Exception):
-	pass
-
-
-def _load_speak_with_context(context_cls):
-	fake_prism = types.SimpleNamespace(
-		BackendId=_BackendId,
-		Context=context_cls,
-		PrismError=_PrismError,
-	)
+	The fake accessible_output2 module provides an outputs.auto.Auto factory
+	that returns the supplied speaker (or raises if speaker is None).
+	"""
 	sys.modules.pop("speak", None)
-	sys.modules["prism"] = fake_prism
-	# Stub out 'application' so speak._use_legacy() doesn't drag the real
-	# (heavyweight) application module into the unit test. Without this, a test
-	# that fakes sys.platform to 'darwin' bypasses the Linux short-circuit in
-	# _use_legacy() and pays a cold ~0.15s+ import inside the latency-sensitive
-	# shutdown path, which blows the bounded-wait timing budget on slower CI.
-	sys.modules["application"] = types.SimpleNamespace(get_app=lambda: None)
-	speak = importlib.import_module("speak")
+
+	class _Auto:
+		def __init__(self_inner):
+			if speaker is None:
+				raise RuntimeError("no speaker configured")
+		# Proxy method lookups onto the supplied speaker so the actual call
+		# sites (speaker.speak, speaker.braille) work without rebinding.
+		def __getattr__(self_inner, name):
+			return getattr(speaker, name)
+
+	fake_outputs = types.SimpleNamespace(auto=types.SimpleNamespace(Auto=_Auto))
+	sys.modules["accessible_output2"] = types.SimpleNamespace(outputs=fake_outputs)
+	sys.modules["accessible_output2.outputs"] = fake_outputs
+	sys.modules["accessible_output2.outputs.auto"] = fake_outputs.auto
+
+	original_platform = sys.platform
+	sys.platform = platform
+	try:
+		speak = importlib.import_module("speak")
+	finally:
+		sys.platform = original_platform
 	speak._logger.disabled = True
+	# Override the Linux-only Orca submit (None unless the test wants one).
+	speak._orca_submit = orca_submit
 	return speak
 
 
-class SpeakPrismFailureTests(unittest.TestCase):
+class SpeakTests(unittest.TestCase):
 	def tearDown(self):
 		sys.modules.pop("speak", None)
-		sys.modules.pop("prism", None)
-		sys.modules.pop("application", None)
+		for name in (
+			"accessible_output2",
+			"accessible_output2.outputs",
+			"accessible_output2.outputs.auto",
+		):
+			sys.modules.pop(name, None)
 
-	def test_non_prism_backend_errors_are_swallowed_after_retry(self):
-		speak_calls = []
+	def test_speak_uses_accessible_output2(self):
+		calls = []
 
-		class Backend:
-			id = "orca"
-
-			def speak(self, text, interrupt):
-				speak_calls.append((text, interrupt))
-				raise RuntimeError("unsupported Orca DBus API")
-
+		class Speaker:
+			def speak(self, text, interrupt=False):
+				calls.append((text, interrupt))
 			def braille(self, text):
 				pass
 
-		class Context:
-			create_count = 0
+		speak = _load_speak_with_speaker(Speaker())
+		speak.speak("hello", True)
+		self.assertEqual(calls, [("hello", True)])
 
-			def create_best(self):
-				type(self).create_count += 1
-				return Backend()
+	def test_orca_path_short_circuits_accessible_output2(self):
+		a2_calls = []
+		orca_calls = []
 
-		speak = _load_speak_with_context(Context)
-
-		speak.speak("Exiting.", interrupt=True)
-
-		self.assertEqual(Context.create_count, 2)
-		self.assertEqual(len(speak_calls), 2)
-		self.assertIsNone(speak._prism_backend)
-
-	def test_non_prism_backend_creation_errors_are_swallowed(self):
-		class Context:
-			create_count = 0
-
-			def create_best(self):
-				type(self).create_count += 1
-				raise RuntimeError("unsupported Orca DBus API")
-
-		speak = _load_speak_with_context(Context)
-
-		speak.speak("Exiting.")
-
-		self.assertEqual(Context.create_count, 2)
-		self.assertIsNone(speak._prism_backend)
-
-	def test_retry_success_keeps_new_backend_cached(self):
-		class BrokenBackend:
-			id = "orca"
-
-			def speak(self, text, interrupt):
-				raise RuntimeError("unsupported Orca DBus API")
-
+		class Speaker:
+			def speak(self, text, interrupt=False):
+				a2_calls.append((text, interrupt))
 			def braille(self, text):
 				pass
 
-		class WorkingBackend:
-			id = "speech_dispatcher"
-			speak_calls = 0
+		def orca_submit(text, interrupt):
+			orca_calls.append((text, interrupt))
 
-			def speak(self, text, interrupt):
-				type(self).speak_calls += 1
+		speak = _load_speak_with_speaker(Speaker(), orca_submit=orca_submit)
+		speak.speak("hello")
+		self.assertEqual(orca_calls, [("hello", False)])
+		self.assertEqual(a2_calls, [])
 
+	def test_orca_failure_falls_back_to_a2(self):
+		a2_calls = []
+
+		class Speaker:
+			def speak(self, text, interrupt=False):
+				a2_calls.append((text, interrupt))
 			def braille(self, text):
 				pass
 
-		class Context:
-			create_count = 0
+		def orca_submit(text, interrupt):
+			raise RuntimeError("D-Bus exploded")
 
-			def create_best(self):
-				type(self).create_count += 1
-				if type(self).create_count == 1:
-					return BrokenBackend()
-				return WorkingBackend()
+		speak = _load_speak_with_speaker(Speaker(), orca_submit=orca_submit)
+		speak.speak("hello", True)
+		self.assertEqual(a2_calls, [("hello", True)])
 
-		speak = _load_speak_with_context(Context)
+	def test_speaker_error_is_swallowed(self):
+		class Speaker:
+			def speak(self, text, interrupt=False):
+				raise RuntimeError("backend went away")
+			def braille(self, text):
+				pass
 
-		speak.speak("Hello")
+		speak = _load_speak_with_speaker(Speaker())
+		speak.speak("hello")  # must not raise
 
-		self.assertEqual(Context.create_count, 2)
-		self.assertEqual(WorkingBackend.speak_calls, 1)
-		self.assertIsInstance(speak._prism_backend, WorkingBackend)
-
-	def test_import_time_does_not_require_prism(self):
-		sys.modules.pop("speak", None)
-		sys.modules.pop("prism", None)
-
-		speak = importlib.import_module("speak")
-		speak._logger.disabled = True
-		original_import_module = importlib.import_module
-		def fail_import(name):
-			raise RuntimeError(f"cannot import {name}")
-		importlib.import_module = fail_import
-
-		try:
-			speak.speak("Exiting.")
-		finally:
-			importlib.import_module = original_import_module
-
-		self.assertIsNone(speak._prism_backend)
-
-	def test_repeated_prism_creation_attempts_keep_trying(self):
-		class Context:
-			create_count = 0
-
-			def create_best(self):
-				type(self).create_count += 1
-				raise RuntimeError("unsupported Orca DBus API")
-
-		speak = _load_speak_with_context(Context)
-
-		speak.speak("first failure")
-		speak.speak("second failure")
-
-		self.assertEqual(Context.create_count, 4)
-
-	def test_prism_failure_does_not_show_dialogs(self):
-		class DialogSentinel:
-			def __getattr__(self, name):
-				if name in ("MessageBox", "MessageDialog"):
-					raise AssertionError(f"unexpected dialog: {name}")
-				raise AttributeError(name)
-
-		class Context:
-			def create_best(self):
-				raise RuntimeError("unsupported Orca DBus API")
-
-		sys.modules["wx"] = DialogSentinel()
-		try:
-			speak = _load_speak_with_context(Context)
-
-			speak.speak("Exiting.")
-		finally:
-			sys.modules.pop("wx", None)
+	def test_no_speaker_available_is_silent(self):
+		speak = _load_speak_with_speaker(None)
+		speak.speak("hello")  # must not raise
 
 	def test_speak_async_start_failure_is_swallowed(self):
+		class Speaker:
+			def speak(self, text, interrupt=False):
+				raise AssertionError("speech should not be attempted")
+			def braille(self, text):
+				pass
+
 		class FailingThread:
 			def __init__(self, *args, **kwargs):
 				pass
-
 			def start(self):
 				raise RuntimeError("cannot start thread")
 
-		class Context:
-			def create_best(self):
-				raise AssertionError("speech should not be attempted")
-
-		speak = _load_speak_with_context(Context)
+		speak = _load_speak_with_speaker(Speaker())
 		original_thread = threading.Thread
 		threading.Thread = FailingThread
 		try:
@@ -192,64 +133,35 @@ class SpeakPrismFailureTests(unittest.TestCase):
 			threading.Thread = original_thread
 
 	def test_shutdown_announcement_blocks_later_speech(self):
-		speak_calls = []
+		calls = []
 
-		class Backend:
-			id = "speech_dispatcher"
-
-			def speak(self, text, interrupt):
-				speak_calls.append((text, interrupt))
-
+		class Speaker:
+			def speak(self, text, interrupt=False):
+				calls.append((text, interrupt))
 			def braille(self, text):
 				pass
 
-		class Context:
-			def create_best(self):
-				return Backend()
-
-		speak = _load_speak_with_context(Context)
+		speak = _load_speak_with_speaker(Speaker())
 
 		speak.speak_before_shutdown("Exiting.", interrupt=True)
 		speak.speak("late speech")
 		speak.speak_async("late async speech")
 		speak._do_speak("queued before shutdown", False)
 
-		self.assertEqual(speak_calls, [("Exiting.", True)])
-
-	def test_shutdown_announcement_does_not_retry_broken_backend(self):
-		class Context:
-			create_count = 0
-
-			def create_best(self):
-				type(self).create_count += 1
-				raise RuntimeError("unsupported Orca DBus API")
-
-		speak = _load_speak_with_context(Context)
-
-		speak.speak_before_shutdown("Exiting.")
-
-		self.assertEqual(Context.create_count, 1)
-		self.assertIsNone(speak._prism_backend)
+		self.assertEqual(calls, [("Exiting.", True)])
 
 	def test_shutdown_announcement_has_bounded_wait(self):
 		started = threading.Event()
 		release = threading.Event()
 
-		class Backend:
-			id = "speech_dispatcher"
-
-			def speak(self, text, interrupt):
+		class Speaker:
+			def speak(self, text, interrupt=False):
 				started.set()
 				release.wait(1.0)
-
 			def braille(self, text):
 				pass
 
-		class Context:
-			def create_best(self):
-				return Backend()
-
-		speak = _load_speak_with_context(Context)
+		speak = _load_speak_with_speaker(Speaker())
 
 		start = time.monotonic()
 		try:
@@ -264,26 +176,14 @@ class SpeakPrismFailureTests(unittest.TestCase):
 		started = threading.Event()
 		release = threading.Event()
 
-		class Backend:
-			id = "voice_over"
-
-			def speak(self, text, interrupt):
+		class Speaker:
+			def speak(self, text, interrupt=False):
 				started.set()
 				release.wait(1.0)
-
 			def braille(self, text):
 				pass
 
-		class Context:
-			def exists(self, backend_id):
-				return False
-
-			def create_best(self):
-				return Backend()
-
-		speak = _load_speak_with_context(Context)
-		original_platform = sys.platform
-		sys.platform = "darwin"
+		speak = _load_speak_with_speaker(Speaker(), platform="darwin")
 
 		start = time.monotonic()
 		try:
@@ -292,25 +192,24 @@ class SpeakPrismFailureTests(unittest.TestCase):
 			self.assertLess(elapsed, 0.2)
 			self.assertTrue(started.wait(0.2))
 		finally:
-			sys.platform = original_platform
 			release.set()
 
 	def test_shutdown_announcement_start_failure_is_swallowed(self):
+		class Speaker:
+			def speak(self, text, interrupt=False):
+				raise AssertionError("speech should not be attempted")
+			def braille(self, text):
+				pass
+
 		class FailingThread:
 			def __init__(self, *args, **kwargs):
 				pass
-
 			def start(self):
 				raise RuntimeError("cannot start thread")
-
 			def join(self, timeout=None):
 				raise AssertionError("join should not run after start failure")
 
-		class Context:
-			def create_best(self):
-				raise AssertionError("speech should not be attempted")
-
-		speak = _load_speak_with_context(Context)
+		speak = _load_speak_with_speaker(Speaker())
 		original_thread = threading.Thread
 		threading.Thread = FailingThread
 		try:
