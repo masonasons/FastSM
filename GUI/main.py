@@ -259,36 +259,40 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnStopAudio, m_stop_audio)
 		m_audio_player = menu4.Append(-1, "Audio player\tCtrl+Shift+A", "audio_player")
 		self.Bind(wx.EVT_MENU, self.OnAudioPlayer, m_audio_player)
-		m_volup = menu4.Append(-1, "Volume up", "volup")
-		m_voldown = menu4.Append(-1, "Volume down", "voldown")
+		if platform.system() == "Darwin":
+			m_volup = menu4.Append(-1, "Volume up (Option+Up)", "volup")
+			m_voldown = menu4.Append(-1, "Volume down (Option+Down)", "voldown")
+		else:
+			m_volup = menu4.Append(-1, "Volume up\tAlt+Up", "volup")
+			m_voldown = menu4.Append(-1, "Volume down\tAlt+Down", "voldown")
 		self.Bind(wx.EVT_MENU, self.OnVolup, m_volup)
 		self.Bind(wx.EVT_MENU, self.OnVoldown, m_voldown)
 		self.menuBar.Append(menu4, "A&udio")
 		menu5 = wx.Menu()
 		if platform.system() == "Darwin":
-			m_previous_in_thread = menu5.Append(-1, "Previous post in thread (Ctrl+Up)", "prevpost")
-			m_next_in_thread = menu5.Append(-1, "Next post in thread (Ctrl+Down)", "nextpost")
-			m_previous_from_user = menu5.Append(-1, "Previous post from user (Ctrl+Left)", "prevuser")
-			m_next_from_user = menu5.Append(-1, "Next post from user (Ctrl+Right)", "nextuser")
-			m_prev_movement_unit = menu5.Append(-1, "Previous movement unit (Option+Left)", "prevunit")
-			m_next_movement_unit = menu5.Append(-1, "Next movement unit (Option+Right)", "nextunit")
-			m_move_by_unit_up = menu5.Append(-1, "Move up by unit (Option+Up)", "moveupunit")
-			m_move_by_unit_down = menu5.Append(-1, "Move down by unit (Option+Down)", "movedownunit")
-			m_next_timeline = menu5.Append(-1, "Next timeline", "nexttl")
-			m_prev_timeline = menu5.Append(-1, "Previous timeline", "prevtl")
+			m_previous_in_thread = menu5.Append(-1, "Previous post in thread", "prevpost")
+			m_next_in_thread = menu5.Append(-1, "Next post in thread", "nextpost")
+			m_previous_from_user = menu5.Append(-1, "Previous post from user", "prevuser")
+			m_next_from_user = menu5.Append(-1, "Next post from user", "nextuser")
+			m_prev_movement_unit = menu5.Append(-1, "Previous movement unit (Ctrl+Left)", "prevunit")
+			m_next_movement_unit = menu5.Append(-1, "Next movement unit (Ctrl+Right)", "nextunit")
+			m_move_by_unit_up = menu5.Append(-1, "Move up by unit (Ctrl+Up)", "moveupunit")
+			m_move_by_unit_down = menu5.Append(-1, "Move down by unit (Ctrl+Down)", "movedownunit")
+			m_next_timeline = menu5.Append(-1, "Next timeline (Option+Right)", "nexttl")
+			m_prev_timeline = menu5.Append(-1, "Previous timeline (Option+Left)", "prevtl")
 			m_next_account = menu5.Append(-1, "Next account (Ctrl+Shift+Right)", "nextacc")
 			m_prev_account = menu5.Append(-1, "Previous account (Ctrl+Shift+Left)", "prevacc")
 		else:
-			m_previous_in_thread = menu5.Append(-1, "Previous post in thread\tCtrl+Up", "prevpost")
-			m_next_in_thread = menu5.Append(-1, "Next post in thread\tCtrl+Down", "nextpost")
-			m_previous_from_user = menu5.Append(-1, "Previous post from user\tCtrl+Left", "prevuser")
-			m_next_from_user = menu5.Append(-1, "Next post from user\tCtrl+Right", "nextuser")
-			m_prev_movement_unit = menu5.Append(-1, "Previous movement unit\tAlt+Left", "prevunit")
-			m_next_movement_unit = menu5.Append(-1, "Next movement unit\tAlt+Right", "nextunit")
-			m_move_by_unit_up = menu5.Append(-1, "Move up by unit\tAlt+Up", "moveupunit")
-			m_move_by_unit_down = menu5.Append(-1, "Move down by unit\tAlt+Down", "movedownunit")
-			m_next_timeline = menu5.Append(-1, "Next timeline", "nexttl")
-			m_prev_timeline = menu5.Append(-1, "Previous timeline", "prevtl")
+			m_previous_in_thread = menu5.Append(-1, "Previous post in thread", "prevpost")
+			m_next_in_thread = menu5.Append(-1, "Next post in thread", "nextpost")
+			m_previous_from_user = menu5.Append(-1, "Previous post from user", "prevuser")
+			m_next_from_user = menu5.Append(-1, "Next post from user", "nextuser")
+			m_prev_movement_unit = menu5.Append(-1, "Previous movement unit\tCtrl+Left", "prevunit")
+			m_next_movement_unit = menu5.Append(-1, "Next movement unit\tCtrl+Right", "nextunit")
+			m_move_by_unit_up = menu5.Append(-1, "Move up by unit\tCtrl+Up", "moveupunit")
+			m_move_by_unit_down = menu5.Append(-1, "Move down by unit\tCtrl+Down", "movedownunit")
+			m_next_timeline = menu5.Append(-1, "Next timeline\tAlt+Right", "nexttl")
+			m_prev_timeline = menu5.Append(-1, "Previous timeline\tAlt+Left", "prevtl")
 			m_next_account = menu5.Append(-1, "Next account\tCtrl+Shift+Right", "nextacc")
 			m_prev_account = menu5.Append(-1, "Previous account\tCtrl+Shift+Left", "prevacc")
 		self.Bind(wx.EVT_MENU, self.OnPreviousInThread, m_previous_in_thread)
@@ -338,6 +342,8 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnGotoTimeline9, m_goto_tl9)
 		self.Bind(wx.EVT_MENU, self.OnGotoTimeline0, m_goto_tl0)
 		# Store menu item references for accelerator table on macOS
+		self._m_volup = m_volup
+		self._m_voldown = m_voldown
 		self._m_previous_in_thread = m_previous_in_thread
 		self._m_next_in_thread = m_next_in_thread
 		self._m_previous_from_user = m_previous_from_user
@@ -415,16 +421,16 @@ class MainGui(wx.Frame):
 			# macOS: Add arrow key combos to accelerator table (only fires when main window focused)
 			# This prevents these shortcuts from firing in dialogs like New Post
 			accel = wx.AcceleratorTable([
-				# Alt (Option) + Arrow keys cycle / move by movement unit
-				(wx.ACCEL_ALT, wx.WXK_LEFT, self._m_prev_movement_unit.GetId()),
-				(wx.ACCEL_ALT, wx.WXK_RIGHT, self._m_next_movement_unit.GetId()),
-				(wx.ACCEL_ALT, wx.WXK_UP, self._m_move_by_unit_up.GetId()),
-				(wx.ACCEL_ALT, wx.WXK_DOWN, self._m_move_by_unit_down.GetId()),
-				# Ctrl (Control) + Arrow keys
-				(wx.ACCEL_CTRL, wx.WXK_UP, self._m_previous_in_thread.GetId()),
-				(wx.ACCEL_CTRL, wx.WXK_DOWN, self._m_next_in_thread.GetId()),
-				(wx.ACCEL_CTRL, wx.WXK_LEFT, self._m_previous_from_user.GetId()),
-				(wx.ACCEL_CTRL, wx.WXK_RIGHT, self._m_next_from_user.GetId()),
+				# Alt (Option) + Arrow keys
+				(wx.ACCEL_ALT, wx.WXK_UP, self._m_volup.GetId()),
+				(wx.ACCEL_ALT, wx.WXK_DOWN, self._m_voldown.GetId()),
+				(wx.ACCEL_ALT, wx.WXK_LEFT, self._m_prev_timeline.GetId()),
+				(wx.ACCEL_ALT, wx.WXK_RIGHT, self._m_next_timeline.GetId()),
+				# Ctrl (Control) + Arrow keys cycle / move by movement unit
+				(wx.ACCEL_CTRL, wx.WXK_LEFT, self._m_prev_movement_unit.GetId()),
+				(wx.ACCEL_CTRL, wx.WXK_RIGHT, self._m_next_movement_unit.GetId()),
+				(wx.ACCEL_CTRL, wx.WXK_UP, self._m_move_by_unit_up.GetId()),
+				(wx.ACCEL_CTRL, wx.WXK_DOWN, self._m_move_by_unit_down.GetId()),
 				# Ctrl+Shift + Arrow keys
 				(wx.ACCEL_CTRL | wx.ACCEL_SHIFT, wx.WXK_LEFT, self._m_prev_account.GetId()),
 				(wx.ACCEL_CTRL | wx.ACCEL_SHIFT, wx.WXK_RIGHT, self._m_next_account.GetId()),
