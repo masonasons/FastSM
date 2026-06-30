@@ -278,6 +278,7 @@ class MainGui(wx.Frame):
 			m_next_movement_unit = menu5.Append(-1, "Next movement unit (Ctrl+Right)", "nextunit")
 			m_move_by_unit_up = menu5.Append(-1, "Move up by unit (Ctrl+Up)", "moveupunit")
 			m_move_by_unit_down = menu5.Append(-1, "Move down by unit (Ctrl+Down)", "movedownunit")
+			m_undo_navigation = menu5.Append(-1, "Undo navigation (Cmd+Z)", "undonav")
 			m_next_timeline = menu5.Append(-1, "Next timeline (Option+Right)", "nexttl")
 			m_prev_timeline = menu5.Append(-1, "Previous timeline (Option+Left)", "prevtl")
 			m_next_account = menu5.Append(-1, "Next account (Ctrl+Shift+Right)", "nextacc")
@@ -291,6 +292,7 @@ class MainGui(wx.Frame):
 			m_next_movement_unit = menu5.Append(-1, "Next movement unit\tCtrl+Right", "nextunit")
 			m_move_by_unit_up = menu5.Append(-1, "Move up by unit\tCtrl+Up", "moveupunit")
 			m_move_by_unit_down = menu5.Append(-1, "Move down by unit\tCtrl+Down", "movedownunit")
+			m_undo_navigation = menu5.Append(-1, "Undo navigation\tCtrl+Z", "undonav")
 			m_next_timeline = menu5.Append(-1, "Next timeline\tAlt+Right", "nexttl")
 			m_prev_timeline = menu5.Append(-1, "Previous timeline\tAlt+Left", "prevtl")
 			m_next_account = menu5.Append(-1, "Next account\tCtrl+Shift+Right", "nextacc")
@@ -303,6 +305,7 @@ class MainGui(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnNextMovementUnit, m_next_movement_unit)
 		self.Bind(wx.EVT_MENU, self.OnMoveByUnitUp, m_move_by_unit_up)
 		self.Bind(wx.EVT_MENU, self.OnMoveByUnitDown, m_move_by_unit_down)
+		self.Bind(wx.EVT_MENU, self.OnUndoNavigation, m_undo_navigation)
 		self.Bind(wx.EVT_MENU, self.OnNextTimeline, m_next_timeline)
 		self.Bind(wx.EVT_MENU, self.OnPrevTimeline, m_prev_timeline)
 		self.Bind(wx.EVT_MENU, self.OnNextAccount, m_next_account)
@@ -352,6 +355,7 @@ class MainGui(wx.Frame):
 		self._m_next_movement_unit = m_next_movement_unit
 		self._m_move_by_unit_up = m_move_by_unit_up
 		self._m_move_by_unit_down = m_move_by_unit_down
+		self._m_undo_navigation = m_undo_navigation
 		self._m_next_timeline = m_next_timeline
 		self._m_prev_timeline = m_prev_timeline
 		self._m_next_account = m_next_account
@@ -441,6 +445,8 @@ class MainGui(wx.Frame):
 				(wx.ACCEL_CTRL, ord('A'), self._m_accounts.GetId()),
 				# Ctrl+C for Copy post (conflicts with system Copy on Mac)
 				(wx.ACCEL_CTRL, ord('C'), self._m_copy.GetId()),
+				# Cmd+Z for navigation undo
+				(wx.ACCEL_CMD, ord('Z'), self._m_undo_navigation.GetId()),
 				# Cmd + number for timeline jump
 				(wx.ACCEL_CMD, ord('1'), self._m_goto_tl1.GetId()),
 				(wx.ACCEL_CMD, ord('2'), self._m_goto_tl2.GetId()),
@@ -1011,6 +1017,9 @@ class MainGui(wx.Frame):
 		unit = movement_units.cycle(delta)
 		speak.speak("Move by " + unit.title, True)
 
+	def OnUndoNavigation(self, event=None):
+		invisible.inv.undo_navigation()
+
 	def _move_by_unit(self, direction):
 		import movement_units
 		account = get_app().currentAccount
@@ -1024,6 +1033,7 @@ class MainGui(wx.Frame):
 			sound.play(account, "boundary")
 			speak.speak("No more by " + unit.title, True)
 			return
+		tl.mark_navigation_step()
 		tl.index = target
 		self.list2.SetSelection(target)
 		self.on_list2_change(None)
@@ -1303,9 +1313,16 @@ class MainGui(wx.Frame):
 			if event:
 				event.Skip()
 			return
-		get_app().currentAccount.currentTimeline.index=self.list2.GetSelection()
+		tl = get_app().currentAccount.currentTimeline
+		new_index = self.list2.GetSelection()
+		# Push the OLD position (still tl.index until we overwrite it) onto
+		# the undo history if this is a real move, not a re-selection at the
+		# same row.
+		if new_index != tl.index:
+			tl.mark_navigation_step()
+		tl.index = new_index
 		# Track position change for timeline sync
-		get_app().currentAccount.currentTimeline.mark_position_moved()
+		tl.mark_position_moved()
 		status = self.get_current_status()
 		if status and get_app().prefs.earcon_audio:
 			# Get the actual status (unwrap boosts)

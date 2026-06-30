@@ -626,6 +626,7 @@ def next_in_thread(account):
 	if hasattr(status, 'in_reply_to_id') and status.in_reply_to_id is not None:
 		newindex = account.app.find_status(account.currentTimeline, status.in_reply_to_id)
 		if newindex > -1:
+			account.currentTimeline.mark_navigation_step()
 			account.currentTimeline.index = newindex
 			main.window.list2.SetSelection(newindex)
 	else:
@@ -636,6 +637,7 @@ def previous_in_thread(account):
 	newindex = -1
 	newindex = account.app.find_reply(account.currentTimeline, account.currentTimeline.statuses[account.currentTimeline.index].id)
 	if newindex > -1:
+		account.currentTimeline.mark_navigation_step()
 		account.currentTimeline.index = newindex
 		main.window.list2.SetSelection(newindex)
 	else:
@@ -655,6 +657,7 @@ def previous_from_user(account):
 		newindex2 += 1
 
 	if newindex > -1:
+		account.currentTimeline.mark_navigation_step()
 		account.currentTimeline.index = newindex
 		main.window.list2.SetSelection(newindex)
 	else:
@@ -674,6 +677,7 @@ def next_from_user(account):
 		newindex2 += 1
 
 	if newindex > -1:
+		account.currentTimeline.mark_navigation_step()
 		account.currentTimeline.index = newindex
 		main.window.list2.SetSelection(newindex)
 	else:

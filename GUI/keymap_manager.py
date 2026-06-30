@@ -74,6 +74,7 @@ ACTION_LABELS = {
 	"NextMovementUnit": "Next movement unit",
 	"MoveByUnitUp": "Move up by movement unit",
 	"MoveByUnitDown": "Move down by movement unit",
+	"UndoNavigation": "Undo navigation (go back)",
 	"Copy": "Copy post to clipboard",
 	"AddToList": "Add user to list",
 	"RemoveFromList": "Remove user from list",

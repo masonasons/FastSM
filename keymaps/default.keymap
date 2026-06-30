@@ -67,3 +67,4 @@ control+win+alt+m=ContextMenu
 control+alt+win+v=ViewImage
 control+win+alt+i=ViewInstance
 control+win+alt+k=KeymapManager
+alt+win+z=UndoNavigation

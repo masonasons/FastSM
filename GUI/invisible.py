@@ -161,54 +161,95 @@ class invisible_interface(object):
 		main.window.OnNextAccount()
 
 	def prev_item(self):
-		if get_app().currentAccount.currentTimeline.index==0 or len(get_app().currentAccount.currentTimeline.statuses)==0:
+		tl = get_app().currentAccount.currentTimeline
+		if tl.index==0 or len(tl.statuses)==0:
 			sound.play(get_app().currentAccount,"boundary")
 			if get_app().prefs.repeat:
 				self.speak_item()
 			return
-		get_app().currentAccount.currentTimeline.index-=1
-		get_app().currentAccount.currentTimeline.mark_position_moved()
+		tl.mark_navigation_step()
+		tl.index-=1
+		tl.mark_position_moved()
 		self.focus_tl_item()
 
 	def prev_item_jump(self):
-		if get_app().currentAccount.currentTimeline.index < 20:
+		tl = get_app().currentAccount.currentTimeline
+		if tl.index < 20:
 			sound.play(get_app().currentAccount,"boundary")
 			if get_app().prefs.repeat:
 				self.speak_item()
 			return
-		get_app().currentAccount.currentTimeline.index -= 20
-		get_app().currentAccount.currentTimeline.mark_position_moved()
+		tl.mark_navigation_step()
+		tl.index -= 20
+		tl.mark_position_moved()
 		self.focus_tl_item()
 	
 	def top_item(self):
-		get_app().currentAccount.currentTimeline.index=0
-		get_app().currentAccount.currentTimeline.mark_position_moved()
+		tl = get_app().currentAccount.currentTimeline
+		tl.mark_navigation_step()
+		tl.index=0
+		tl.mark_position_moved()
 		self.focus_tl_item()
 	
 	def next_item(self):
-		if get_app().currentAccount.currentTimeline.index==len(get_app().currentAccount.currentTimeline.statuses)-1 or len(get_app().currentAccount.currentTimeline.statuses)==0:
+		tl = get_app().currentAccount.currentTimeline
+		if tl.index==len(tl.statuses)-1 or len(tl.statuses)==0:
 			sound.play(get_app().currentAccount,"boundary")
 			if get_app().prefs.repeat:
 				self.speak_item()
 			return
-		get_app().currentAccount.currentTimeline.index+=1
-		get_app().currentAccount.currentTimeline.mark_position_moved()
+		tl.mark_navigation_step()
+		tl.index+=1
+		tl.mark_position_moved()
 		self.focus_tl_item()
 	
 	def next_item_jump(self):
-		if get_app().currentAccount.currentTimeline.index >= len(get_app().currentAccount.currentTimeline.statuses) - 20:
+		tl = get_app().currentAccount.currentTimeline
+		if tl.index >= len(tl.statuses) - 20:
 			sound.play(get_app().currentAccount,"boundary")
 			if get_app().prefs.repeat:
 				self.speak_item()
 			return
-		get_app().currentAccount.currentTimeline.index += 20
-		get_app().currentAccount.currentTimeline.mark_position_moved()
+		tl.mark_navigation_step()
+		tl.index += 20
+		tl.mark_position_moved()
 		self.focus_tl_item()
 
 	def bottom_item(self):
-		get_app().currentAccount.currentTimeline.index=len(get_app().currentAccount.currentTimeline.statuses)-1
-		get_app().currentAccount.currentTimeline.mark_position_moved()
+		tl = get_app().currentAccount.currentTimeline
+		tl.mark_navigation_step()
+		tl.index=len(tl.statuses)-1
+		tl.mark_position_moved()
 		self.focus_tl_item()
+
+	def undo_navigation(self):
+		"""Pop one step off the per-timeline nav history and return there."""
+		account = get_app().currentAccount
+		tl = account.currentTimeline
+		target = tl.undo_navigation_target()
+		if target is None:
+			sound.play(account, "boundary")
+			speak.speak("Nothing to undo", True)
+			return
+		# Keep _undoing set across the (possibly async) UI update so
+		# on_list2_change sees it and doesn't record the undo target as a
+		# new navigation step.
+		tl._undoing = True
+		tl.index = target
+		tl.mark_position_moved()
+		if get_app().prefs.invisible_sync:
+			def update_ui(idx=target):
+				try:
+					main.window.list2.SetSelection(idx)
+					main.window.on_list2_change(None)
+				finally:
+					tl._undoing = False
+			wx.CallAfter(update_ui)
+		else:
+			try:
+				self.focus_tl_item()
+			finally:
+				tl._undoing = False
 	
 	def previous_from_user(self):
 		main.window.OnPreviousFromUser()

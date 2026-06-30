@@ -1,4 +1,5 @@
 from mastodon import MastodonError
+import collections
 import time
 import speak
 import sound
@@ -104,6 +105,10 @@ class timeline(object):
 		# Timeline position sync (for home timeline with Mastodon)
 		self._position_moved = False  # Track if user navigated since last load
 		self._last_synced_id = None  # Last position synced with server
+		# Undo history: ids the user navigated AWAY from. Capped so a long
+		# session doesn't accumulate unbounded state per timeline.
+		self._nav_history = collections.deque(maxlen=50)
+		self._undoing = False
 		# Set of status IDs for O(1) duplicate checking
 		self._status_ids = set()
 		# Lock for thread-safe duplicate checking and status addition
@@ -2070,6 +2075,39 @@ class timeline(object):
 	def mark_position_moved(self):
 		"""Mark that the user has manually moved position in this timeline."""
 		self._position_moved = True
+
+	def mark_navigation_step(self):
+		"""Push the current item id onto the undo history.
+
+		Called by navigation primitives BEFORE they mutate `self.index`, so a
+		later undo can return the user to where they were. Skipped during an
+		in-progress undo (the popped position is the new "current", not a new
+		history entry), and skipped if the head of the history already matches
+		(consecutive nav from the same id is a no-op).
+		"""
+		if self._undoing or not self.statuses:
+			return
+		if not (0 <= self.index < len(self.statuses)):
+			return
+		item_id = getattr(self.statuses[self.index], 'id', None)
+		if item_id is None:
+			return
+		if self._nav_history and self._nav_history[-1] == item_id:
+			return
+		self._nav_history.append(item_id)
+
+	def undo_navigation_target(self):
+		"""Pop the undo history until an id still present in `statuses` is found.
+
+		Returns its current index, or None if the history is empty / all
+		entries have fallen out of the loaded statuses.
+		"""
+		while self._nav_history:
+			item_id = self._nav_history.pop()
+			for i, s in enumerate(self.statuses):
+				if getattr(s, 'id', None) == item_id:
+					return i
+		return None
 
 	def _can_sync_position(self):
 		"""Check if position sync is available for this timeline."""
