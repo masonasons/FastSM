@@ -697,7 +697,6 @@ class mastodon(object):
 
 				consecutive_errors += 1
 				if consecutive_errors >= 5:
-					speak.speak("Stream connection lost")
 					consecutive_errors = 0
 
 				delay = min(base_delay * (2 ** (consecutive_errors - 1)), max_delay)
